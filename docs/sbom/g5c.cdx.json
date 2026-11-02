@@ -1,0 +1,386 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "version": 1,
+  "serialNumber": "urn:uuid:0ea4480c-14d4-4748-b159-aa5422c88618",
+  "metadata": {
+    "timestamp": "2026-10-29T08:40:23Z",
+    "tools": [
+      {
+        "name": "tools/gen_sbom.py"
+      }
+    ],
+    "component": {
+      "type": "application",
+      "name": "g5c",
+      "version": "0.9.0-rc1"
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "bom-ref": "openssl@3.5.5",
+      "name": "OpenSSL",
+      "version": "3.5.5",
+      "description": "AES, SHA-2, HMAC, CMAC, X25519, P-256, TLS/mTLS",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "purl": "pkg:generic/openssl@3.5.5",
+      "scope": "required"
+    },
+    {
+      "type": "library",
+      "bom-ref": "nghttp2@1.68.0",
+      "name": "nghttp2",
+      "version": "1.68.0",
+      "description": "HTTP/2 framing for the SBI",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:generic/nghttp2@1.68.0",
+      "scope": "required"
+    },
+    {
+      "type": "library",
+      "bom-ref": "libuv@1.51.0",
+      "name": "libuv",
+      "version": "1.51.0",
+      "description": "event loop for the SBI server",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:generic/libuv@1.51.0",
+      "scope": "required"
+    },
+    {
+      "type": "library",
+      "bom-ref": "libpq@5.18",
+      "name": "libpq",
+      "version": "5.18",
+      "description": "PostgreSQL client library of the UDR (optional at build time)",
+      "licenses": [
+        {
+          "license": {
+            "id": "PostgreSQL"
+          }
+        }
+      ],
+      "purl": "pkg:generic/libpq@5.18",
+      "scope": "required"
+    },
+    {
+      "type": "application",
+      "bom-ref": "g5c/amf",
+      "name": "amf",
+      "version": "0.9.0-rc1",
+      "licenses": [
+        {
+          "license": {
+            "name": "Proprietary"
+          }
+        }
+      ],
+      "scope": "required"
+    },
+    {
+      "type": "application",
+      "bom-ref": "g5c/smf",
+      "name": "smf",
+      "version": "0.9.0-rc1",
+      "licenses": [
+        {
+          "license": {
+            "name": "Proprietary"
+          }
+        }
+      ],
+      "scope": "required"
+    },
+    {
+      "type": "application",
+      "bom-ref": "g5c/upf",
+      "name": "upf",
+      "version": "0.9.0-rc1",
+      "licenses": [
+        {
+          "license": {
+            "name": "Proprietary"
+          }
+        }
+      ],
+      "scope": "required"
+    },
+    {
+      "type": "application",
+      "bom-ref": "g5c/udm",
+      "name": "udm",
+      "version": "0.9.0-rc1",
+      "licenses": [
+        {
+          "license": {
+            "name": "Proprietary"
+          }
+        }
+      ],
+      "scope": "required"
+    },
+    {
+      "type": "application",
+      "bom-ref": "g5c/pcf",
+      "name": "pcf",
+      "version": "0.9.0-rc1",
+      "licenses": [
+        {
+          "license": {
+            "name": "Proprietary"
+          }
+        }
+      ],
+      "scope": "required"
+    },
+    {
+      "type": "application",
+      "bom-ref": "g5c/udr",
+      "name": "udr",
+      "version": "0.9.0-rc1",
+      "licenses": [
+        {
+          "license": {
+            "name": "Proprietary"
+          }
+        }
+      ],
+      "scope": "required"
+    },
+    {
+      "type": "application",
+      "bom-ref": "g5c/ausf",
+      "name": "ausf",
+      "version": "0.9.0-rc1",
+      "licenses": [
+        {
+          "license": {
+            "name": "Proprietary"
+          }
+        }
+      ],
+      "scope": "required"
+    },
+    {
+      "type": "application",
+      "bom-ref": "g5c/nrf",
+      "name": "nrf",
+      "version": "0.9.0-rc1",
+      "licenses": [
+        {
+          "license": {
+            "name": "Proprietary"
+          }
+        }
+      ],
+      "scope": "required"
+    },
+    {
+      "type": "application",
+      "bom-ref": "g5c/nssf",
+      "name": "nssf",
+      "version": "0.9.0-rc1",
+      "licenses": [
+        {
+          "license": {
+            "name": "Proprietary"
+          }
+        }
+      ],
+      "scope": "required"
+    },
+    {
+      "type": "application",
+      "bom-ref": "g5c/nef",
+      "name": "nef",
+      "version": "0.9.0-rc1",
+      "licenses": [
+        {
+          "license": {
+            "name": "Proprietary"
+          }
+        }
+      ],
+      "scope": "required"
+    },
+    {
+      "type": "application",
+      "bom-ref": "g5c/scp",
+      "name": "scp",
+      "version": "0.9.0-rc1",
+      "licenses": [
+        {
+          "license": {
+            "name": "Proprietary"
+          }
+        }
+      ],
+      "scope": "required"
+    },
+    {
+      "type": "application",
+      "bom-ref": "g5c/bsf",
+      "name": "bsf",
+      "version": "0.9.0-rc1",
+      "licenses": [
+        {
+          "license": {
+            "name": "Proprietary"
+          }
+        }
+      ],
+      "scope": "required"
+    },
+    {
+      "type": "application",
+      "bom-ref": "g5c/g5c-ctl",
+      "name": "g5c-ctl",
+      "version": "0.9.0-rc1",
+      "licenses": [
+        {
+          "license": {
+            "name": "Proprietary"
+          }
+        }
+      ],
+      "scope": "required"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "g5c/amf",
+      "dependsOn": [
+        "openssl@3.5.5",
+        "nghttp2@1.68.0",
+        "libuv@1.51.0",
+        "libpq@5.18"
+      ]
+    },
+    {
+      "ref": "g5c/smf",
+      "dependsOn": [
+        "openssl@3.5.5",
+        "nghttp2@1.68.0",
+        "libuv@1.51.0",
+        "libpq@5.18"
+      ]
+    },
+    {
+      "ref": "g5c/upf",
+      "dependsOn": [
+        "openssl@3.5.5",
+        "nghttp2@1.68.0",
+        "libuv@1.51.0",
+        "libpq@5.18"
+      ]
+    },
+    {
+      "ref": "g5c/udm",
+      "dependsOn": [
+        "openssl@3.5.5",
+        "nghttp2@1.68.0",
+        "libuv@1.51.0",
+        "libpq@5.18"
+      ]
+    },
+    {
+      "ref": "g5c/pcf",
+      "dependsOn": [
+        "openssl@3.5.5",
+        "nghttp2@1.68.0",
+        "libuv@1.51.0",
+        "libpq@5.18"
+      ]
+    },
+    {
+      "ref": "g5c/udr",
+      "dependsOn": [
+        "openssl@3.5.5",
+        "nghttp2@1.68.0",
+        "libuv@1.51.0",
+        "libpq@5.18"
+      ]
+    },
+    {
+      "ref": "g5c/ausf",
+      "dependsOn": [
+        "openssl@3.5.5",
+        "nghttp2@1.68.0",
+        "libuv@1.51.0",
+        "libpq@5.18"
+      ]
+    },
+    {
+      "ref": "g5c/nrf",
+      "dependsOn": [
+        "openssl@3.5.5",
+        "nghttp2@1.68.0",
+        "libuv@1.51.0",
+        "libpq@5.18"
+      ]
+    },
+    {
+      "ref": "g5c/nssf",
+      "dependsOn": [
+        "openssl@3.5.5",
+        "nghttp2@1.68.0",
+        "libuv@1.51.0",
+        "libpq@5.18"
+      ]
+    },
+    {
+      "ref": "g5c/nef",
+      "dependsOn": [
+        "openssl@3.5.5",
+        "nghttp2@1.68.0",
+        "libuv@1.51.0",
+        "libpq@5.18"
+      ]
+    },
+    {
+      "ref": "g5c/scp",
+      "dependsOn": [
+        "openssl@3.5.5",
+        "nghttp2@1.68.0",
+        "libuv@1.51.0",
+        "libpq@5.18"
+      ]
+    },
+    {
+      "ref": "g5c/bsf",
+      "dependsOn": [
+        "openssl@3.5.5",
+        "nghttp2@1.68.0",
+        "libuv@1.51.0",
+        "libpq@5.18"
+      ]
+    },
+    {
+      "ref": "g5c/g5c-ctl",
+      "dependsOn": [
+        "openssl@3.5.5",
+        "nghttp2@1.68.0",
+        "libuv@1.51.0",
+        "libpq@5.18"
+      ]
+    }
+  ]
+}

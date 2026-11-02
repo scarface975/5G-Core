@@ -1,0 +1,3437 @@
+{
+ "title": "Conformance matrix, Phase 7 (NRF: Nnrf_NFManagement, Nnrf_NFDiscovery, Nnrf_AccessToken; discovery in the other functions; AUSF: Nausf_UEAuthentication, Nausf_SoRProtection, Nausf_UPUProtection; UDR: Nudr_DataRepository, Nudr_GroupIDmap; NSSF: Nnssf_NSSelection, Nnssf_NSSAIAvailability; NEF: TrafficInfluence, MonitoringEvent, AsSessionWithQoS; SCP: indirect communication; BSF: Nbsf_Management; PCF: Npcf_PolicyAuthorization)",
+ "note": "Same rules as the other matrices. 'verified' = tests pass and an independent peer (Open5GS's functions and its NRF as the reference, UERANSIM end to end) confirms it. The gap rows are what the phase leaves out so far.",
+ "specs": {
+  "TS 29.510": "29510-gf0.txt",
+  "TS 33.501": "33501-gk0.txt",
+  "TS 29.571": "29571-gf0.txt",
+  "TS 29.509": "29509-gb0.txt",
+  "TS 29.503": "29503-gi0.txt",
+  "TS 24.501": "24501-gf0.txt",
+  "TS 29.504": "29504-ge0.txt",
+  "TS 29.505": "29505-gc0.txt",
+  "TS 29.519": "29519-ge0.txt",
+  "TS 29.531": "29531-gb0.txt",
+  "TS 29.522": "29522-gi0.txt",
+  "TS 29.122": "29122-gj0.txt",
+  "TS 29.514": "29514-gn0.txt",
+  "TS 29.518": "29518-gj0.txt",
+  "TS 29.500": "29500-gf0.txt",
+  "TS 29.521": "29521-gb0.txt",
+  "TS 23.501": "23501-gk0.txt"
+ },
+ "rows": [
+  {
+   "id": "NRF-NFM-01",
+   "phase": 7,
+   "nf": "NRF",
+   "procedure": "NFRegister: PUT of the NFProfile; 201 with Location, ETag and the heart-beat timer; refusals (400) for a malformed profile, an id that differs from the URI, a missing nfType, a bad nfStatus, bad lists; custom NF types and vendor attributes are stored; the registry fills priority / capacity / load / plmnList when absent",
+   "spec": "TS 29.510",
+   "clause": "5.2.2.2.2",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "nrf_e2e",
+     "file": "nf/nrf/tests/test_nrf.c",
+     "fn": "test_registration"
+    },
+    {
+     "ctest": "nrf_differential",
+     "file": "tools/nrf_diff.py",
+     "fn": "main"
+    }
+   ],
+   "evidence": "Open5GS's AUSF, UDR, UDM, BSF, PCF, NSSF, SMF and AMF register at our NRF in oracle scenario S3 (OUR_NRF=1) and complete the registration, session and release; the differential against Open5GS's NRF gives the same status codes."
+  },
+  {
+   "id": "NRF-NFM-02",
+   "phase": 7,
+   "nf": "NRF",
+   "procedure": "NFUpdate by replacement (PUT on an existing instance: 200) and by JSON Patch (PATCH: 200 with the profile; 404, 409 for a non-existing attribute, 412 for a stale If-Match, 400 for an immutable attribute, a bad status or a malformed patch)",
+   "spec": "TS 29.510",
+   "clause": "5.2.2.3.1",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "nrf_e2e",
+     "file": "nf/nrf/tests/test_nrf.c",
+     "fn": "test_update"
+    }
+   ],
+   "evidence": "End-to-end with the HTTP/2 client; the patch engine is the shared RFC 6902 implementation."
+  },
+  {
+   "id": "NRF-NFM-03",
+   "phase": 7,
+   "nf": "NRF",
+   "procedure": "NF heart-beat: PATCH replace /nfStatus (and /load): 204 and no new entity tag when nothing changed; a function back from SUSPENDED gets 200 with its profile; UNDISCOVERABLE accepted",
+   "spec": "TS 29.510",
+   "clause": "5.2.2.3.2",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "nrf_e2e",
+     "file": "nf/nrf/tests/test_nrf.c",
+     "fn": "test_update"
+    },
+    {
+     "ctest": "nrf_e2e",
+     "file": "nf/nrf/tests/test_nrf.c",
+     "fn": "test_monitor"
+    }
+   ],
+   "evidence": "Open5GS's functions and ours heart-beat at our NRF for the length of the oracle scenarios."
+  },
+  {
+   "id": "NRF-NFM-04",
+   "phase": 7,
+   "nf": "NRF",
+   "procedure": "heart-beat supervision: a function that misses suspend_after heart-beats becomes SUSPENDED (not discoverable, subscribers notified); after purge_after seconds the profile is removed and NF_DEREGISTERED is sent",
+   "spec": "TS 29.510",
+   "clause": "5.2.2.3.2",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "nrf_e2e",
+     "file": "nf/nrf/tests/test_nrf.c",
+     "fn": "test_monitor"
+    }
+   ],
+   "evidence": "Timers shortened in the test (1 s heart-beat, 2 missed, 3 s purge)."
+  },
+  {
+   "id": "NRF-NFM-05",
+   "phase": 7,
+   "nf": "NRF",
+   "procedure": "NFDeregister: DELETE; 204, 404 when unknown; subscribers get NF_DEREGISTERED",
+   "spec": "TS 29.510",
+   "clause": "5.2.2.4.1",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "nrf_e2e",
+     "file": "nf/nrf/tests/test_nrf.c",
+     "fn": "test_registration"
+    },
+    {
+     "ctest": "nrf_e2e",
+     "file": "nf/nrf/tests/test_nrf.c",
+     "fn": "test_subscriptions"
+    }
+   ],
+   "evidence": "Every oracle scenario ends with the functions deregistering from our NRF."
+  },
+  {
+   "id": "NRF-NFM-06",
+   "phase": 7,
+   "nf": "NRF",
+   "procedure": "NFListRetrieval (nf-type, limit; UriList with _links.item) and NFProfileRetrieval (200, 404; the services as the nfServices array, or the nfServiceList map for a consumer that indicates the Service-Map feature)",
+   "spec": "TS 29.510",
+   "clause": "5.2.2.9.1",
+   "also": [
+    "5.2.2.8.1"
+   ],
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "nrf_e2e",
+     "file": "nf/nrf/tests/test_nrf.c",
+     "fn": "test_registration"
+    },
+    {
+     "ctest": "nrf_differential",
+     "file": "tools/nrf_diff.py",
+     "fn": "main"
+    }
+   ],
+   "evidence": "Differential: the reference answers a retrieval with the map unasked, ours follows NOTE 15 (array unless Service-Map is indicated)."
+  },
+  {
+   "id": "NRF-NFM-07",
+   "phase": 7,
+   "nf": "NRF",
+   "procedure": "NFStatusSubscribe / Update / Unsubscribe: nfStatusNotificationUri, subscrCond (nfInstanceId, nfType, serviceName, amfSetId / amfRegionId, snssaiList, nfGroupId), reqNotifEvents, notifCondition (monitored / unmonitored attributes), validityTime; 201 with Location and subscriptionId; validity extension by PATCH; 404, 400 for unsupported conditions",
+   "spec": "TS 29.510",
+   "clause": "5.2.2.5.2",
+   "also": [
+    "5.2.2.5.6",
+    "5.2.2.7.2"
+   ],
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "nrf_e2e",
+     "file": "nf/nrf/tests/test_nrf.c",
+     "fn": "test_subscriptions"
+    },
+    {
+     "ctest": "nrf_differential",
+     "file": "tools/nrf_diff.py",
+     "fn": "main"
+    }
+   ],
+   "evidence": "Open5GS's functions subscribe at our NRF and receive the status notifications in the oracle scenarios."
+  },
+  {
+   "id": "NRF-NFM-08",
+   "phase": 7,
+   "nf": "NRF",
+   "procedure": "NFStatusNotify: POST NotificationData (NF_REGISTERED, NF_PROFILE_CHANGED, NF_DEREGISTERED) with nfInstanceUri and the profile in the subscriber's representation of the services; a load report alone is not a change; three attempts",
+   "spec": "TS 29.510",
+   "clause": "5.2.2.6.2",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "nrf_e2e",
+     "file": "nf/nrf/tests/test_nrf.c",
+     "fn": "test_subscriptions"
+    }
+   ],
+   "evidence": "A callback server in the test receives and decodes each notification."
+  },
+  {
+   "id": "NRF-NFM-09",
+   "phase": 7,
+   "nf": "NRF",
+   "procedure": "OPTIONS on nf-instances answers with the capabilities",
+   "spec": "TS 29.510",
+   "clause": "5.2.2.2.2",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "nrf_e2e",
+     "file": "nf/nrf/tests/test_nrf.c",
+     "fn": "test_registration"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "NRF-DISC-01",
+   "phase": 7,
+   "nf": "NRF",
+   "procedure": "NFDiscover: target-nf-type and requester-nf-type mandatory; only REGISTERED instances; service-names (comma separated list, or repeated) with the services of the answer reduced to the intersection; snssais and target-plmn-list as JSON arrays; dnn, tai, guami, amf-set-id, amf-region-id, supi (ranges and patterns), target-nf-instance-id; allowedNfTypes of the profile and of its services; limit; unknown parameters ignored; complexQuery refused",
+   "spec": "TS 29.510",
+   "clause": "5.3.2.2.2",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "nrf_e2e",
+     "file": "nf/nrf/tests/test_nrf.c",
+     "fn": "test_discovery"
+    },
+    {
+     "ctest": "nrf_differential",
+     "file": "tools/nrf_diff.py",
+     "fn": "main"
+    },
+    {
+     "ctest": "fuzz_replay_nrf",
+     "file": "fuzz/fuzz_nrf.c",
+     "fn": "LLVMFuzzerTestOneInput"
+    }
+   ],
+   "evidence": "Our AMF, SMF, UDM, PCF and AUSF find their peers through it in the cluster and in the oracle (S3-S5); Open5GS's AMF, SMF and AUSF find ours. The differential has the same status codes for every query including the refusals."
+  },
+  {
+   "id": "NRF-DISC-02",
+   "phase": 7,
+   "nf": "NRF",
+   "procedure": "result order: preferred-locality first, then priority (lower first), then load; validityPeriod and nrfSupportedFeatures in the answer",
+   "spec": "TS 29.510",
+   "clause": "5.3.2.2.2",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "nrf_e2e",
+     "file": "nf/nrf/tests/test_nrf.c",
+     "fn": "test_discovery"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "NRF-DISC-03",
+   "phase": 7,
+   "nf": "NRF",
+   "procedure": "Service-Map feature (supported-features): nfServiceList map or nfServices array in discovery, retrieval and notifications",
+   "spec": "TS 29.510",
+   "clause": "6.1.9",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "nrf_e2e",
+     "file": "nf/nrf/tests/test_nrf.c",
+     "fn": "test_discovery"
+    },
+    {
+     "ctest": "nrf_e2e",
+     "file": "nf/nrf/tests/test_nrf.c",
+     "fn": "test_discovery_client"
+    }
+   ],
+   "evidence": "Found by the oracle run: Open5GS's functions register with the map and its clients expect the array; the first version of the NRF returned the map and the AMF could not reach the AUSF."
+  },
+  {
+   "id": "NRF-DISC-04",
+   "phase": 7,
+   "nf": "libs/nfcore",
+   "procedure": "discovery client shared by the functions: apiRoot of the first matching instance, cached for the validity period, forgotten after a connection failure",
+   "spec": "TS 29.510",
+   "clause": "5.3.2.2.2",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "nrf_e2e",
+     "file": "nf/nrf/tests/test_nrf.c",
+     "fn": "test_discovery_client"
+    },
+    {
+     "ctest": "cluster_load",
+     "file": "deploy/run/g5c-cluster.sh",
+     "fn": "-"
+    }
+   ],
+   "evidence": "UDM (UDR), PCF (UDR), AUSF (UDM), SMF (UDM, PCF, AMF) and AMF (AUSF, UDM, PCF, SMF) run with no peer address in their configuration in the cluster tests."
+  },
+  {
+   "id": "NRF-OAUTH-01",
+   "phase": 7,
+   "nf": "NRF",
+   "procedure": "Access token request: client_credentials grant, form body; the requester must be a registered instance of the stated type; the scope must be offered by a registered producer (or the given instance) that allows the requester's type; 200 with an ES256 JWT (iss, sub, aud, scope, exp), Bearer, expires_in; error body with invalid_request / invalid_client / invalid_scope / unsupported_grant_type",
+   "spec": "TS 29.510",
+   "clause": "5.4.2.2.1",
+   "also": [
+    "TS 33.501 13.4.1"
+   ],
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "nrf_e2e",
+     "file": "nf/nrf/tests/test_nrf.c",
+     "fn": "test_tokens"
+    }
+   ],
+   "evidence": "The test verifies the signature with the public key from /oauth2/jwks and rejects a damaged token, alg none and a malformed one."
+  },
+  {
+   "id": "NRF-OAUTH-02",
+   "phase": 7,
+   "nf": "NRF",
+   "procedure": "enforcement: with oauth2.enforce the discovery, retrieval, list and subscription endpoints need a bearer token whose audience is the NRF and whose scope covers the service (401, 403); registration, heart-beat and deregistration are authenticated by the transport",
+   "spec": "TS 33.501",
+   "clause": "13.4.1",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "nrf_e2e",
+     "file": "nf/nrf/tests/test_nrf.c",
+     "fn": "test_enforcement"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "NRF-OP-01",
+   "phase": 7,
+   "nf": "NRF",
+   "procedure": "the registry survives a restart (state file, written behind); registrations get a full heart-beat interval to come back",
+   "spec": "TS 29.510",
+   "clause": "5.2.2.2.2",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "nrf_e2e",
+     "file": "nf/nrf/tests/test_nrf.c",
+     "fn": "test_persistence"
+    },
+    {
+     "ctest": "cluster_chaos",
+     "file": "deploy/run/g5c-cluster.sh",
+     "fn": "-"
+    }
+   ],
+   "evidence": "The chaos run kills and restarts the NRF under load; the functions register again by themselves and the recovery wave passes."
+  },
+  {
+   "id": "NRF-OP-02",
+   "phase": 7,
+   "nf": "NRF",
+   "procedure": "configuration: registry block validated (ranges, unknown keys, enforce needs enabled, the top-level nrf key refused for the NRF itself)",
+   "spec": "TS 29.510",
+   "clause": "5.2.2.3.2",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "nrf_e2e",
+     "file": "nf/nrf/tests/test_nrf.c",
+     "fn": "test_config_errors"
+    },
+    {
+     "ctest": "bad_configs_rejected",
+     "file": "tests/conformance/check_bad_configs.sh",
+     "fn": "-"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "NRF-OP-03",
+   "phase": 7,
+   "nf": "NRF",
+   "procedure": "hostile input: replay fuzzing of registration, patch, subscription, discovery query and token request under ASan / UBSan",
+   "spec": "TS 29.510",
+   "clause": "5.2.2.2.2",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "fuzz_replay_nrf",
+     "file": "fuzz/fuzz_nrf.c",
+     "fn": "LLVMFuzzerTestOneInput"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "NRF-GAP-01",
+   "phase": 7,
+   "nf": "NRF",
+   "procedure": "NRF-to-NRF: registration of an NRF with another, forwarding and redirecting discovery, subscription and token requests, hnrf-uri",
+   "spec": "TS 29.510",
+   "clause": "5.2.2.2.3",
+   "status": "gap",
+   "tests": [],
+   "evidence": "Single NRF per PLMN; the hierarchy comes with the roaming scope, which is out of v1."
+  },
+  {
+   "id": "NRF-GAP-02",
+   "phase": 7,
+   "nf": "NRF",
+   "procedure": "other PLMNs and SNPNs: target-plmn-list towards a home NRF, subscription ids prefixed with the PLMN, SNPN lists",
+   "spec": "TS 29.510",
+   "clause": "5.3.2.2.3",
+   "status": "gap",
+   "tests": [],
+   "evidence": "Roaming is out of scope for v1 (ADR-0003)."
+  },
+  {
+   "id": "NRF-GAP-03",
+   "phase": 7,
+   "nf": "NRF",
+   "procedure": "NF sets and groups: nfSetId-based discovery and subscription conditions, nfSetIdList, NF group ids as discovery parameters",
+   "spec": "TS 29.510",
+   "clause": "5.3.2.2.2",
+   "status": "gap",
+   "tests": [],
+   "evidence": "Profiles are stored whole, so a set-aware consumer's attributes are kept; the filters are not implemented."
+  },
+  {
+   "id": "NRF-GAP-05",
+   "phase": 7,
+   "nf": "NRF",
+   "procedure": "ETag / If-Match on PUT (replacement), If-None-Match handling, compression of registration bodies",
+   "spec": "TS 29.510",
+   "clause": "6.1.2.2.4",
+   "status": "gap",
+   "tests": [],
+   "evidence": "Entity tags are issued and honoured for PATCH."
+  },
+  {
+   "id": "AUSF-UEAU-01",
+   "phase": 7,
+   "nf": "AUSF",
+   "procedure": "Authenticate with 5G AKA: POST AuthenticationInfo (SUPI or SUCI, serving network name) gets the vector from the UDM and answers 201 with UEAuthenticationCtx (rand, autn, HXRES*, the 5g-aka link) and Location; the AMF's PUT of RES* is compared with XRES*; 200 with AUTHENTICATION_SUCCESS, SUPI and KSEAF, or AUTHENTICATION_FAILURE without a key; the context is single use",
+   "spec": "TS 29.509",
+   "clause": "5.2.2.2.2",
+   "also": [
+    "TS 33.501 6.1.3.2.0",
+    "TS 33.501 A.5",
+    "TS 33.501 A.6"
+   ],
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "ausf_e2e",
+     "file": "nf/ausf/tests/test_ausf.c",
+     "fn": "test_full_aka"
+    },
+    {
+     "ctest": "ausf_e2e",
+     "file": "nf/ausf/tests/test_ausf.c",
+     "fn": "test_wrong_res_star"
+    },
+    {
+     "ctest": "ausf_e2e",
+     "file": "nf/ausf/tests/test_ausf.c",
+     "fn": "test_suci"
+    },
+    {
+     "ctest": "ausf_differential",
+     "file": "tools/ausf_diff.py",
+     "fn": "main"
+    }
+   ],
+   "evidence": "Open5GS's AMF and UERANSIM register through our AUSF behind Open5GS's UDM and NRF (oracle S3, OUR_AUSF=1), and with every function ours (S3, S4, S5). The differential against Open5GS's AUSF gives the same status codes and attributes for the shared requests; the two documented differences (a second confirmation, the kseaf attribute of a failure) are in tools/ausf_diff.py."
+  },
+  {
+   "id": "AUSF-UEAU-02",
+   "phase": 7,
+   "nf": "AUSF",
+   "procedure": "the serving network name: constructed as 5G:mnc<3>.mcc<3>.3gppnetwork.org, checked by the AUSF before it asks the UDM, restricted to a configured list of serving networks (SERVING_NETWORK_NOT_AUTHORIZED, 403)",
+   "spec": "TS 33.501",
+   "clause": "6.1.2",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "ausf_e2e",
+     "file": "nf/ausf/tests/test_more.inc",
+     "fn": "test_serving_network"
+    },
+    {
+     "ctest": "ausf_e2e",
+     "file": "nf/ausf/tests/test_more.inc",
+     "fn": "test_allow_list"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "AUSF-UEAU-03",
+   "phase": 7,
+   "nf": "AUSF",
+   "procedure": "synchronisation failure: resynchronizationInfo (RAND, AUTS) is passed to the UDM, a forged AUTS is refused (403), the SQN continues from the UE's",
+   "spec": "TS 33.501",
+   "clause": "6.1.3.3.2",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "ausf_e2e",
+     "file": "nf/ausf/tests/test_ausf.c",
+     "fn": "test_resync"
+    },
+    {
+     "ctest": "ausf_e2e",
+     "file": "nf/ausf/tests/test_ausf.c",
+     "fn": "test_forged_auts"
+    }
+   ],
+   "evidence": "Open5GS's AMF resynchronises through our AUSF in the oracle scenarios that include a stale SQN."
+  },
+  {
+   "id": "AUSF-UEAU-04",
+   "phase": 7,
+   "nf": "AUSF",
+   "procedure": "a null RES* (no response from the UE, a failed check in the AMF) is a failure; a malformed one is 400; an unknown or expired context is 404 CONTEXT_NOT_FOUND; one pending context per UE and serving network (a new start replaces it); the tables are bounded (503 beyond)",
+   "spec": "TS 29.509",
+   "clause": "5.2.2.2.2",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "ausf_e2e",
+     "file": "nf/ausf/tests/test_more.inc",
+     "fn": "test_supersede_and_limits"
+    },
+    {
+     "ctest": "ausf_e2e",
+     "file": "nf/ausf/tests/test_more.inc",
+     "fn": "test_null_res_star"
+    },
+    {
+     "ctest": "ausf_e2e",
+     "file": "nf/ausf/tests/test_more.inc",
+     "fn": "test_removal_and_deregister"
+    },
+    {
+     "ctest": "ausf_e2e",
+     "file": "nf/ausf/tests/test_ausf.c",
+     "fn": "test_context_expiry"
+    },
+    {
+     "ctest": "fuzz_replay_ausf",
+     "file": "fuzz/fuzz_ausf.c",
+     "fn": "LLVMFuzzerTestOneInput"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "AUSF-UEAU-05",
+   "phase": 7,
+   "nf": "AUSF",
+   "procedure": "Authenticate with EAP-AKA': the UDM's AV' (RAND, AUTN with the AMF separation bit, XRES, CK', IK') is turned into the EAP-Request/AKA'-Challenge (AT_RAND, AT_AUTN, AT_KDF 1, AT_KDF_INPUT = the serving network name, optional AT_RESULT_IND, AT_MAC) in the 5gAuthData string and the eap-session link; the response is verified (AT_MAC first, then RES; an AT_KDF that asks for another function fails), with a failure notification and EAP-Failure after a failed round, AKA'-Authentication-Reject and Client-Error ending the session, a protected success indication when both sides ask for one, the synchronisation failure answered with a new challenge (at most twice), and EAP-Success with KSEAF (the first 256 bits of the EMSK -> KAUSF -> KSEAF) at the end",
+   "spec": "TS 29.509",
+   "clause": "5.2.2.2.3",
+   "also": [
+    "TS 33.501 6.1.3.1",
+    "TS 33.501 Annex F",
+    "RFC 5448",
+    "RFC 4187",
+    "RFC 9048",
+    "TS 24.501 5.4.1.2.2"
+   ],
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "ausf_e2e",
+     "file": "nf/ausf/tests/test_more.inc",
+     "fn": "test_eap_full"
+    },
+    {
+     "ctest": "ausf_e2e",
+     "file": "nf/ausf/tests/test_more.inc",
+     "fn": "test_eap_result_indication"
+    },
+    {
+     "ctest": "ausf_e2e",
+     "file": "nf/ausf/tests/test_more.inc",
+     "fn": "test_eap_failures"
+    },
+    {
+     "ctest": "ausf_e2e",
+     "file": "nf/ausf/tests/test_more.inc",
+     "fn": "test_eap_resync"
+    },
+    {
+     "ctest": "crypto_eapaka",
+     "file": "libs/crypto/tests/test_eapaka.c",
+     "fn": "test_vectors"
+    },
+    {
+     "ctest": "amf_e2e",
+     "file": "nf/amf/tests/test_amf_e2e.c",
+     "fn": "test_eap_registration"
+    },
+    {
+     "ctest": "udm_unit_and_services",
+     "file": "nf/udm/tests/test_udm.c",
+     "fn": "test_ueau_eap"
+    }
+   ],
+   "evidence": "Key derivation: the four test vectors of RFC 9048 Annex D (CK', IK', K_encr, K_aut, K_re, MSK, EMSK) are reproduced. End to end: UERANSIM's own EAP-AKA' peer (nr-ue, with the one-line decoder fix of deploy/oracle/build_ueransim_eap.sh) registers, sets up a PDU session and pings through our NRF, AUSF, AMF, SMF, UPF, UDM and PCF (oracle S3, S5 with AUTH_METHOD=EAP_AKA_PRIME); the AMF carries the challenge in the EAP message of the Authentication request and the EAP-success in the Security mode command (TS 24.501 5.4.1.2.1)."
+  },
+  {
+   "id": "AUSF-UEAU-06",
+   "phase": 7,
+   "nf": "AUSF",
+   "procedure": "removal of an authentication result (DELETE on the 5g-aka-confirmation or eap-session resource): 204, the UDM is told (PUT auth-events/{authEventId} with authRemovalInd), only for the current result of the UE; the AMF deletes the result when the UE is de-registered, implicitly de-registered or rejects the security mode command",
+   "spec": "TS 29.509",
+   "clause": "5.2.2.2.5",
+   "also": [
+    "TS 29.509 5.2.2.2.6",
+    "TS 29.503 6.3.3.6"
+   ],
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "ausf_e2e",
+     "file": "nf/ausf/tests/test_more.inc",
+     "fn": "test_removal_and_deregister"
+    },
+    {
+     "ctest": "ausf_e2e",
+     "file": "nf/ausf/tests/test_more.inc",
+     "fn": "test_eap_full"
+    }
+   ],
+   "evidence": "In the oracle scenarios our AUSF forwards Open5GS's AMF's DELETE to Open5GS's UDM, which accepts it (it wants success=true next to authRemovalInd: our AUSF sends the specified false first and the other form when the UDM answers 400)."
+  },
+  {
+   "id": "AUSF-UEAU-07",
+   "phase": 7,
+   "nf": "AUSF",
+   "procedure": "deregister: POST .../ue-authentications/deregister clears the security context of a SUPI (204; 404 CONTEXT_NOT_FOUND; 400)",
+   "spec": "TS 29.509",
+   "clause": "5.2.2.3.1",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "ausf_e2e",
+     "file": "nf/ausf/tests/test_more.inc",
+     "fn": "test_removal_and_deregister"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "AUSF-UEAU-08",
+   "phase": 7,
+   "nf": "AUSF",
+   "procedure": "FN-RG authentication: POST rg-authentications with the SUCI and the authenticated indication; the UDM's RgAuthCtx gives the SUPI; AUTHENTICATION_SUCCESS with authInd when the W-AGF authenticated the gateway, AUTHENTICATION_FAILURE otherwise",
+   "spec": "TS 29.509",
+   "clause": "5.2.2.2.4",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "ausf_e2e",
+     "file": "nf/ausf/tests/test_more.inc",
+     "fn": "test_rg"
+    },
+    {
+     "ctest": "udm_unit_and_services",
+     "file": "nf/udm/tests/test_udm.c",
+     "fn": "test_ueau_eap"
+    }
+   ],
+   "evidence": "The UDM side (GET security-information-rg) is part of the same change."
+  },
+  {
+   "id": "AUSF-UEAU-09",
+   "phase": 7,
+   "nf": "AUSF",
+   "procedure": "errors of the UDM mapped as the AUSF table says: USER_NOT_FOUND (404), AUTHENTICATION_REJECTED / SERVING_NETWORK_NOT_AUTHORIZED / INVALID_HN_PUBLIC_KEY_IDENTIFIER / INVALID_SCHEME_OUTPUT (403), UNSUPPORTED_PROTECTION_SCHEME (501), AV_GENERATION_PROBLEM (500), UPSTREAM_SERVER_ERROR and NETWORK_FAILURE (504)",
+   "spec": "TS 29.509",
+   "clause": "6.1.7.3",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "ausf_e2e",
+     "file": "nf/ausf/tests/test_ausf.c",
+     "fn": "test_ausf_udm_faults"
+    },
+    {
+     "ctest": "ausf_e2e",
+     "file": "nf/ausf/tests/test_ausf.c",
+     "fn": "test_error_cases"
+    },
+    {
+     "ctest": "ausf_e2e",
+     "file": "nf/ausf/tests/test_ausf.c",
+     "fn": "test_udm_damaged_credentials"
+    },
+    {
+     "ctest": "ausf_differential",
+     "file": "tools/ausf_diff.py",
+     "fn": "main"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "AUSF-SOR-01",
+   "phase": 7,
+   "nf": "AUSF",
+   "procedure": "Nausf_SoRProtection generate-sor-data: the SoR header (ACK, list type, list indication), SoR-MAC-IAUSF = the 128 least significant bits of KDF(KAUSF, 0x77, header, CounterSoR, list), SoR-XMAC-IUE = KDF(KAUSF, 0x78, 0x01, CounterSoR); PLMN identities as TS 24.008, access technologies as TS 31.102, secured packets as base64; CounterSoR starts at 1 with every new KAUSF, goes up with every MAC and suspends the service (503 COUNTER_WRAP) at 0xFFFF; 404 without a security context",
+   "spec": "TS 29.509",
+   "clause": "5.3.2.2.1",
+   "also": [
+    "TS 33.501 6.14",
+    "TS 33.501 A.17",
+    "TS 33.501 A.18",
+    "TS 24.501 9.11.3.51"
+   ],
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "ausf_e2e",
+     "file": "nf/ausf/tests/test_more.inc",
+     "fn": "test_sor"
+    }
+   ],
+   "evidence": "The expected MACs in the test are computed from the clauses' own constants and byte strings written out by hand. The consumer side (UDM, AMF, UE) does not exist yet: AUSF-GAP-02."
+  },
+  {
+   "id": "AUSF-UPU-01",
+   "phase": 7,
+   "nf": "AUSF",
+   "procedure": "Nausf_UPUProtection generate-upu-data: UPU-MAC-IAUSF = KDF(KAUSF, 0x7B, UE parameters update list, CounterUPU) (secured packet, default configured NSSAI and ME routing indicator data sets as TS 24.501 9.11.3.53A encodes them), UPU-XMAC-IUE = KDF(KAUSF, 0x7C, 0x01, CounterUPU); the same counter rules",
+   "spec": "TS 29.509",
+   "clause": "5.4.2.2.1",
+   "also": [
+    "TS 33.501 6.15",
+    "TS 33.501 A.19",
+    "TS 33.501 A.20",
+    "TS 24.501 9.11.3.53A"
+   ],
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "ausf_e2e",
+     "file": "nf/ausf/tests/test_more.inc",
+     "fn": "test_upu"
+    }
+   ],
+   "evidence": "As for SoR."
+  },
+  {
+   "id": "AUSF-OP-01",
+   "phase": 7,
+   "nf": "AUSF",
+   "procedure": "the latest KAUSF of every authenticated SUPI, with its counters, is kept in an AES-256-GCM wrapped state file (bound to the SUPI) written behind the requests and restored at start-up with the counters ahead of the last values used; a wrong key, a tampered ciphertext, a moved record and a damaged file stop the start",
+   "spec": "TS 33.501",
+   "clause": "6.1.1.2",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "ausf_e2e",
+     "file": "nf/ausf/tests/test_more.inc",
+     "fn": "test_state_file"
+    },
+    {
+     "ctest": "cluster_chaos",
+     "file": "deploy/run/g5c-cluster.sh",
+     "fn": "-"
+    }
+   ],
+   "evidence": "The chaos run kills and restarts the AUSF under load."
+  },
+  {
+   "id": "AUSF-OP-02",
+   "phase": 7,
+   "nf": "AUSF",
+   "procedure": "registration at the NRF with the three services (nausf-auth, nausf-sorprotection, nausf-upuprotection) and ausfInfo (supiRanges, routingIndicators, groupId); the UDM is found through the NRF",
+   "spec": "TS 29.510",
+   "clause": "6.1.6.2.8",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "ausf_e2e",
+     "file": "nf/ausf/tests/test_more.inc",
+     "fn": "test_config"
+    },
+    {
+     "ctest": "cluster_load",
+     "file": "deploy/run/g5c-cluster.sh",
+     "fn": "-"
+    }
+   ],
+   "evidence": "Open5GS's AMF finds our AUSF at Open5GS's NRF and ours; our AMF finds it at ours."
+  },
+  {
+   "id": "AUSF-OP-03",
+   "phase": 7,
+   "nf": "AUSF",
+   "procedure": "configuration: the ausf block validated (ranges, unknown keys, serving network names, state file needs the master key, supi_ranges, routing_indicators)",
+   "spec": "TS 33.501",
+   "clause": "6.1.2",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "ausf_e2e",
+     "file": "nf/ausf/tests/test_more.inc",
+     "fn": "test_config"
+    },
+    {
+     "ctest": "bad_configs_rejected",
+     "file": "tests/conformance/check_bad_configs.sh",
+     "fn": "-"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "AUSF-OP-04",
+   "phase": 7,
+   "nf": "AUSF",
+   "procedure": "hostile input: replay fuzzing of every request of the three services against a stub UDM with a known EAP-AKA' vector, under ASan / UBSan",
+   "spec": "TS 29.509",
+   "clause": "6.1.3.2.3",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "fuzz_replay_ausf",
+     "file": "fuzz/fuzz_ausf.c",
+     "fn": "LLVMFuzzerTestOneInput"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "AUSF-OP-05",
+   "phase": 7,
+   "nf": "AUSF",
+   "procedure": "every body the AUSF produces (UEAuthenticationCtx for both methods, ConfirmationDataResponse, EapSession in three states, RgAuthCtx, SorSecurityInfo, UpuSecurityInfo, ProblemDetails) validates against the OpenAPI of the pinned specification; so do the UDM's EAP-AKA' vector and RgAuthCtx",
+   "spec": "TS 29.509",
+   "clause": "Annex A",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "conformance_dump_payloads_noop",
+     "file": "tests/conformance/dump_payloads.c",
+     "fn": "ausf_more_payloads"
+    }
+   ],
+   "evidence": "scripts/validate_payloads.ps1: 44 of 44 payloads valid."
+  },
+  {
+   "id": "AUSF-GAP-01",
+   "phase": 7,
+   "nf": "AUSF",
+   "procedure": "EAP-TLS for N5GC devices and FN-RGs in private networks (n5gcInd, Annex B)",
+   "spec": "TS 29.509",
+   "clause": "Annex B",
+   "status": "gap",
+   "tests": [],
+   "evidence": "A request with n5gcInd true is refused (403 AUTHENTICATION_REJECTED)."
+  },
+  {
+   "id": "AUSF-GAP-02",
+   "phase": 7,
+   "nf": "AUSF",
+   "procedure": "the consumers of the protection services: the UDM requesting SoR-MAC-IAUSF / UPU-MAC-IAUSF when it delivers steering information or UE parameters (including the SoR / UPU containers in the AMF's Registration accept and DL NAS transport and the acknowledgement checks), and the UDM clearing a stale context at an old AUSF (deregister)",
+   "spec": "TS 33.501",
+   "clause": "6.14.2",
+   "status": "gap",
+   "tests": [],
+   "evidence": "The AUSF side is complete and tested through its API; wiring the UDM and the AMF is a Release 15 / 16 feature pass of its own."
+  },
+  {
+   "id": "AUSF-GAP-04",
+   "phase": 7,
+   "nf": "AUSF",
+   "procedure": "EAP identity exchange (EAP-Request/Identity, AKA'-Identity with AT_*_ID_REQ), pseudonyms and fast re-authentication",
+   "spec": "TS 33.501",
+   "clause": "Annex F.2",
+   "status": "gap",
+   "tests": [],
+   "evidence": "5GS does not use fast re-authentication (Annex F.3 NOTE 1) and sends the SUCI outside EAP; the AUSF never requests an identity."
+  },
+  {
+   "id": "AUSF-GAP-05",
+   "phase": 7,
+   "nf": "AUSF",
+   "procedure": "HTTP 307 / 308 redirection (ES3XX) between AUSF instances of a set, indirect communication through an SCP",
+   "spec": "TS 29.509",
+   "clause": "6.1.10",
+   "status": "gap",
+   "tests": [],
+   "evidence": "One AUSF instance per deployment unit; the SCP is a later function."
+  },
+  {
+   "id": "UDR-API-01",
+   "phase": 7,
+   "nf": "UDR",
+   "procedure": "every operation of the four published API files (subscription data, policy data, exposure data, application data: 176 operations, 444 schemas) is generated from the pinned OpenAPI files and served under /nudr-dr/v1 and /nudr-dr/v2, from one engine",
+   "spec": "TS 29.504",
+   "clause": "6.1.1",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "udr_api",
+     "file": "nf/udr/tests/test_udr_api.c",
+     "fn": "test_validation_and_status"
+    },
+    {
+     "ctest": "conformance_dump_payloads_noop",
+     "file": "tests/conformance/dump_payloads.c",
+     "fn": "udr_payloads"
+    }
+   ],
+   "evidence": "tools/gen_udr_api.py --check proves that the committed tables are those of the pinned files; 19 UDR payloads validate against the OpenAPI."
+  },
+  {
+   "id": "UDR-DR-01",
+   "phase": 7,
+   "nf": "UDR",
+   "procedure": "Query: GET of a document, of a collection (the children of a path), of a composite parent (ProvisionedDataSets, ContextDataSets); 404 with USER_NOT_FOUND when the subscriber is unknown and DATA_NOT_FOUND when the data is; the SM data filters single-nssai and dnn, the SM policy filters snssai and dnn",
+   "spec": "TS 29.504",
+   "clause": "5.2.2.2.2",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "udr_api",
+     "file": "nf/udr/tests/test_udr_api.c",
+     "fn": "test_fields_filters_composites"
+    },
+    {
+     "ctest": "udr_differential",
+     "file": "tools/udr_diff.py",
+     "fn": "main"
+    }
+   ],
+   "evidence": "Oracle S3 and S4 with Open5GS's UDM, AUSF, PCF, SMF and AMF against our UDR (OUR_UDR=1): the subscriber is provisioned in Open5GS's document format and UERANSIM registers, opens a PDU session, pings and releases it."
+  },
+  {
+   "id": "UDR-DR-02",
+   "phase": 7,
+   "nf": "UDR",
+   "procedure": "retrieval of a subset of a resource: ?fields= with JSON pointers (members, members of members, members of every array element); a bare member name is taken as a pointer (Open5GS's UDM sends fields=nssai)",
+   "spec": "TS 29.504",
+   "clause": "5.2.2.2.3",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "udr_api",
+     "file": "nf/udr/tests/test_udr_api.c",
+     "fn": "test_fields_filters_composites"
+    },
+    {
+     "ctest": "udr_differential",
+     "file": "tools/udr_diff.py",
+     "fn": "main"
+    }
+   ],
+   "evidence": "The differential compares fields=nssai with Open5GS's UDR; Open5GS's UDM's NSSAI query works against our UDR in oracle S3."
+  },
+  {
+   "id": "UDR-DR-03",
+   "phase": 7,
+   "nf": "UDR",
+   "procedure": "Create: PUT of a new resource answers 201 with the representation and the Location, POST to a collection allocates the identifier and answers 201; a replacing PUT answers 204 (or 200 where the operation lists it); compat.put_no_content answers 204 for Open5GS's UDM",
+   "spec": "TS 29.504",
+   "clause": "5.2.2.3.2",
+   "also": [
+    "TS 29.504 5.2.2.3.3"
+   ],
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "udr_api",
+     "file": "nf/udr/tests/test_udr_api.c",
+     "fn": "test_validation_and_status"
+    },
+    {
+     "ctest": "udr_notify",
+     "file": "nf/udr/tests/test_udr_notify.c",
+     "fn": "test_subscription_data"
+    }
+   ],
+   "evidence": "Oracle S3 and S4 with Open5GS's UDM, AUSF, PCF, SMF and AMF against our UDR (OUR_UDR=1): the subscriber is provisioned in Open5GS's document format and UERANSIM registers, opens a PDU session, pings and releases it."
+  },
+  {
+   "id": "UDR-DR-04",
+   "phase": 7,
+   "nf": "UDR",
+   "procedure": "Delete: 204; 404 when absent; the subscriber's whole data (DELETE /subscription-data/{ueId}, provisioning extension) removes its aliases too",
+   "spec": "TS 29.504",
+   "clause": "5.2.2.4.2",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "udr_api",
+     "file": "nf/udr/tests/test_udr_api.c",
+     "fn": "test_fields_filters_composites"
+    },
+    {
+     "ctest": "udr_api",
+     "file": "nf/udr/tests/test_udr_api.c",
+     "fn": "test_aliases_and_policy"
+    }
+   ],
+   "evidence": "Oracle S3 and S4 with Open5GS's UDM, AUSF, PCF, SMF and AMF against our UDR (OUR_UDR=1): the subscriber is provisioned in Open5GS's document format and UERANSIM registers, opens a PDU session, pings and releases it. Open5GS's UDM deletes the SMF registration at release."
+  },
+  {
+   "id": "UDR-DR-05",
+   "phase": 7,
+   "nf": "UDR",
+   "procedure": "Update: PATCH with JSON Patch (application/json-patch+json, plain application/json taken as one) or merge patch, atomic, the result validated, a failing patch changes nothing (400 MODIFICATION_NOT_ALLOWED); PUT replaces",
+   "spec": "TS 29.504",
+   "clause": "5.2.2.5.2",
+   "also": [
+    "TS 29.504 5.2.2.5.3"
+   ],
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "udr_api",
+     "file": "nf/udr/tests/test_udr_api.c",
+     "fn": "test_etag_and_patch"
+    },
+    {
+     "ctest": "udr_patch_store_routes",
+     "file": "nf/udr/tests/test_udr.c",
+     "fn": "test_patch_rfc6902"
+    }
+   ],
+   "evidence": "Open5GS's UDM updates the SQN with a JSON Patch on the authentication subscription in every registration of oracle S3."
+  },
+  {
+   "id": "UDR-DR-06",
+   "phase": 7,
+   "nf": "UDR",
+   "procedure": "entity tags and validators: strong ETag (the revision) and Last-Modified on every representation, 304 for If-None-Match and If-Modified-Since, 412 for a failed If-Match / If-None-Match: * on PUT, PATCH and DELETE, checked inside the storage operation (atomic), Cache-Control max-age configurable",
+   "spec": "TS 29.504",
+   "clause": "6.1.2.2.4",
+   "also": [
+    "TS 29.504 6.1.2.2.5",
+    "TS 29.504 6.1.2.2.6",
+    "TS 29.504 6.1.2.2.7"
+   ],
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "udr_api",
+     "file": "nf/udr/tests/test_udr_api.c",
+     "fn": "test_etag_and_patch"
+    },
+    {
+     "ctest": "udr_db",
+     "file": "nf/udr/tests/test_udr_db.c",
+     "fn": "test_conditions"
+    },
+    {
+     "ctest": "udr_db",
+     "file": "nf/udr/tests/test_udr_db.c",
+     "fn": "test_contention"
+    }
+   ],
+   "evidence": "Eight threads create one key: exactly one wins, on every backend."
+  },
+  {
+   "id": "UDR-DR-07",
+   "phase": 7,
+   "nf": "UDR",
+   "procedure": "bodies are validated against the schemas of the pinned OpenAPI files (type, enum, range, length, pattern, required members, additional properties, combinators) and the document a PATCH produces too; the error names the JSON pointer",
+   "spec": "TS 29.505",
+   "clause": "5.2.2",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "udr_api",
+     "file": "nf/udr/tests/test_udr_api.c",
+     "fn": "test_validation_and_status"
+    },
+    {
+     "ctest": "udr_api_postgres",
+     "file": "nf/udr/tests/test_udr_api.c",
+     "fn": "test_validation_and_status"
+    }
+   ],
+   "evidence": "Open5GS's SM data (three allowed SSC modes, schema maximum two) is refused, and the oracle provisions a conforming document: the validator is strict where the reference is not."
+  },
+  {
+   "id": "UDR-DR-08",
+   "phase": 7,
+   "nf": "UDR",
+   "procedure": "Subscribe and unsubscribe: POST to subs-to-notify of each data set (subscription, policy, exposure, application, influence data), 201 with Location and the subscriptionId, expiry chosen by the UDR (bounded, spread), a bound on the number of subscriptions (429), DELETE to unsubscribe, expired subscriptions removed",
+   "spec": "TS 29.504",
+   "clause": "5.2.2.6.2",
+   "also": [
+    "TS 29.504 5.2.2.7.2"
+   ],
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "udr_notify",
+     "file": "nf/udr/tests/test_udr_notify.c",
+     "fn": "test_subscription_data"
+    },
+    {
+     "ctest": "udr_notify",
+     "file": "nf/udr/tests/test_udr_notify.c",
+     "fn": "test_limits_expiry_and_failures"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "UDR-DR-09",
+   "phase": 7,
+   "nf": "UDR",
+   "procedure": "Notify on a change of subscription data: DataChangeNotify with NotifyItem / ChangeItem (whole document ADD or REMOVE, else one item per changed member), the originalCallbackReference of a stateless UDM, 3gpp-Sbi-Notification-Correlation suppresses the named subscriptions; delivery by worker threads with retries, a bounded queue and outcome counters",
+   "spec": "TS 29.504",
+   "clause": "5.2.2.8.2",
+   "also": [
+    "TS 29.504 5.2.2.8.3",
+    "TS 29.504 6.1.2.3.3"
+   ],
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "udr_notify",
+     "file": "nf/udr/tests/test_udr_notify.c",
+     "fn": "test_subscription_data"
+    },
+    {
+     "ctest": "udr_notify_postgres",
+     "file": "nf/udr/tests/test_udr_notify.c",
+     "fn": "test_subscription_data"
+    },
+    {
+     "ctest": "udr_notify",
+     "file": "nf/udr/tests/test_udr_notify.c",
+     "fn": "test_limits_expiry_and_failures"
+    }
+   ],
+   "evidence": "A real callback server over HTTP/2."
+  },
+  {
+   "id": "UDR-DR-10",
+   "phase": 7,
+   "nf": "UDR",
+   "procedure": "notifications of policy data (PolicyDataChangeNotification by resource: am-data, sm-data, usage monitoring, operator-specific data, sponsor, BDT, PLMN UE policy; delResources on removal), exposure data (ExposureDataChangeNotification), influence data and application data (TrafficInfluDataNotif, ApplicationDataChangeNotif, filtered by dnns, snssais, internalGroupIds, supis, appIds / dataFilters)",
+   "spec": "TS 29.519",
+   "clause": "6.2.2",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "udr_notify",
+     "file": "nf/udr/tests/test_udr_notify.c",
+     "fn": "test_other_data_sets"
+    },
+    {
+     "ctest": "conformance_dump_payloads_noop",
+     "file": "tests/conformance/dump_payloads.c",
+     "fn": "udr_payloads"
+    }
+   ],
+   "evidence": "The notification bodies validate against the OpenAPI schemas of the pinned specification."
+  },
+  {
+   "id": "UDR-DR-11",
+   "phase": 7,
+   "nf": "UDR",
+   "procedure": "a subscriber addressed by GPSI (msisdn-, extid-) is resolved to its SUPI through the alias index kept from the identity data; S-NSSAI comparison treats the slice differentiator FFFFFF as none",
+   "spec": "TS 29.505",
+   "clause": "5.2.2",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "udr_api",
+     "file": "nf/udr/tests/test_udr_api.c",
+     "fn": "test_aliases_and_policy"
+    },
+    {
+     "ctest": "udr_api",
+     "file": "nf/udr/tests/test_udr_api.c",
+     "fn": "test_fields_filters_composites"
+    }
+   ],
+   "evidence": "Open5GS's UDM and SMF send single-nssai {sst, sd: ffffff}; without the equivalence they get no SM data (found by oracle S3)."
+  },
+  {
+   "id": "UDR-DR-12",
+   "phase": 7,
+   "nf": "UDR",
+   "procedure": "the provisioning extension (PUT and DELETE on the GET-only resources, DELETE of a subscriber, listing the subscribers) needs the bearer token, 403 PROVISIONING_DISABLED without one configured; the UDM presents it; the operations of the specification need none",
+   "spec": "TS 29.505",
+   "clause": "5.2.2",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "udr_api",
+     "file": "nf/udr/tests/test_udr_api.c",
+     "fn": "test_provisioning_access"
+    },
+    {
+     "ctest": "udm_unit_and_services",
+     "file": "nf/udm/tests/test_udm.c",
+     "fn": "test_udr_provisioning_token"
+    },
+    {
+     "ctest": "cluster_load",
+     "file": "deploy/run/g5c-cluster.sh",
+     "fn": "-"
+    }
+   ],
+   "evidence": "The cluster runs with a token on the UDR and one on the UDM."
+  },
+  {
+   "id": "UDR-GRP-01",
+   "phase": 7,
+   "nf": "UDR",
+   "procedure": "Nudr_GroupIDmap: GET nf-group-ids with nf-type (list) and subscriberId answers the map NF type -> group id from the configured SUPI ranges; a GPSI is resolved first; 400 for a missing or malformed parameter, 404 when nothing is configured",
+   "spec": "TS 29.504",
+   "clause": "5.3.2.2.2",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "udr_config",
+     "file": "nf/udr/tests/test_udr_config.c",
+     "fn": "test_config_and_groupids"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "UDR-STO-01",
+   "phase": 7,
+   "nf": "UDR",
+   "procedure": "storage interface (get, put with precondition and replaced record, delete, atomic mutate, prefix listing, partitions) with the same expectations on the memory, the journalled file and the PostgreSQL backend: revisions, preconditions, prefix semantics (keys with LIKE metacharacters and unicode), eight-thread read-modify-write without a lost update",
+   "spec": "TS 29.504",
+   "clause": "5.2.1.2",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "udr_db",
+     "file": "nf/udr/tests/test_udr_db.c",
+     "fn": "test_basic"
+    },
+    {
+     "ctest": "udr_db_postgres",
+     "file": "nf/udr/tests/test_udr_db.c",
+     "fn": "test_basic"
+    },
+    {
+     "ctest": "udr_db_postgres",
+     "file": "nf/udr/tests/test_udr_db.c",
+     "fn": "test_contention"
+    }
+   ],
+   "evidence": "PostgreSQL 18 started without root for each test run (deploy/run/pg-temp.sh)."
+  },
+  {
+   "id": "UDR-STO-02",
+   "phase": 7,
+   "nf": "UDR",
+   "procedure": "PostgreSQL: one table with jsonb documents, revisions from a sequence, row locks for the transactions, a connection pool, schema version check, an unreachable server is a start-up error; the API tests, the notification tests and the storage tests all run on it",
+   "spec": "TS 29.504",
+   "clause": "5.2.1.2",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "udr_api_postgres",
+     "file": "nf/udr/tests/test_udr_api.c",
+     "fn": "test_etag_and_patch"
+    },
+    {
+     "ctest": "udr_notify_postgres",
+     "file": "nf/udr/tests/test_udr_notify.c",
+     "fn": "test_other_data_sets"
+    },
+    {
+     "ctest": "udr_db_postgres",
+     "file": "nf/udr/tests/test_udr_db.c",
+     "fn": "test_mutate"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "UDR-STO-03",
+   "phase": 7,
+   "nf": "UDR",
+   "procedure": "the journalled file store: write-behind journal and snapshot, recovery from a crash image (including a journal older than its snapshot), refusal of an unreadable, corrupt or unwritable store at start-up",
+   "spec": "TS 29.504",
+   "clause": "5.2.1.2",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "udr_patch_store_routes",
+     "file": "nf/udr/tests/test_udr.c",
+     "fn": "test_journal_recovery"
+    },
+    {
+     "ctest": "udr_patch_store_routes",
+     "file": "nf/udr/tests/test_udr.c",
+     "fn": "test_store_startup"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "UDR-OP-01",
+   "phase": 7,
+   "nf": "UDR",
+   "procedure": "registration at the NRF: nudr-dr (v1 and v2 as one service with two versions), nudr-group-id-map and udrInfo (group id, SUPI / GPSI ranges, supported data sets); found by Open5GS's UDM, AUSF and PCF through the NRF",
+   "spec": "TS 29.510",
+   "clause": "6.1.6.2.8",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "nfcore_runtime_nrf",
+     "file": "libs/nfcore/tests/test_nfcore.c",
+     "fn": "test_profile_versions"
+    },
+    {
+     "ctest": "udr_config",
+     "file": "nf/udr/tests/test_udr_config.c",
+     "fn": "test_config_and_groupids"
+    },
+    {
+     "ctest": "cluster_load",
+     "file": "deploy/run/g5c-cluster.sh",
+     "fn": "-"
+    }
+   ],
+   "evidence": "Oracle S3 and S4 with Open5GS's UDM, AUSF, PCF, SMF and AMF against our UDR (OUR_UDR=1): the subscriber is provisioned in Open5GS's document format and UERANSIM registers, opens a PDU session, pings and releases it."
+  },
+  {
+   "id": "UDR-OP-02",
+   "phase": 7,
+   "nf": "UDR",
+   "procedure": "configuration: store (memory, file, postgres; the connection string only from the environment or a file), provisioning token (16 characters at least), validation switch, udrInfo ranges, subscription limits, cache, compatibility, group map; unknown keys and bad values refused with the name of the key",
+   "spec": "TS 29.504",
+   "clause": "6.1.7",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "bad_configs_rejected",
+     "file": "tests/conformance/check_bad_configs.sh",
+     "fn": "-"
+    },
+    {
+     "ctest": "udr_config",
+     "file": "nf/udr/tests/test_udr_config.c",
+     "fn": "test_defaults_and_refusals"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "UDR-OP-03",
+   "phase": 7,
+   "nf": "UDR",
+   "procedure": "hostile input: replay fuzzing of requests to 33 resources with every method, content type, query and precondition, of arbitrary paths and of the group map query, under ASan / UBSan (30,000 mutations per seed run locally)",
+   "spec": "TS 29.504",
+   "clause": "6.1.6",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "fuzz_replay_udr",
+     "file": "fuzz/fuzz_udr.c",
+     "fn": "LLVMFuzzerTestOneInput"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "UDR-OP-04",
+   "phase": 7,
+   "nf": "UDR",
+   "procedure": "every body the UDR produces (the composites, registrations, identity data, subscriptions in all five data sets, the five notifications, ProblemDetails for 404 / 400 / 412) validates against the OpenAPI of the pinned specifications",
+   "spec": "TS 29.505",
+   "clause": "Annex A",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "conformance_dump_payloads_noop",
+     "file": "tests/conformance/dump_payloads.c",
+     "fn": "udr_payloads"
+    }
+   ],
+   "evidence": "scripts/validate_payloads.ps1: every payload valid in the run of the time (63 of 63, 19 of them the UDR's; 81 of 81 now)."
+  },
+  {
+   "id": "UDR-OP-05",
+   "phase": 7,
+   "nf": "UDR",
+   "procedure": "Open5GS as the consumer: its UDM, AUSF, PCF, SMF and AMF run their registration, PDU session, policy and release procedures against our UDR",
+   "spec": "TS 29.505",
+   "clause": "5.2.2",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "sbi_oracle_interop",
+     "file": "tests/conformance/CMakeLists.txt",
+     "fn": "-"
+    }
+   ],
+   "evidence": "Oracle S3 and S4 with Open5GS's UDM, AUSF, PCF, SMF and AMF against our UDR (OUR_UDR=1): the subscriber is provisioned in Open5GS's document format and UERANSIM registers, opens a PDU session, pings and releases it. scripts/g5c_regress.sh --oracle runs S3 and S4 this way."
+  },
+  {
+   "id": "UDR-OP-06",
+   "phase": 7,
+   "nf": "UDR",
+   "procedure": "Open5GS as the reference: the same requests to its UDR (over MongoDB) and to ours, with the documents of the reference written into ours first; statuses and attribute sets compared, every accepted difference written down with its reason",
+   "spec": "TS 29.504",
+   "clause": "5.2.2",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "udr_differential",
+     "file": "tools/udr_diff.py",
+     "fn": "main"
+    }
+   ],
+   "evidence": "28 requests; the documents of the reference are accepted by our validator except the SSC-mode list that violates the schema."
+  },
+  {
+   "id": "UDR-GAP-01",
+   "phase": 7,
+   "nf": "UDR",
+   "procedure": "26 schema references into specifications that are not pinned (TS 29.122, 29.514, 29.518, 29.522, 29.544, 29.551, 29.554, 29.572) accept any value: BDT, traffic influence, service parameter and IPTV details are not validated",
+   "spec": "TS 29.519",
+   "clause": "Annex A",
+   "status": "gap",
+   "tests": [],
+   "evidence": "Downloading those specifications needs the owner's permission; the generator lists the references."
+  },
+  {
+   "id": "UDR-GAP-02",
+   "phase": 7,
+   "nf": "UDR",
+   "procedure": "PFD change notifications (ApplicationDataChangeNotif.pfdData, TS 29.551) are not sent; monResItems of a policy data subscription is not supported",
+   "spec": "TS 29.519",
+   "clause": "6.2.3",
+   "status": "gap",
+   "tests": [],
+   "evidence": ""
+  },
+  {
+   "id": "UDR-GAP-03",
+   "phase": 7,
+   "nf": "UDR",
+   "procedure": "the implicit subscription of the UDM to permanent subscription data (the UDR selects a UDM through the NRF to notify a provisioning change)",
+   "spec": "TS 29.504",
+   "clause": "5.2.2.6.1",
+   "status": "gap",
+   "tests": [],
+   "evidence": "Subscriptions are explicit; the UDM does not yet subscribe to the data it caches (it caches nothing)."
+  },
+  {
+   "id": "UDR-GAP-04",
+   "phase": 7,
+   "nf": "UDR",
+   "procedure": "feature negotiation (supportedFeatures is stored, not negotiated), DELETE of a subscription collection by query filters, 3gpp-Sbi-Message-Priority",
+   "spec": "TS 29.504",
+   "clause": "6.1.8",
+   "status": "gap",
+   "tests": [],
+   "evidence": ""
+  },
+  {
+   "id": "UDR-GAP-05",
+   "phase": 7,
+   "nf": "UDR",
+   "procedure": "the group data aggregates (5g-vn-groups/internal, pp-profile-data, group-identifiers) are stored documents, not derived from the groups",
+   "spec": "TS 29.505",
+   "clause": "5.2.2",
+   "status": "gap",
+   "tests": [],
+   "evidence": ""
+  },
+  {
+   "id": "UDR-GAP-06",
+   "phase": 7,
+   "nf": "UDR",
+   "procedure": "PostgreSQL: one database, no sharding, schema version 1 only, the records gauge counts this process's changes after start; replication and failover are the database's",
+   "spec": "TS 29.504",
+   "clause": "5.2.1.2",
+   "status": "gap",
+   "tests": [],
+   "evidence": ""
+  },
+  {
+   "id": "NSSF-SEL-01",
+   "phase": 7,
+   "nf": "NSSF",
+   "procedure": "Nnssf_NSSelection for the registration procedure: allowed NSSAI from the requested and the subscribed S-NSSAIs filtered by the slices that are configured and by the tracking area, rejected in the PLMN and in the TA, configured NSSAI when nothing valid was requested or defaultConfiguredSnssaiInd is set, target AMF set (the requesting AMF's own set when it covers the allowed NSSAI) and candidate AMFs",
+   "spec": "TS 29.531",
+   "clause": "5.2.2.2.2",
+   "also": [
+    "6.1.6.2.2",
+    "6.1.6.2.10"
+   ],
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "nssf_e2e",
+     "file": "nf/nssf/tests/test_nssf.c",
+     "fn": "test_registration"
+    },
+    {
+     "ctest": "fuzz_replay_nssf",
+     "file": "fuzz/fuzz_nssf.c",
+     "fn": "LLVMFuzzerTestOneInput"
+    }
+   ],
+   "evidence": "Replayed requests of 22 shapes (fuzz seeds); the allowed-NSSAI rules are those of TS 23.501 5.15.5."
+  },
+  {
+   "id": "NSSF-SEL-02",
+   "phase": 7,
+   "nf": "NSSF",
+   "procedure": "Nnssf_NSSelection for the PDU session establishment: the network slice instance (NSI information: the NRF to use for the slice, nsiId, NRF management and token URIs); 403 SNSSAI_NOT_SUPPORTED for a slice that is not configured; the NRF is named by the API URI of its NFDiscovery service",
+   "spec": "TS 29.531",
+   "clause": "5.2.2.2.3",
+   "also": [
+    "6.1.6.2.7",
+    "6.1.6.2.11"
+   ],
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "nssf_e2e",
+     "file": "nf/nssf/tests/test_nssf.c",
+     "fn": "test_registration"
+    },
+    {
+     "ctest": "nssf_e2e",
+     "file": "nf/nssf/tests/test_nssf.c",
+     "fn": "test_policy_and_errors"
+    },
+    {
+     "ctest": "nssf_differential",
+     "file": "tools/nssf_diff.py",
+     "fn": "main"
+    }
+   ],
+   "evidence": "Oracle S3 with our NSSF in place of Open5GS's (OUR_NSSF=1): it registers at the NRF and the core completes registration, PDU session and release; Open5GS's AMF asks an NSSF only on the home-routed roaming path, so the answers are compared by the differential. The differential gives the same status and the same NRF as Open5GS's NSSF for five requests (sd FFFFFF, tracking area, local breakout)."
+  },
+  {
+   "id": "NSSF-SEL-03",
+   "phase": 7,
+   "nf": "NSSF",
+   "procedure": "Nnssf_NSSelection for the UE configuration update: configured NSSAI (and allowed NSSAI when requested) for the subscribed S-NSSAIs of the UE",
+   "spec": "TS 29.531",
+   "clause": "5.2.2.2.4",
+   "also": [
+    "6.1.6.2.13"
+   ],
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "nssf_e2e",
+     "file": "nf/nssf/tests/test_nssf.c",
+     "fn": "test_other_procedures"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "NSSF-SEL-04",
+   "phase": 7,
+   "nf": "NSSF",
+   "procedure": "Nnssf_NSSelection for the PDN connection establishment (interworking with EPS): the S-NSSAI the PDN connection maps to, with the roaming mapping of the home PLMN",
+   "spec": "TS 29.531",
+   "clause": "5.2.2.2.5",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "nssf_e2e",
+     "file": "nf/nssf/tests/test_nssf.c",
+     "fn": "test_other_procedures"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "NSSF-SEL-05",
+   "phase": 7,
+   "nf": "NSSF",
+   "procedure": "roaming: requested and subscribed S-NSSAIs of a home PLMN are mapped to the serving PLMN's by the configured mapping; the allowed NSSAI carries mappedHomeSnssai and the answer mappingOfNssai; a slice restricted for a home PLMN is rejected",
+   "spec": "TS 29.531",
+   "clause": "5.2.2.2.2",
+   "also": [
+    "6.1.6.2.8"
+   ],
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "nssf_e2e",
+     "file": "nf/nssf/tests/test_nssf.c",
+     "fn": "test_roaming"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "NSSF-SEL-06",
+   "phase": 7,
+   "nf": "NSSF",
+   "procedure": "query handling: nf-type and nf-id are required, exactly one of the four slice information parameters, JSON-encoded parameters, supported-features; a malformed or missing parameter is 400 with the cause and the invalid parameter",
+   "spec": "TS 29.531",
+   "clause": "6.1.3.2.3.1",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "nssf_e2e",
+     "file": "nf/nssf/tests/test_nssf.c",
+     "fn": "test_policy_and_errors"
+    },
+    {
+     "ctest": "nssf_differential",
+     "file": "tools/nssf_diff.py",
+     "fn": "main"
+    },
+    {
+     "ctest": "conformance_dump_payloads_noop",
+     "file": "tests/conformance/dump_payloads.c",
+     "fn": "nssf_payloads"
+    }
+   ],
+   "evidence": "The differential gives 400 for a missing nf-id, nf-type and slice information, as Open5GS's NSSF does."
+  },
+  {
+   "id": "NSSF-AV-01",
+   "phase": 7,
+   "nf": "NSSF",
+   "procedure": "Nnssf_NSSAIAvailability update: PUT of the NSSAI supported per tracking area of an AMF (NssaiAvailabilityInfo; 200 with the authorized part, 403 for slices that are not configured or are restricted, 400 for a malformed body); PATCH (JSON Patch) and DELETE (204)",
+   "spec": "TS 29.531",
+   "clause": "5.3.2.2.1",
+   "also": [
+    "6.2.3.2.3.1"
+   ],
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "nssf_e2e",
+     "file": "nf/nssf/tests/test_nssf.c",
+     "fn": "test_availability"
+    },
+    {
+     "ctest": "conformance_dump_payloads_noop",
+     "file": "tests/conformance/dump_payloads.c",
+     "fn": "nssf_payloads"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "NSSF-AV-02",
+   "phase": 7,
+   "nf": "NSSF",
+   "procedure": "Nnssf_NSSAIAvailability subscribe: POST to /subscriptions with nfNssaiAvailabilityUri, the tracking areas and the expiry chosen by the NSSF (never more than max_lifetime_s), a bound on the number of subscriptions; modify (PATCH of expiry, SUMOD feature) and unsubscribe (DELETE)",
+   "spec": "TS 29.531",
+   "clause": "5.3.2.3.1",
+   "also": [
+    "5.3.2.3.2",
+    "5.3.2.4.1"
+   ],
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "nssf_e2e",
+     "file": "nf/nssf/tests/test_nssf.c",
+     "fn": "test_subscriptions"
+    },
+    {
+     "ctest": "conformance_dump_payloads_noop",
+     "file": "tests/conformance/dump_payloads.c",
+     "fn": "nssf_payloads"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "NSSF-AV-03",
+   "phase": 7,
+   "nf": "NSSF",
+   "procedure": "Nnssf_NSSAIAvailability notify: NssfEventNotification with the authorized NSSAI per tracking area to the subscribers when an AMF's update changes it, delivered by a worker thread (bounded queue, retries), expired subscriptions removed",
+   "spec": "TS 29.531",
+   "clause": "5.3.2.5.1",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "nssf_e2e",
+     "file": "nf/nssf/tests/test_nssf.c",
+     "fn": "test_subscriptions"
+    },
+    {
+     "ctest": "conformance_dump_payloads_noop",
+     "file": "tests/conformance/dump_payloads.c",
+     "fn": "nssf_payloads"
+    }
+   ],
+   "evidence": "A real callback server receives the notification in the test."
+  },
+  {
+   "id": "NSSF-AV-04",
+   "phase": 7,
+   "nf": "NSSF",
+   "procedure": "Nnssf_NSSAIAvailability OPTIONS: 200 with Accept-Encoding: identity (RFC 7694; no content coding is supported)",
+   "spec": "TS 29.531",
+   "clause": "5.3.2.7.1",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "nssf_e2e",
+     "file": "nf/nssf/tests/test_nssf.c",
+     "fn": "test_availability"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "NSSF-AV-05",
+   "phase": 7,
+   "nf": "NSSF",
+   "procedure": "supported features: the NSSF keeps and answers the intersection of what the consumer offered and what it supports (availability: ONSSAI, SUMOD, EANAN; selection: RSIPCE)",
+   "spec": "TS 29.531",
+   "clause": "6.1.8",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "nssf_e2e",
+     "file": "nf/nssf/tests/test_nssf.c",
+     "fn": "test_availability"
+    },
+    {
+     "ctest": "nssf_e2e",
+     "file": "nf/nssf/tests/test_nssf.c",
+     "fn": "test_registration"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "NSSF-OP-01",
+   "phase": 7,
+   "nf": "NSSF",
+   "procedure": "registration at the NRF with the two services (nnssf-nsselection v2, nnssf-nssaiavailability v1); the AMF discovers it without a configured address",
+   "spec": "TS 29.510",
+   "clause": "5.2.2.2.2",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "cluster_load",
+     "file": "deploy/run/g5c-cluster.sh",
+     "fn": "-"
+    },
+    {
+     "ctest": "sbi_oracle_interop",
+     "file": "tests/conformance/CMakeLists.txt",
+     "fn": "-"
+    }
+   ],
+   "evidence": "Oracle S3 with our NSSF in place of Open5GS's (OUR_NSSF=1): it registers at the NRF and the core completes registration, PDU session and release; Open5GS's AMF asks an NSSF only on the home-routed roaming path, so the answers are compared by the differential. The cluster tests start the NSSF with the other functions."
+  },
+  {
+   "id": "NSSF-OP-02",
+   "phase": 7,
+   "nf": "NSSF",
+   "procedure": "configuration: slices (S-NSSAI, NRF, tracking areas or TAC ranges, restriction per home PLMN), AMF sets, roaming mappings, policy limits, subscriptions, state file; every wrong value is refused at start with the key that is wrong",
+   "spec": "TS 29.531",
+   "clause": "-",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "nssf_e2e",
+     "file": "nf/nssf/tests/test_nssf.c",
+     "fn": "test_config"
+    },
+    {
+     "ctest": "bad_configs_rejected",
+     "file": "tests/conformance/check_bad_configs.sh",
+     "fn": "-"
+    }
+   ],
+   "evidence": "11 bad configurations are rejected by the binary."
+  },
+  {
+   "id": "NSSF-OP-03",
+   "phase": 7,
+   "nf": "NSSF",
+   "procedure": "state: subscriptions and the NSSAI availability of the AMFs survive a restart (write-behind state file, atomic replace, a damaged file refused)",
+   "spec": "TS 29.531",
+   "clause": "-",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "nssf_e2e",
+     "file": "nf/nssf/tests/test_nssf.c",
+     "fn": "test_state"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "NSSF-OP-04",
+   "phase": 7,
+   "nf": "NSSF",
+   "procedure": "hostile input: replay fuzzing of selection and availability requests and notifications (30,000 mutations under ASan in the regression)",
+   "spec": "TS 29.531",
+   "clause": "-",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "fuzz_replay_nssf",
+     "file": "fuzz/fuzz_nssf.c",
+     "fn": "LLVMFuzzerTestOneInput"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "NSSF-OP-05",
+   "phase": 7,
+   "nf": "NSSF",
+   "procedure": "every body the NSSF produces (selection answers for the four procedures, ProblemDetails 403 and 400, subscription created, availability info, notification) validates against the OpenAPI of TS 29.531",
+   "spec": "TS 29.531",
+   "clause": "Annex A",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "conformance_dump_payloads_noop",
+     "file": "tests/conformance/dump_payloads.c",
+     "fn": "nssf_payloads"
+    }
+   ],
+   "evidence": "every payload valid in the current run (81 of 81, the NSSF's among them)."
+  },
+  {
+   "id": "NSSF-OP-06",
+   "phase": 7,
+   "nf": "NSSF",
+   "procedure": "Open5GS as the reference: the same Nnssf_NSSelection requests to its NSSF (behind its NRF) and to ours with the same slices; statuses, the NRF of the slice and the attributes of the answers are compared (the other three procedures are only in ours: Open5GS answers 400)",
+   "spec": "TS 29.531",
+   "clause": "5.2.2.2.3",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "nssf_differential",
+     "file": "tools/nssf_diff.py",
+     "fn": "main"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "NSSF-GAP-01",
+   "phase": 7,
+   "nf": "NSSF",
+   "procedure": "the NSSF of the home PLMN (H-NSSF) is not queried for the home-routed roaming case; the mapping is configured",
+   "spec": "TS 23.501",
+   "clause": "5.15.5.2",
+   "status": "gap",
+   "tests": [],
+   "evidence": ""
+  },
+  {
+   "id": "NSSF-GAP-02",
+   "phase": 7,
+   "nf": "NSSF",
+   "procedure": "HTTP redirection (307/308 with a Location to another NSSF) and the NSSF-assisted re-routing responses are not produced",
+   "spec": "TS 29.531",
+   "clause": "6.1.10",
+   "status": "gap",
+   "tests": [],
+   "evidence": ""
+  },
+  {
+   "id": "NSSF-GAP-03",
+   "phase": 7,
+   "nf": "NSSF",
+   "procedure": "slice-to-tracking-area rules by TAC range are exact; the pattern-based TacRange form (TS 29.531 NssaiAvailability tacRangeList pattern) is not supported",
+   "spec": "TS 29.531",
+   "clause": "6.2.6",
+   "status": "gap",
+   "tests": [],
+   "evidence": ""
+  },
+  {
+   "id": "NSSF-GAP-05",
+   "phase": 7,
+   "nf": "NSSF",
+   "procedure": "the AMF decides the allowed NSSAI from its own configuration; it does not yet consume Nnssf_NSSelection / Nnssf_NSSAIAvailability",
+   "spec": "TS 23.502",
+   "clause": "4.2.2.2.3",
+   "status": "gap",
+   "tests": [],
+   "evidence": ""
+  },
+  {
+   "id": "NEF-TI-01",
+   "phase": 7,
+   "nf": "NEF",
+   "procedure": "TrafficInfluence: POST creates (201, Location, the representation with self), GET lists and reads, PUT replaces, PATCH (merge patch) changes, DELETE removes the subscription and its influence data in the UDR; the stored TrafficInfluData is the mapping of TS 29.519 6.2.6.2.2",
+   "spec": "TS 29.522",
+   "clause": "4.4.7.3",
+   "also": [
+    "5.4.1.3.3.4"
+   ],
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "nef_e2e",
+     "file": "nf/nef/tests/test_nef.c",
+     "fn": "test_traffic_influence"
+    },
+    {
+     "ctest": "conformance_dump_payloads_noop",
+     "file": "tests/conformance/dump_payloads.c",
+     "fn": "nef_payloads"
+    },
+    {
+     "ctest": "fuzz_replay_nef",
+     "file": "fuzz/fuzz_nef.c",
+     "fn": "LLVMFuzzerTestOneInput"
+    }
+   ],
+   "evidence": "Oracle S6: UERANSIM registers against our NRF, AUSF, AMF, UDM, UDR and PCF; the NEF stores an AF's traffic influence in the UDR and subscribes at the AMF for the UE (an external identifier resolved by our UDM); the UE's de-registration reaches the AF as a LOSS_OF_CONNECTIVITY report."
+  },
+  {
+   "id": "NEF-TI-02",
+   "phase": 7,
+   "nf": "NEF",
+   "procedure": "the UE of a traffic influence request: a GPSI (msisdn- or extid-) is resolved to the SUPI by Nudm_SDM id translation (404 USER_NOT_FOUND when unknown), a request for any UE is stored with interGroupId AnyUE",
+   "spec": "TS 29.522",
+   "clause": "4.4.7.3",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "nef_e2e",
+     "file": "nf/nef/tests/test_nef.c",
+     "fn": "test_traffic_influence"
+    }
+   ],
+   "evidence": "Oracle S6: UERANSIM registers against our NRF, AUSF, AMF, UDM, UDR and PCF; the NEF stores an AF's traffic influence in the UDR and subscribes at the AMF for the UE (an external identifier resolved by our UDM); the UE's de-registration reaches the AF as a LOSS_OF_CONNECTIVITY report."
+  },
+  {
+   "id": "NEF-TI-03",
+   "phase": 7,
+   "nf": "NEF",
+   "procedure": "refusals and the test notification: 400 with the pointer of the member that is wrong, 403 for a notification destination the AF may not name, 501 for a request identified by the UE's address or for a group of UEs, a test notification when requestTestNotification is true and feature 2 is negotiated",
+   "spec": "TS 29.122",
+   "clause": "5.2.5.3",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "nef_e2e",
+     "file": "nf/nef/tests/test_nef.c",
+     "fn": "test_traffic_influence"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "NEF-ME-01",
+   "phase": 7,
+   "nf": "NEF",
+   "procedure": "MonitoringEvent subscription for one UE (external identifier or MSISDN): LOSS_OF_CONNECTIVITY, UE_REACHABILITY and LOCATION_REPORTING; the NEF finds the serving AMF (UECM, NRF) and subscribes there; 201 with Location, supportedFeatures negotiated; GET, PUT (Subscription_modification: the UE and the type cannot change), DELETE (also at the AMF)",
+   "spec": "TS 29.122",
+   "clause": "4.4.2.2.2.2",
+   "also": [
+    "TS 29.522 4.4.2"
+   ],
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "nef_e2e",
+     "file": "nf/nef/tests/test_nef.c",
+     "fn": "test_monitoring"
+    },
+    {
+     "ctest": "conformance_dump_payloads_noop",
+     "file": "tests/conformance/dump_payloads.c",
+     "fn": "nef_payloads"
+    },
+    {
+     "ctest": "fuzz_replay_nef",
+     "file": "fuzz/fuzz_nef.c",
+     "fn": "LLVMFuzzerTestOneInput"
+    }
+   ],
+   "evidence": "Oracle S6: UERANSIM registers against our NRF, AUSF, AMF, UDM, UDR and PCF; the NEF stores an AF's traffic influence in the UDR and subscribes at the AMF for the UE (an external identifier resolved by our UDM); the UE's de-registration reaches the AF as a LOSS_OF_CONNECTIVITY report."
+  },
+  {
+   "id": "NEF-ME-02",
+   "phase": 7,
+   "nf": "NEF",
+   "procedure": "the reports: the AMF's notification (checked against the correlation identifier) becomes a MonitoringNotification with the MonitoringEventReport (loss of connectivity reason 6 / 7 / 8, reachability type, location information); reaching maximumNumberOfReports or monitorExpireTime removes the subscription here and at the AMF",
+   "spec": "TS 29.122",
+   "clause": "4.4.2.3",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "nef_e2e",
+     "file": "nf/nef/tests/test_nef.c",
+     "fn": "test_monitoring"
+    }
+   ],
+   "evidence": "Oracle S6: UERANSIM registers against our NRF, AUSF, AMF, UDM, UDR and PCF; the NEF stores an AF's traffic influence in the UDR and subscribes at the AMF for the UE (an external identifier resolved by our UDM); the UE's de-registration reaches the AF as a LOSS_OF_CONNECTIVITY report."
+  },
+  {
+   "id": "NEF-ME-03",
+   "phase": 7,
+   "nf": "NEF",
+   "procedure": "a one-time request is answered with the report (200) when the AMF has one, nothing is kept; LAST_KNOWN_LOCATION is a one-time request whatever the AF said",
+   "spec": "TS 29.522",
+   "clause": "4.4.2",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "nef_e2e",
+     "file": "nf/nef/tests/test_nef.c",
+     "fn": "test_monitoring"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "NEF-ME-04",
+   "phase": 7,
+   "nf": "NEF",
+   "procedure": "application errors: EVENT_FEATURE_MISMATCH (400), EVENT_UNSUPPORTED (500), PARAMETER_OUT_OF_RANGE (403; a value above the operator's limit is replaced by the limit), IDLE_STATUS_UNSUPPORTED (403); 404 for an unknown UE and for a UE that no AMF serves",
+   "spec": "TS 29.122",
+   "clause": "5.3.5.3",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "nef_e2e",
+     "file": "nf/nef/tests/test_nef.c",
+     "fn": "test_monitoring"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "NEF-AQ-01",
+   "phase": 7,
+   "nf": "NEF",
+   "procedure": "AsSessionWithQoS: POST creates an application session at the PCF (Npcf_PolicyAuthorization, one media component with the QoS reference and the flows, subscription to the allocation outcome), 201 with Location; 403 REQUESTED_SERVICE_NOT_AUTHORIZED and 404 PDU_SESSION_NOT_AVAILABLE as the PCF decides",
+   "spec": "TS 29.522",
+   "clause": "4.4.9",
+   "also": [
+    "TS 29.122 4.4.13"
+   ],
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "nef_e2e",
+     "file": "nf/nef/tests/test_nef.c",
+     "fn": "test_as_qos"
+    },
+    {
+     "ctest": "fuzz_replay_nef",
+     "file": "fuzz/fuzz_nef.c",
+     "fn": "LLVMFuzzerTestOneInput"
+    }
+   ],
+   "evidence": "Oracle S7: UERANSIM with a PDU session; an AF asks the NEF for a QoS for a flow of the UE; our PCF authorizes it and has the PCC rule installed at Open5GS's SMF and at ours (the AF is told the resources were allocated, the user plane keeps working)."
+  },
+  {
+   "id": "NEF-AQ-02",
+   "phase": 7,
+   "nf": "NEF",
+   "procedure": "PUT replaces and PATCH changes the subscription (the media component at the PCF is brought to the new flows and QoS reference; the UE address stays); DELETE ends the application session at the PCF",
+   "spec": "TS 29.122",
+   "clause": "4.4.13",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "nef_e2e",
+     "file": "nf/nef/tests/test_nef.c",
+     "fn": "test_as_qos"
+    }
+   ],
+   "evidence": "Oracle S7: UERANSIM with a PDU session; an AF asks the NEF for a QoS for a flow of the UE; our PCF authorizes it and has the PCC rule installed at Open5GS's SMF and at ours (the AF is told the resources were allocated, the user plane keeps working)."
+  },
+  {
+   "id": "NEF-AQ-03",
+   "phase": 7,
+   "nf": "NEF",
+   "procedure": "notifications: the PCF's SUCCESSFUL_ / FAILED_RESOURCES_ALLOCATION reach the AF as UserPlaneNotificationData; the end of the PDU session is SESSION_TERMINATION and removes the subscription",
+   "spec": "TS 29.522",
+   "clause": "4.4.9",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "nef_e2e",
+     "file": "nf/nef/tests/test_nef.c",
+     "fn": "test_as_qos"
+    }
+   ],
+   "evidence": "Oracle S7: UERANSIM with a PDU session; an AF asks the NEF for a QoS for a flow of the UE; our PCF authorizes it and has the PCC rule installed at Open5GS's SMF and at ours (the AF is told the resources were allocated, the user plane keeps working)."
+  },
+  {
+   "id": "NEF-AQ-04",
+   "phase": 7,
+   "nf": "NEF",
+   "procedure": "what the NEF does not serve is 501: Ethernet and IPv6 UEs, usage thresholds, sponsored connectivity, QoS monitoring, alternative QoS references; the QoS references an AF may name are configured",
+   "spec": "TS 29.122",
+   "clause": "4.4.13",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "nef_e2e",
+     "file": "nf/nef/tests/test_nef.c",
+     "fn": "test_as_qos"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "NEF-OP-01",
+   "phase": 7,
+   "nf": "NEF",
+   "procedure": "access control: the AF of {afId} must exist, may use the API and must present its bearer token (401, 403); a notification destination must be a host of the AF; a limit on its subscriptions (429)",
+   "spec": "TS 29.122",
+   "clause": "5.2.5.2",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "nef_e2e",
+     "file": "nf/nef/tests/test_nef.c",
+     "fn": "test_traffic_influence"
+    },
+    {
+     "ctest": "nef_e2e",
+     "file": "nf/nef/tests/test_nef.c",
+     "fn": "test_monitoring"
+    },
+    {
+     "ctest": "nef_e2e",
+     "file": "nf/nef/tests/test_nef.c",
+     "fn": "test_as_qos"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "NEF-OP-02",
+   "phase": 7,
+   "nf": "NEF",
+   "procedure": "registration at the NRF as an NEF (nefInfo); the functions behind it (UDR, UDM, PCF, the AMF of the UE) found through the NRF unless the configuration names them",
+   "spec": "TS 29.510",
+   "clause": "5.2.2.2.2",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "cluster_load",
+     "file": "deploy/run/g5c-cluster.sh",
+     "fn": "-"
+    },
+    {
+     "ctest": "sbi_oracle_interop",
+     "file": "tests/conformance/CMakeLists.txt",
+     "fn": "-"
+    }
+   ],
+   "evidence": "Oracle S6: UERANSIM registers against our NRF, AUSF, AMF, UDM, UDR and PCF; the NEF stores an AF's traffic influence in the UDR and subscribes at the AMF for the UE (an external identifier resolved by our UDM); the UE's de-registration reaches the AF as a LOSS_OF_CONNECTIVITY report. The cluster tests start the NEF with the other functions."
+  },
+  {
+   "id": "NEF-OP-03",
+   "phase": 7,
+   "nf": "NEF",
+   "procedure": "configuration: AFs (token, APIs, QoS references, notification hosts, limits), callback address, addresses of the other functions, limits, state file; every wrong value is refused at start with the key that is wrong",
+   "spec": "TS 29.522",
+   "clause": "-",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "nef_e2e",
+     "file": "nf/nef/tests/test_nef.c",
+     "fn": "test_config"
+    },
+    {
+     "ctest": "bad_configs_rejected",
+     "file": "tests/conformance/check_bad_configs.sh",
+     "fn": "-"
+    }
+   ],
+   "evidence": "12 bad configurations are rejected by the binary."
+  },
+  {
+   "id": "NEF-OP-04",
+   "phase": 7,
+   "nf": "NEF",
+   "procedure": "state: the subscriptions and what the NEF holds at other functions (correlation identifiers included) survive a restart; a damaged state file is refused",
+   "spec": "TS 29.522",
+   "clause": "-",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "nef_e2e",
+     "file": "nf/nef/tests/test_nef.c",
+     "fn": "test_state"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "NEF-OP-05",
+   "phase": 7,
+   "nf": "NEF",
+   "procedure": "hostile input: replay fuzzing of the northbound requests and of the callbacks of the AMF and the PCF (30,000 mutations under ASan in the regression; it found and fixed a null flow description)",
+   "spec": "TS 29.522",
+   "clause": "-",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "fuzz_replay_nef",
+     "file": "fuzz/fuzz_nef.c",
+     "fn": "LLVMFuzzerTestOneInput"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "NEF-OP-06",
+   "phase": 7,
+   "nf": "NEF",
+   "procedure": "every body the NEF produces (the representations, the two notifications, ProblemDetails, the influence data it stores) validates against the OpenAPI of TS 29.522 / TS 29.122 / TS 29.519",
+   "spec": "TS 29.522",
+   "clause": "5.4.3",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "conformance_dump_payloads_noop",
+     "file": "tests/conformance/dump_payloads.c",
+     "fn": "nef_payloads"
+    }
+   ],
+   "evidence": "every payload valid in the current run (81 of 81)."
+  },
+  {
+   "id": "NEF-GAP-01",
+   "phase": 7,
+   "nf": "NEF",
+   "procedure": "traffic influence for a UE identified by its address (the PCF's afRoutReq, 4.4.7.2) and for a group of UEs (the UDM's group identifier translation) are 501; the SMF's UP path change notifications are not received",
+   "spec": "TS 29.522",
+   "clause": "4.4.7.2",
+   "status": "gap",
+   "tests": [],
+   "evidence": ""
+  },
+  {
+   "id": "NEF-GAP-02",
+   "phase": 7,
+   "nf": "NEF",
+   "procedure": "monitoring: no subscription at the UDM (Nudm_EventExposure is not built), so the UE must be registered; groups of UEs and the other monitoring types are refused; no group reporting guard time; no Ngmlc location for accuracy above cell level",
+   "spec": "TS 29.522",
+   "clause": "4.4.2",
+   "status": "gap",
+   "tests": [],
+   "evidence": ""
+  },
+  {
+   "id": "NEF-GAP-03",
+   "phase": 7,
+   "nf": "NEF",
+   "procedure": "PFD management (TS 29.551 is not pinned and the SMF does not read PFDs), Nnef_EventExposure (nothing in this core produces AF or analytics events), Nnef_PFDmanagement, Nnef_TrafficInfluence",
+   "spec": "TS 29.591",
+   "clause": "-",
+   "status": "gap",
+   "tests": [],
+   "evidence": ""
+  },
+  {
+   "id": "NEF-GAP-04",
+   "phase": 7,
+   "nf": "NEF",
+   "procedure": "a UE address with no binding at the BSF (or no BSF) gets any PCF of the NRF, which is the right one only with a single PCF; the PCF Set Id and PCF instance Id of the binding are not used when its address cannot be reached (TS 29.521 4.2.4.2 NOTE 2); the address of a UE of IPv6 or Ethernet is not asked for",
+   "spec": "TS 29.522",
+   "clause": "4.4.9",
+   "status": "gap",
+   "tests": [],
+   "evidence": ""
+  },
+  {
+   "id": "NEF-GAP-05",
+   "phase": 7,
+   "nf": "NEF",
+   "procedure": "AFs present a configured bearer token, not an access token of the NRF (an AF is not a function of the core; the functions behind the NEF use NRF tokens, SEC-OA-*); websocket notification delivery (Notification_websocket)",
+   "spec": "TS 33.501",
+   "clause": "13.4.1",
+   "status": "gap",
+   "tests": [],
+   "evidence": ""
+  },
+  {
+   "id": "PCF-N5-01",
+   "phase": 7,
+   "nf": "PCF",
+   "procedure": "Npcf_PolicyAuthorization Create: POST app-sessions with the UE's IPv4 address; session binding to the SM policy of the PDU session (DNN, SUPI, S-NSSAI when given); 500 PDU_SESSION_NOT_AVAILABLE when none; 201 with Location and the AppSessionContext; 400 for a malformed request; 429 at the limit",
+   "spec": "TS 29.514",
+   "clause": "4.2.2.2",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "pcf_policy_and_services",
+     "file": "nf/pcf/tests/test_pcf.c",
+     "fn": "test_policy_authorization"
+    }
+   ],
+   "evidence": "Oracle S7: UERANSIM with a PDU session; an AF asks the NEF for a QoS for a flow of the UE; our PCF authorizes it and has the PCC rule installed at Open5GS's SMF and at ours (the AF is told the resources were allocated, the user plane keeps working)."
+  },
+  {
+   "id": "PCF-N5-02",
+   "phase": 7,
+   "nf": "PCF",
+   "procedure": "required QoS: a media component that names a QoS reference of the configuration becomes a PCC rule with its 5QI (and GBR / MBR) and the AF's flows, installed at the SMF by an update notification of the SM policy; a closed gate installs no rule; an unknown reference, no reference, Ethernet flows: 403 REQUESTED_SERVICE_NOT_AUTHORIZED",
+   "spec": "TS 29.514",
+   "clause": "4.2.2.32",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "pcf_policy_and_services",
+     "file": "nf/pcf/tests/test_pcf.c",
+     "fn": "test_policy_authorization"
+    }
+   ],
+   "evidence": "Oracle S7: UERANSIM with a PDU session; an AF asks the NEF for a QoS for a flow of the UE; our PCF authorizes it and has the PCC rule installed at Open5GS's SMF and at ours (the AF is told the resources were allocated, the user plane keeps working)."
+  },
+  {
+   "id": "PCF-N5-03",
+   "phase": 7,
+   "nf": "PCF",
+   "procedure": "Update: PATCH (merge patch of ascReqData: media components added, replaced, removed with null) and the SMF is updated; Delete: POST .../delete removes the rules; GET reads the context; 404 for an unknown one",
+   "spec": "TS 29.514",
+   "clause": "4.2.3.2",
+   "also": [
+    "4.2.4.2"
+   ],
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "pcf_policy_and_services",
+     "file": "nf/pcf/tests/test_pcf.c",
+     "fn": "test_policy_authorization"
+    }
+   ],
+   "evidence": "Oracle S7: UERANSIM with a PDU session; an AF asks the NEF for a QoS for a flow of the UE; our PCF authorizes it and has the PCC rule installed at Open5GS's SMF and at ours (the AF is told the resources were allocated, the user plane keeps working)."
+  },
+  {
+   "id": "PCF-N5-04",
+   "phase": 7,
+   "nf": "PCF",
+   "procedure": "notifications to the AF: SUCCESSFUL_ / FAILED_RESOURCES_ALLOCATION (the SMF's acceptance or refusal of the update, from a thread of its own) to the events subscription's notifUri + /notify, the events subscription as a resource of its own (PUT, DELETE); TerminationInfo to notifUri + /terminate when the PDU session ends",
+   "spec": "TS 29.514",
+   "clause": "4.2.5.8",
+   "also": [
+    "4.2.5.3",
+    "4.2.2.10"
+   ],
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "pcf_policy_and_services",
+     "file": "nf/pcf/tests/test_pcf.c",
+     "fn": "test_policy_authorization"
+    }
+   ],
+   "evidence": "Oracle S7: UERANSIM with a PDU session; an AF asks the NEF for a QoS for a flow of the UE; our PCF authorizes it and has the PCC rule installed at Open5GS's SMF and at ours (the AF is told the resources were allocated, the user plane keeps working)."
+  },
+  {
+   "id": "PCF-N5-05",
+   "phase": 7,
+   "nf": "PCF",
+   "procedure": "configuration policy_authorization (QoS references with their 5QI and bit rates, the limit of application sessions); wrong values refused at start",
+   "spec": "TS 29.514",
+   "clause": "-",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "pcf_policy_and_services",
+     "file": "nf/pcf/tests/test_pcf.c",
+     "fn": "test_policy_authorization"
+    },
+    {
+     "ctest": "bad_configs_rejected",
+     "file": "tests/conformance/check_bad_configs.sh",
+     "fn": "-"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "PCF-N5-GAP-01",
+   "phase": 7,
+   "nf": "PCF",
+   "procedure": "QoS from the media type and the bandwidths (TS 29.513 is not pinned), usage monitoring, sponsored connectivity, traffic routing (afRoutReq), access network information, QoS notification control, IPv6 and Ethernet sessions",
+   "spec": "TS 29.514",
+   "clause": "4.2.2.2",
+   "status": "gap",
+   "tests": [],
+   "evidence": "Open5GS's PCF answers 403 to a media component that has only a QoS reference."
+  },
+  {
+   "id": "UDM-IDT-01",
+   "phase": 7,
+   "nf": "UDM",
+   "procedure": "Nudm_SDM id translation: GET {gpsi}/id-translation-result answers the SUPI (and the GPSI) from the identity data of the UDR; 404 for an unknown GPSI, 400 for something that is not a GPSI; the subscriber API takes msisdn and gpsi and writes the identity data",
+   "spec": "TS 29.503",
+   "clause": "-",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "nef_e2e",
+     "file": "nf/nef/tests/test_nef.c",
+     "fn": "test_monitoring"
+    },
+    {
+     "ctest": "nef_e2e",
+     "file": "nf/nef/tests/test_nef.c",
+     "fn": "test_traffic_influence"
+    }
+   ],
+   "evidence": "Oracle S6: UERANSIM registers against our NRF, AUSF, AMF, UDM, UDR and PCF; the NEF stores an AF's traffic influence in the UDR and subscribes at the AMF for the UE (an external identifier resolved by our UDM); the UE's de-registration reaches the AF as a LOSS_OF_CONNECTIVITY report."
+  },
+  {
+   "id": "AMF-EE-01",
+   "phase": 7,
+   "nf": "AMF",
+   "procedure": "Namf_EventExposure: the LOSS_OF_CONNECTIVITY event (UE_DEREGISTERED, MAX_DETECTION_TIME_EXPIRED for the implicit de-registration) and the reachability report when a UE becomes connected",
+   "spec": "TS 29.518",
+   "clause": "5.3.2.2",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "nef_e2e",
+     "file": "nf/nef/tests/test_nef.c",
+     "fn": "test_monitoring"
+    },
+    {
+     "ctest": "amf_e2e",
+     "file": "nf/amf/tests/test_amf_e2e.c",
+     "fn": "test_events"
+    }
+   ],
+   "evidence": "Oracle S6: UERANSIM registers against our NRF, AUSF, AMF, UDM, UDR and PCF; the NEF stores an AF's traffic influence in the UDR and subscribes at the AMF for the UE (an external identifier resolved by our UDM); the UE's de-registration reaches the AF as a LOSS_OF_CONNECTIVITY report."
+  },
+  {
+   "id": "SCP-C-01",
+   "phase": 7,
+   "nf": "SCP",
+   "procedure": "indirect communication without delegated discovery (Model C): the request goes to the apiRoot named in 3gpp-Sbi-Target-apiRoot, the path and query are kept, the Target-apiRoot is taken off and Via is added; the response is relayed with its headers and body; the producer is named in 3gpp-Sbi-Producer-Id",
+   "spec": "TS 29.500",
+   "clause": "6.10.5.1",
+   "also": [
+    "5.2.3.2.4",
+    "5.2.3.2.8"
+   ],
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "scp_e2e",
+     "file": "nf/scp/tests/test_scp.c",
+     "fn": "test_model_c"
+    },
+    {
+     "ctest": "scp_differential",
+     "file": "tools/scp_diff.py",
+     "fn": "main"
+    },
+    {
+     "ctest": "fuzz_replay_scp",
+     "file": "fuzz/fuzz_scp.c",
+     "fn": "LLVMFuzzerTestOneInput"
+    }
+   ],
+   "evidence": "Oracle S3 through our SCP (OUR_SCP=1): Open5GS's NRF, UDR, UDM, AUSF, PCF, SMF and AMF send every request to the other functions to our SCP (client.scp); UERANSIM registers, establishes a PDU session and releases it. Mode c names the producer, mode d delegates the discovery and the registration. The differential gives the same status and body as Open5GS's SCP for the same requests."
+  },
+  {
+   "id": "SCP-C-02",
+   "phase": 7,
+   "nf": "SCP",
+   "procedure": "the ck (cache key) query parameter is removed before the request is forwarded; the SCP's own prefix (the deployment-specific string of its apiRoot) is removed from the path",
+   "spec": "TS 29.500",
+   "clause": "6.10.2.6",
+   "also": [
+    "6.10.4"
+   ],
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "scp_e2e",
+     "file": "nf/scp/tests/test_scp.c",
+     "fn": "test_model_c"
+    },
+    {
+     "ctest": "scp_e2e",
+     "file": "nf/scp/tests/test_scp.c",
+     "fn": "test_limits_and_targets"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "SCP-C-03",
+   "phase": 7,
+   "nf": "SCP",
+   "procedure": "notifications and callbacks: a request with 3gpp-Sbi-Callback is forwarded to the callback URI named in Target-apiRoot with the header kept; the default notification subscription pseudo URI (/scp-default-sub-notify-uri) is answered 404, as no default subscription is supported",
+   "spec": "TS 29.500",
+   "clause": "6.10.7",
+   "also": [
+    "5.2.3.2.3",
+    "6.10.5.2"
+   ],
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "scp_e2e",
+     "file": "nf/scp/tests/test_scp.c",
+     "fn": "test_model_c"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "SCP-D-01",
+   "phase": 7,
+   "nf": "SCP",
+   "procedure": "delegated discovery (Model D): the 3gpp-Sbi-Discovery-* headers become the query of an Nnrf_NFDiscovery request (every header 3gpp-Sbi-Discovery-<name> is the query parameter <name>: target-nf-type, service-names, requester-nf-type, target-nf-instance-id and the others), the NF profiles are turned into candidate apiRoots (priority, capacity, the service's address)",
+   "spec": "TS 29.500",
+   "clause": "6.10.3.2",
+   "also": [
+    "5.2.3.2.7"
+   ],
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "scp_e2e",
+     "file": "nf/scp/tests/test_scp.c",
+     "fn": "test_model_d"
+    },
+    {
+     "ctest": "scp_differential",
+     "file": "tools/scp_diff.py",
+     "fn": "main"
+    },
+    {
+     "ctest": "fuzz_replay_scp",
+     "file": "fuzz/fuzz_scp.c",
+     "fn": "LLVMFuzzerTestOneInput"
+    }
+   ],
+   "evidence": "Oracle S3 through our SCP (OUR_SCP=1): Open5GS's NRF, UDR, UDM, AUSF, PCF, SMF and AMF send every request to the other functions to our SCP (client.scp); UERANSIM registers, establishes a PDU session and releases it. Mode c names the producer, mode d delegates the discovery and the registration."
+  },
+  {
+   "id": "SCP-D-02",
+   "phase": 7,
+   "nf": "SCP",
+   "procedure": "the requester NF type is taken from the User-Agent when the consumer did not give it; a request with discovery factors but no target NF type, or with no requester type, is 400 MANDATORY_IE_MISSING with the SCP named in the Server header; the NRF used is the one in 3gpp-Sbi-Nrf-Uri (nnrf-disc) or the configured one",
+   "spec": "TS 29.500",
+   "clause": "6.10.3.2",
+   "also": [
+    "5.2.3.2.12",
+    "5.2.7.4"
+   ],
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "scp_e2e",
+     "file": "nf/scp/tests/test_scp.c",
+     "fn": "test_model_d"
+    },
+    {
+     "ctest": "scp_differential",
+     "file": "tools/scp_diff.py",
+     "fn": "main"
+    }
+   ],
+   "evidence": "Open5GS's SCP answers 500 for the same requests; the specification gives no status for a missing discovery factor."
+  },
+  {
+   "id": "SCP-D-03",
+   "phase": 7,
+   "nf": "SCP",
+   "procedure": "the answers of the NRF are cached (cache_ttl_s, cache_max) per discovery query; NRF failure is 504 TARGET_NF_NOT_REACHABLE, a refusal of the query is 400 NF_DISCOVERY_FAILURE, an empty result is 400 NF_DISCOVERY_FAILURE",
+   "spec": "TS 29.500",
+   "clause": "6.10.3.2",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "scp_e2e",
+     "file": "nf/scp/tests/test_scp.c",
+     "fn": "test_model_d"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "SCP-D-04",
+   "phase": 7,
+   "nf": "SCP",
+   "procedure": "the NF service producer ID is returned to the consumer in 3gpp-Sbi-Producer-Id (nfinst=<id>) after delegated discovery, so the consumer can bind to the instance; the apiRoot of a reselected producer is returned in 3gpp-Sbi-Target-apiRoot",
+   "spec": "TS 29.500",
+   "clause": "6.10.3.4",
+   "also": [
+    "5.2.3.2.8",
+    "6.10.4"
+   ],
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "scp_e2e",
+     "file": "nf/scp/tests/test_scp.c",
+     "fn": "test_model_d"
+    },
+    {
+     "ctest": "scp_e2e",
+     "file": "nf/scp/tests/test_scp.c",
+     "fn": "test_retries_and_health"
+    },
+    {
+     "ctest": "scp_differential",
+     "file": "tools/scp_diff.py",
+     "fn": "main"
+    }
+   ],
+   "evidence": "Open5GS's SCP sends the bare instance id; the differential accepts that and checks ours is nfinst=<id> as the specification gives it."
+  },
+  {
+   "id": "SCP-R-01",
+   "phase": 7,
+   "nf": "SCP",
+   "procedure": "reselection: when a producer cannot be reached, times out or answers 503 (retry_on_503) the next candidate is tried (attempts, timeout_ms) with the same request; the candidate order is priority, then random weighted by capacity and load; Routing-Binding restricts or prefers the instance named by nfinst",
+   "spec": "TS 29.500",
+   "clause": "6.10.5.1",
+   "also": [
+    "5.2.3.2.5"
+   ],
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "scp_e2e",
+     "file": "nf/scp/tests/test_scp.c",
+     "fn": "test_retries_and_health"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "SCP-R-02",
+   "phase": 7,
+   "nf": "SCP",
+   "procedure": "producers that fail failures times in a row are left alone for seconds (quarantine) and tried last; the gauge of quarantined producers",
+   "spec": "TS 23.501",
+   "clause": "6.2.19",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "scp_e2e",
+     "file": "nf/scp/tests/test_scp.c",
+     "fn": "test_retries_and_health"
+    },
+    {
+     "ctest": "scp_e2e",
+     "file": "nf/scp/tests/test_scp.c",
+     "fn": "test_metrics_and_concurrency"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "SCP-E-01",
+   "phase": 7,
+   "nf": "SCP",
+   "procedure": "errors made by the SCP: 400 (MANDATORY_IE_MISSING, INVALID_API, INVALID_DISCOVERY_PARAM, NF_DISCOVERY_FAILURE), 413 for a body above max_body, 503 NF_CONGESTION above max_inflight, 504 TARGET_NF_NOT_REACHABLE and TIMED_OUT_REQUEST; ProblemDetails with the cause and the Server header naming the SCP",
+   "spec": "TS 29.500",
+   "clause": "6.10.8.2",
+   "also": [
+    "5.2.7.4"
+   ],
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "scp_e2e",
+     "file": "nf/scp/tests/test_scp.c",
+     "fn": "test_limits_and_targets"
+    },
+    {
+     "ctest": "scp_e2e",
+     "file": "nf/scp/tests/test_scp.c",
+     "fn": "test_retries_and_health"
+    },
+    {
+     "ctest": "scp_differential",
+     "file": "tools/scp_diff.py",
+     "fn": "main"
+    }
+   ],
+   "evidence": "The differential gives 504 for an unreachable target (Open5GS: 500)."
+  },
+  {
+   "id": "SCP-E-02",
+   "phase": 7,
+   "nf": "SCP",
+   "procedure": "an error answer of the producer is relayed unchanged with Via added and no Server header of the SCP; a request that already passed this SCP (its Via names it) is refused as a loop",
+   "spec": "TS 29.500",
+   "clause": "6.10.8.3",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "scp_e2e",
+     "file": "nf/scp/tests/test_scp.c",
+     "fn": "test_model_c"
+    },
+    {
+     "ctest": "scp_e2e",
+     "file": "nf/scp/tests/test_scp.c",
+     "fn": "test_limits_and_targets"
+    },
+    {
+     "ctest": "scp_differential",
+     "file": "tools/scp_diff.py",
+     "fn": "main"
+    }
+   ],
+   "evidence": "The differential relays a producer's 400 as Open5GS's SCP does."
+  },
+  {
+   "id": "SCP-E-03",
+   "phase": 7,
+   "nf": "SCP",
+   "procedure": "late arriving requests: 3gpp-Sbi-Sender-Timestamp with 3gpp-Sbi-Max-Rsp-Time; a request that has timed out at the client is refused with 504 TIMED_OUT_REQUEST, the two headers are forwarded unmodified (the specification allows that)",
+   "spec": "TS 29.500",
+   "clause": "6.11.2.2",
+   "also": [
+    "5.2.3.3.2",
+    "5.2.3.3.3"
+   ],
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "scp_e2e",
+     "file": "nf/scp/tests/test_scp.c",
+     "fn": "test_model_c"
+    },
+    {
+     "ctest": "fuzz_replay_scp",
+     "file": "fuzz/fuzz_scp.c",
+     "fn": "LLVMFuzzerTestOneInput"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "SCP-X-01",
+   "phase": 7,
+   "nf": "SCP",
+   "procedure": "chained SCPs: a next-hop SCP (scp.next) receives the request with the apiRoot this SCP selected, or with the discovery headers when it delegates the discovery; the prefix of each SCP is handled; the Via of the chain is kept",
+   "spec": "TS 23.501",
+   "clause": "6.2.19",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "scp_e2e",
+     "file": "nf/scp/tests/test_scp.c",
+     "fn": "test_chain"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "SCP-X-02",
+   "phase": 7,
+   "nf": "SCP",
+   "procedure": "access control on the targets (scp.targets.allow: host names, wildcard names, IPv4 CIDRs): a Target-apiRoot outside the list is 403 TARGET_NOT_ALLOWED and a discovered producer outside it is not a candidate (400 NF_DISCOVERY_FAILURE when none is left)",
+   "spec": "TS 29.500",
+   "clause": "6.10.5.1",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "scp_e2e",
+     "file": "nf/scp/tests/test_scp.c",
+     "fn": "test_limits_and_targets"
+    },
+    {
+     "ctest": "fuzz_replay_scp",
+     "file": "fuzz/fuzz_scp.c",
+     "fn": "LLVMFuzzerTestOneInput"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "SCP-X-03",
+   "phase": 7,
+   "nf": "SCP",
+   "procedure": "the client side: the SBI client of every function sends its requests through the SCP (scp_client) with Target-apiRoot set to the producer and the User-Agent carrying the NF type, except requests to the NRF and to the SCP itself; the NF type is registered as SCP with scpInfo.scpPorts",
+   "spec": "TS 29.500",
+   "clause": "6.10.2",
+   "also": [
+    "6.10.2.4"
+   ],
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "scp_e2e",
+     "file": "nf/scp/tests/test_scp.c",
+     "fn": "test_client_side"
+    },
+    {
+     "ctest": "cluster_load",
+     "file": "deploy/run/g5c-cluster.sh",
+     "fn": "-"
+    }
+   ],
+   "evidence": "Oracle S3 through our SCP (OUR_SCP=1): Open5GS's NRF, UDR, UDM, AUSF, PCF, SMF and AMF send every request to the other functions to our SCP (client.scp); UERANSIM registers, establishes a PDU session and releases it. Mode c names the producer, mode d delegates the discovery and the registration. Oracle S4 with every function ours and every request between the functions through our SCP (scp_client in each configuration); the user plane keeps working after the policy change."
+  },
+  {
+   "id": "SCP-OP-01",
+   "phase": 7,
+   "nf": "SCP",
+   "procedure": "configuration: prefix, next hop, discovery, routing, quarantine, limits, workers, targets; every wrong value is refused at start with the key that is wrong",
+   "spec": "TS 29.500",
+   "clause": "-",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "scp_e2e",
+     "file": "nf/scp/tests/test_scp.c",
+     "fn": "test_config"
+    },
+    {
+     "ctest": "bad_configs_rejected",
+     "file": "tests/conformance/check_bad_configs.sh",
+     "fn": "-"
+    }
+   ],
+   "evidence": "12 bad configurations are rejected by the binary; configs/scp.yaml and the compose configuration load."
+  },
+  {
+   "id": "SCP-OP-02",
+   "phase": 7,
+   "nf": "SCP",
+   "procedure": "metrics: requests by model, responses by class, attempts, discovery cache results, quarantined producers and the in-flight gauge, a latency histogram; a totals line at shutdown; correct under concurrent consumers",
+   "spec": "TS 29.500",
+   "clause": "-",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "scp_e2e",
+     "file": "nf/scp/tests/test_scp.c",
+     "fn": "test_metrics_and_concurrency"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "SCP-OP-03",
+   "phase": 7,
+   "nf": "SCP",
+   "procedure": "hostile input: replay fuzzing of the headers, path, query and body of requests to the SCP (30,000 mutations under ASan in the regression)",
+   "spec": "TS 29.500",
+   "clause": "-",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "fuzz_replay_scp",
+     "file": "fuzz/fuzz_scp.c",
+     "fn": "LLVMFuzzerTestOneInput"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "SCP-OP-04",
+   "phase": 7,
+   "nf": "SCP",
+   "procedure": "the cluster runs through the SCP (G5C_SCP=1, the default): load and chaos tests pass with every request between the functions forwarded by it",
+   "spec": "TS 29.500",
+   "clause": "6.10.2",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "cluster_load",
+     "file": "deploy/run/g5c-cluster.sh",
+     "fn": "-"
+    },
+    {
+     "ctest": "cluster_chaos",
+     "file": "deploy/run/g5c-cluster.sh",
+     "fn": "-"
+    }
+   ],
+   "evidence": "Oracle S4 with every function ours and every request between the functions through our SCP (scp_client in each configuration); the user plane keeps working after the policy change."
+  },
+  {
+   "id": "SCP-GAP-01",
+   "phase": 7,
+   "nf": "SCP",
+   "procedure": "HTTP redirection (307/308) is not generated and a 307/308 of a producer is relayed, not followed; no reselection on a redirect",
+   "spec": "TS 29.500",
+   "clause": "6.10.9",
+   "status": "gap",
+   "tests": [],
+   "evidence": ""
+  },
+  {
+   "id": "SCP-GAP-02",
+   "phase": 7,
+   "nf": "SCP",
+   "procedure": "authorization: the SCP does not obtain access tokens for the consumers (Model D) and does not check them (Model C); 401/403 with WWW-Authenticate are relayed",
+   "spec": "TS 29.500",
+   "clause": "6.10.11",
+   "status": "gap",
+   "tests": [],
+   "evidence": "Planned with the pass over all functions (NRF-GAP-04)."
+  },
+  {
+   "id": "SCP-GAP-03",
+   "phase": 7,
+   "nf": "SCP",
+   "procedure": "overload and load control information (3gpp-Sbi-Oci, 3gpp-Sbi-Lci) and message priority are relayed and not interpreted; no NF set / service set based reselection beyond nfinst",
+   "spec": "TS 29.500",
+   "clause": "6.3",
+   "status": "gap",
+   "tests": [],
+   "evidence": ""
+  },
+  {
+   "id": "SCP-GAP-04",
+   "phase": 7,
+   "nf": "SCP",
+   "procedure": "default notification subscriptions are not supported (the pseudo URI is 404); no SEPP functions (N32); no TLS between the SCP and the functions in the sample configuration",
+   "spec": "TS 29.500",
+   "clause": "6.10.3.3",
+   "status": "gap",
+   "tests": [],
+   "evidence": ""
+  },
+  {
+   "id": "BSF-REG-01",
+   "phase": 7,
+   "nf": "BSF",
+   "procedure": "Nbsf_Management_Register: POST /pcfBindings creates the binding (201, Location with the bindingId, the PcfBinding with the features that were negotiated); the BSF assigns the identifier and keeps what the PCF sent",
+   "spec": "TS 29.521",
+   "clause": "4.2.2.2",
+   "also": [
+    "5.3.2.3.1"
+   ],
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "bsf_e2e",
+     "file": "nf/bsf/tests/test_bsf.c",
+     "fn": "test_ipv4"
+    },
+    {
+     "ctest": "bsf_differential",
+     "file": "tools/bsf_diff.py",
+     "fn": "main"
+    },
+    {
+     "ctest": "conformance_dump_payloads_noop",
+     "file": "tests/conformance/dump_payloads.c",
+     "fn": "bsf_payloads"
+    },
+    {
+     "ctest": "fuzz_replay_bsf",
+     "file": "fuzz/fuzz_bsf.c",
+     "fn": "LLVMFuzzerTestOneInput"
+    }
+   ],
+   "evidence": "Oracle S8 with our BSF in place of Open5GS's (OUR_BSF=1): Open5GS's PCF registers the binding of the PDU session (UE address, DNN, slice, its own address) at it, the BSF's discovery finds it by the UE's address while the session is up, and it is gone after the release."
+  },
+  {
+   "id": "BSF-REG-02",
+   "phase": 7,
+   "nf": "BSF",
+   "procedure": "what a registration must carry: DNN and S-NSSAI always; the UE address (ipv4Addr, ipv6Prefix, addIpv6Prefixes, macAddr48, addMacAddrs) and the PCF address (pcfFqdn, pcfIpEndPoints, or both Diameter identities) unless ExtendedSamePcf is negotiated; the IP domain only with an IPv4 address; members of a feature that was not negotiated are refused; 400 with the member that is wrong in invalidParams",
+   "spec": "TS 29.521",
+   "clause": "5.6.2.2",
+   "also": [
+    "4.2.2.2"
+   ],
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "bsf_e2e",
+     "file": "nf/bsf/tests/test_bsf.c",
+     "fn": "test_registration_rules"
+    },
+    {
+     "ctest": "fuzz_replay_bsf",
+     "file": "fuzz/fuzz_bsf.c",
+     "fn": "LLVMFuzzerTestOneInput"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "BSF-REG-03",
+   "phase": 7,
+   "nf": "BSF",
+   "procedure": "SamePcf: a registration with a parameter combination (SUPI, DNN, S-NSSAI, any of them) for which a binding with Npcf_SMPolicyControl addressing exists is refused with 403 EXISTING_BINDING_INFO_FOUND and the pcfSmFqdn / pcfSmIpEndPoints of the existing one",
+   "spec": "TS 29.521",
+   "clause": "4.2.2.2",
+   "also": [
+    "5.7.3",
+    "5.6.2.4",
+    "5.6.2.5"
+   ],
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "bsf_e2e",
+     "file": "nf/bsf/tests/test_bsf.c",
+     "fn": "test_same_pcf"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "BSF-REG-04",
+   "phase": 7,
+   "nf": "BSF",
+   "procedure": "more than one address per binding (MultiUeAddr): additional IPv6 prefixes and MAC addresses, framed routes for IPv4 and IPv6; at most 64 of each",
+   "spec": "TS 29.521",
+   "clause": "5.6.2.2",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "bsf_e2e",
+     "file": "nf/bsf/tests/test_bsf.c",
+     "fn": "test_ipv6_mac_framed"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "BSF-REG-05",
+   "phase": 7,
+   "nf": "BSF",
+   "procedure": "stale bindings: a registration for a UE address, DNN, S-NSSAI and IP domain that another binding holds replaces it (the address is unique there), and a PCF that registers with a newer recoveryTime has its older bindings removed",
+   "spec": "TS 29.521",
+   "clause": "4.2.2.2",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "bsf_e2e",
+     "file": "nf/bsf/tests/test_bsf.c",
+     "fn": "test_replace_and_purge"
+    }
+   ],
+   "evidence": "Open5GS's BSF keeps both and answers the first."
+  },
+  {
+   "id": "BSF-DEL-01",
+   "phase": 7,
+   "nf": "BSF",
+   "procedure": "Nbsf_Management_Deregister: DELETE /pcfBindings/{bindingId}: 204, 404 when it does not exist",
+   "spec": "TS 29.521",
+   "clause": "4.2.3.2",
+   "also": [
+    "5.3.3.3.1"
+   ],
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "bsf_e2e",
+     "file": "nf/bsf/tests/test_bsf.c",
+     "fn": "test_ipv4"
+    },
+    {
+     "ctest": "bsf_differential",
+     "file": "tools/bsf_diff.py",
+     "fn": "main"
+    }
+   ],
+   "evidence": "Oracle S8 with our BSF in place of Open5GS's (OUR_BSF=1): Open5GS's PCF registers the binding of the PDU session (UE address, DNN, slice, its own address) at it, the BSF's discovery finds it by the UE's address while the session is up, and it is gone after the release. Oracle S8 with our PCF and Open5GS's BSF: our PCF registers the binding, Open5GS's BSF finds it by the UE's address, and it is removed at the release."
+  },
+  {
+   "id": "BSF-DIS-01",
+   "phase": 7,
+   "nf": "BSF",
+   "procedure": "Nbsf_Management_Discovery by the UE's IPv4 address: 200 with the PcfBinding, 204 when nothing matches; dnn, snssai, supi, gpsi and ipDomain narrow the match; supp-feat selects whether suppFeat is in the answer",
+   "spec": "TS 29.521",
+   "clause": "4.2.4.2",
+   "also": [
+    "5.3.2.3.2"
+   ],
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "bsf_e2e",
+     "file": "nf/bsf/tests/test_bsf.c",
+     "fn": "test_ipv4"
+    },
+    {
+     "ctest": "bsf_differential",
+     "file": "tools/bsf_diff.py",
+     "fn": "main"
+    },
+    {
+     "ctest": "conformance_dump_payloads_noop",
+     "file": "tests/conformance/dump_payloads.c",
+     "fn": "bsf_payloads"
+    }
+   ],
+   "evidence": "Oracle S8 with our BSF in place of Open5GS's (OUR_BSF=1): Open5GS's PCF registers the binding of the PDU session (UE address, DNN, slice, its own address) at it, the BSF's discovery finds it by the UE's address while the session is up, and it is gone after the release. Oracle S8 with our PCF and Open5GS's BSF: our PCF registers the binding, Open5GS's BSF finds it by the UE's address, and it is removed at the release. The differential gives the same answer for the address; Open5GS ignores the narrowing parameters and answers 404 where the specification says 204."
+  },
+  {
+   "id": "BSF-DIS-02",
+   "phase": 7,
+   "nf": "BSF",
+   "procedure": "discovery by an IPv6 address (longest prefix match over the /64 and longer prefixes, the shorter ones, the /128 host entries, additional prefixes), by a MAC address, and through framed routes (the address itself wins over a route)",
+   "spec": "TS 29.521",
+   "clause": "4.2.4.2",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "bsf_e2e",
+     "file": "nf/bsf/tests/test_bsf.c",
+     "fn": "test_ipv6_mac_framed"
+    }
+   ],
+   "evidence": "Open5GS's BSF refuses an IPv6 prefix of the form 2001:db8:1:2::/64 and cannot register a MAC address, so nothing compares these."
+  },
+  {
+   "id": "BSF-DIS-03",
+   "phase": 7,
+   "nf": "BSF",
+   "procedure": "overlapping addresses: the same IPv4 address in two slices or IP domains; a query that does not tell which is 400 MULTIPLE_BINDING_INFO_FOUND, snssai and ipDomain pick one",
+   "spec": "TS 29.521",
+   "clause": "5.7.3",
+   "also": [
+    "4.2.4.2"
+   ],
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "bsf_e2e",
+     "file": "nf/bsf/tests/test_bsf.c",
+     "fn": "test_overlap"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "BSF-DIS-04",
+   "phase": 7,
+   "nf": "BSF",
+   "procedure": "query errors: no UE address is 400 MANDATORY_QUERY_PARAM_MISSING, two of them or a malformed one MANDATORY_QUERY_PARAM_INCORRECT, a query parameter the service does not define INVALID_QUERY_PARAM, a malformed optional one OPTIONAL_QUERY_PARAM_INCORRECT; each with invalidParams",
+   "spec": "TS 29.521",
+   "clause": "4.2.4.2",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "bsf_e2e",
+     "file": "nf/bsf/tests/test_bsf.c",
+     "fn": "test_ipv4"
+    },
+    {
+     "ctest": "fuzz_replay_bsf",
+     "file": "fuzz/fuzz_bsf.c",
+     "fn": "LLVMFuzzerTestOneInput"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "BSF-UPD-01",
+   "phase": 7,
+   "nf": "BSF",
+   "procedure": "Nbsf_Management_Update (BindingUpdate): PATCH /pcfBindings/{bindingId} with a merge patch: new addresses (the old ones stop matching), null removes a member, the address cannot be removed unless ExtendedSamePcf; DNN, S-NSSAI and the like are not modifiable (403 MODIFICATION_NOT_ALLOWED); 415 with Accept-Patch for another media type; 501 for a binding that did not negotiate the feature",
+   "spec": "TS 29.521",
+   "clause": "4.2.5.2",
+   "also": [
+    "5.3.3.3.2",
+    "5.6.2.3"
+   ],
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "bsf_e2e",
+     "file": "nf/bsf/tests/test_bsf.c",
+     "fn": "test_update"
+    },
+    {
+     "ctest": "fuzz_replay_bsf",
+     "file": "fuzz/fuzz_bsf.c",
+     "fn": "LLVMFuzzerTestOneInput"
+    }
+   ],
+   "evidence": "Open5GS's BSF has no PATCH."
+  },
+  {
+   "id": "BSF-FEAT-01",
+   "phase": 7,
+   "nf": "BSF",
+   "procedure": "supported features: the BSF offers MultiUeAddr, BindingUpdate, SamePcf and ExtendedSamePcf (configurable), answers the intersection with what the consumer offered, ExtendedSamePcf only together with SamePcf; ES3XX is not offered",
+   "spec": "TS 29.521",
+   "clause": "5.8",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "bsf_e2e",
+     "file": "nf/bsf/tests/test_bsf.c",
+     "fn": "test_registration_rules"
+    },
+    {
+     "ctest": "bsf_e2e",
+     "file": "nf/bsf/tests/test_bsf.c",
+     "fn": "test_config"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "BSF-OP-01",
+   "phase": 7,
+   "nf": "BSF",
+   "procedure": "registration at the NRF as a BSF with the nbsf-management service and the bsfInfo of the configuration; the PCF and the NEF discover it without a configured address",
+   "spec": "TS 29.510",
+   "clause": "-",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "cluster_load",
+     "file": "deploy/run/g5c-cluster.sh",
+     "fn": "-"
+    },
+    {
+     "ctest": "sbi_oracle_interop",
+     "file": "tests/conformance/CMakeLists.txt",
+     "fn": "-"
+    }
+   ],
+   "evidence": "Oracle S8 with our BSF in place of Open5GS's (OUR_BSF=1): Open5GS's PCF registers the binding of the PDU session (UE address, DNN, slice, its own address) at it, the BSF's discovery finds it by the UE's address while the session is up, and it is gone after the release. Oracle S8 and S7 with every function ours, the BSF and the SCP among them: the PCF registers, the NEF asks the BSF which PCF holds the UE address and reaches it (g5c_nef_bsf_discoveries_total). The cluster tests start the BSF with the other functions."
+  },
+  {
+   "id": "BSF-OP-02",
+   "phase": 7,
+   "nf": "BSF",
+   "procedure": "configuration: bindings limit, offered features, clean-up rules, bsfInfo, state file; every wrong value is refused at start with the key that is wrong, and the PCF's `bsf` block and the NEF's `bsf` block likewise",
+   "spec": "TS 29.521",
+   "clause": "-",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "bsf_e2e",
+     "file": "nf/bsf/tests/test_bsf.c",
+     "fn": "test_config"
+    },
+    {
+     "ctest": "bad_configs_rejected",
+     "file": "tests/conformance/check_bad_configs.sh",
+     "fn": "-"
+    }
+   ],
+   "evidence": "15 bad configurations are rejected by the binaries."
+  },
+  {
+   "id": "BSF-OP-03",
+   "phase": 7,
+   "nf": "BSF",
+   "procedure": "state: the bindings survive a restart (write-behind state file, atomic replace); a damaged file is refused and invalid bindings are dropped",
+   "spec": "TS 29.521",
+   "clause": "-",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "bsf_e2e",
+     "file": "nf/bsf/tests/test_bsf.c",
+     "fn": "test_state"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "BSF-OP-04",
+   "phase": 7,
+   "nf": "BSF",
+   "procedure": "hostile input: replay fuzzing of registrations, discovery queries, updates and deregistrations (30,000 mutations under ASan in the regression)",
+   "spec": "TS 29.521",
+   "clause": "-",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "fuzz_replay_bsf",
+     "file": "fuzz/fuzz_bsf.c",
+     "fn": "LLVMFuzzerTestOneInput"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "BSF-OP-05",
+   "phase": 7,
+   "nf": "BSF",
+   "procedure": "every body the BSF produces (the registered binding, the discovered one, the updated one, ExtProblemDetails with the existing PCF, ProblemDetails) validates against the OpenAPI of TS 29.521",
+   "spec": "TS 29.521",
+   "clause": "5.6.2.2",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "conformance_dump_payloads_noop",
+     "file": "tests/conformance/dump_payloads.c",
+     "fn": "bsf_payloads"
+    }
+   ],
+   "evidence": "every payload valid in the current run."
+  },
+  {
+   "id": "BSF-OP-06",
+   "phase": 7,
+   "nf": "BSF",
+   "procedure": "Open5GS as the reference: the same Nbsf_Management requests to its BSF (behind its NRF) and to ours; statuses, Location and the attributes of the answers are compared, the differences (Open5GS ignores narrowing parameters, answers 404 for no match, refuses IPv6 prefixes, has no PATCH, and its bsfd aborts on a registration that has only the Diameter identities of the PCF) are listed with the clause of the specification",
+   "spec": "TS 29.521",
+   "clause": "4.2.4.2",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "bsf_differential",
+     "file": "tools/bsf_diff.py",
+     "fn": "main"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "BSF-OP-07",
+   "phase": 7,
+   "nf": "BSF",
+   "procedure": "many bindings: 20,000 registered by 8 threads at once and found, indexed by address (no scan); under ASan, UBSan and TSan",
+   "spec": "TS 29.521",
+   "clause": "-",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "bsf_e2e",
+     "file": "nf/bsf/tests/test_bsf.c",
+     "fn": "test_many"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "PCF-BSF-01",
+   "phase": 7,
+   "nf": "PCF",
+   "procedure": "the PCF as consumer of Nbsf_Management: it registers the binding (UE address from the SM policy association, DNN, S-NSSAI, its address, instance id, recovery time) when an association with an IPv4 address or IPv6 prefix is created and removes it when the association ends or the PCF ends it; done from a queue by a thread of its own, so a missing or refusing BSF costs the PDU session nothing; the BSF is the configured one or the one found at the NRF",
+   "spec": "TS 29.521",
+   "clause": "4.1.3.2",
+   "also": [
+    "4.2.2.2",
+    "4.2.3.2"
+   ],
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "pcf_policy_and_services",
+     "file": "nf/pcf/tests/test_pcf.c",
+     "fn": "test_bsf_binding"
+    },
+    {
+     "ctest": "bad_configs_rejected",
+     "file": "tests/conformance/check_bad_configs.sh",
+     "fn": "-"
+    }
+   ],
+   "evidence": "Oracle S8 with our BSF in place of Open5GS's (OUR_BSF=1): Open5GS's PCF registers the binding of the PDU session (UE address, DNN, slice, its own address) at it, the BSF's discovery finds it by the UE's address while the session is up, and it is gone after the release. Oracle S8 with our PCF and Open5GS's BSF: our PCF registers the binding, Open5GS's BSF finds it by the UE's address, and it is removed at the release."
+  },
+  {
+   "id": "NEF-BSF-01",
+   "phase": 7,
+   "nf": "NEF",
+   "procedure": "the NEF as consumer of Nbsf_Management_Discovery: for an AsSessionWithQoS request it asks the BSF for the PCF of the UE's address (with the IP domain, DNN and S-NSSAI when the AF gave them) and calls the PCF the binding names; without a binding or without a BSF it takes a PCF of the NRF; a configured `pcf:` overrides",
+   "spec": "TS 29.521",
+   "clause": "4.1.3.2",
+   "also": [
+    "4.2.4.2"
+   ],
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "nef_e2e",
+     "file": "nf/nef/tests/test_nef.c",
+     "fn": "test_as_qos_via_bsf"
+    },
+    {
+     "ctest": "bad_configs_rejected",
+     "file": "tests/conformance/check_bad_configs.sh",
+     "fn": "-"
+    }
+   ],
+   "evidence": "Oracle S8 and S7 with every function ours, the BSF and the SCP among them: the PCF registers, the NEF asks the BSF which PCF holds the UE address and reaches it (g5c_nef_bsf_discoveries_total). Open5GS's BSF registers allowedNfTypes without the NEF, so Open5GS's NRF does not discover it for our NEF."
+  },
+  {
+   "id": "BSF-GAP-01",
+   "phase": 7,
+   "nf": "BSF",
+   "procedure": "the BSF does not supervise the PCFs at the NRF (Nnrf_NFManagement status subscription) to remove the bindings of a PCF that was deregistered or suspended; stale bindings go when their address is registered again or the PCF registers with a newer recovery time",
+   "spec": "TS 29.521",
+   "clause": "4.2.2.2",
+   "status": "gap",
+   "tests": [],
+   "evidence": ""
+  },
+  {
+   "id": "BSF-GAP-02",
+   "phase": 7,
+   "nf": "BSF",
+   "procedure": "redirection (the ES3XX feature: 307 / 308) is not offered; no BSF collocated with the PCF, UDR, NRF or SMF (it is a function of its own)",
+   "spec": "TS 29.521",
+   "clause": "5.8",
+   "status": "gap",
+   "tests": [],
+   "evidence": ""
+  },
+  {
+   "id": "PCF-BSF-GAP-01",
+   "phase": 7,
+   "nf": "PCF",
+   "procedure": "the PCF registers with SuppFeat 0: it does not use BindingUpdate (a changed UE address is a new registration), SamePcf (same PCF for the sessions of a UE: the paraCom and pcfSm* attributes), MultiUeAddr, or the Diameter identities (no Rx)",
+   "spec": "TS 29.521",
+   "clause": "4.2.2.2",
+   "status": "gap",
+   "tests": [],
+   "evidence": ""
+  }
+ ]
+}

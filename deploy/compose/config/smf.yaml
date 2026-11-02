@@ -1,0 +1,19 @@
+# Compose SMF configuration. No NRF in this stack yet (it arrives in Phase 7), so peers are addressed directly.
+name: smf-1
+plmn: { mcc: '001', mnc: '01' }
+sbi: { address: 0.0.0.0, port: 7778 }
+log: { level: info, json: true }
+smf:
+  udm: { uri: 'http://udm:7773' }
+  pcf: { uri: 'http://pcf:7777' }
+  # amf: { uri: 'http://amf:7777' }   # needed only when the AMF's smContextStatusUri is not reachable from here
+  mtu: 1400
+  state_file: /var/lib/g5c/smf-state.json
+  n4:
+    address: 10.100.0.4
+    port: 8805
+    heartbeat: { interval: 5, failures: 3 }
+  upfs:
+    - { name: upf-1, address: 10.100.0.7, port: 8805, dnns: [internet] }
+  dnns:
+    - { name: internet, ipv4_pool: 10.45.0.0/16, dns: [8.8.8.8, 8.8.4.4] }

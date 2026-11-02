@@ -1,0 +1,398 @@
+{
+ "title": "Conformance matrix, Phase 6 (the five-function core as a system: scenarios, scale, failure injection, soak)",
+ "note": "Same rules as the other matrices. 'verified' = tests pass and a real independent peer (UERANSIM, Open5GS's AUSF / NRF) confirms it. The system rows are run by deploy/run/g5c-cluster.sh (real processes) and nf/amf/tests/load_core.c; the gap rows are what the phase leaves out.",
+ "specs": {
+  "TS 23.502": "23502-gj0.txt",
+  "TS 38.413": "38413-gi0.txt",
+  "TS 29.244": "29244-gd0.txt",
+  "TS 29.281": "29281-g20.txt",
+  "TS 29.504": "29504-ge0.txt",
+  "TS 29.505": "29505-gc0.txt"
+ },
+ "rows": [
+  {
+   "id": "P6-SYS-01",
+   "phase": 6,
+   "nf": "System",
+   "procedure": "S1: initial registration with 5G-AKA, security mode, GUTI allocation, then UE-initiated de-registration; every function a separate process (udr, UDM, AUSF-lite, PCF, UPF, SMF, AMF), a scripted gNB over real SCTP and a scripted UE that derives every key itself",
+   "spec": "TS 23.502",
+   "clause": "4.2.2.2.2",
+   "also": [
+    "4.2.2.3.2"
+   ],
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "cluster_load",
+     "file": "deploy/run/g5c-cluster.sh",
+     "fn": "-"
+    },
+    {
+     "ctest": "amf_e2e",
+     "file": "nf/amf/tests/test_amf_e2e.c",
+     "fn": "test_registration"
+    }
+   ],
+   "evidence": "deploy/run/g5c-cluster.sh ns load: every UE completes and the UE-context, SMF-session and UPF-session counts read from /metrics return to their starting values. UERANSIM does the same against our AMF with Open5GS's AUSF / NRF (oracle S1-S3)."
+  },
+  {
+   "id": "P6-SYS-02",
+   "phase": 6,
+   "nf": "System",
+   "procedure": "S2: S1 plus UE-requested PDU session establishment, user plane through the UPF (N3 GTP-U to N6) and release at de-registration",
+   "spec": "TS 23.502",
+   "clause": "4.3.2.2.1",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "cluster_load",
+     "file": "deploy/run/g5c-cluster.sh",
+     "fn": "-"
+    },
+    {
+     "ctest": "amf_e2e",
+     "file": "nf/amf/tests/test_amf_e2e.c",
+     "fn": "test_sessions"
+    }
+   ],
+   "evidence": "UERANSIM's UE pings through our UPF with our AMF, SMF, UDM and PCF (oracle S2, 0% loss); the scripted gNB and UE do the same with checked tunnel identifiers and addresses."
+  },
+  {
+   "id": "P6-SYS-03",
+   "phase": 6,
+   "nf": "System",
+   "procedure": "S3: S2 plus UE-requested PDU session release and re-registration with the 5G-GUTI",
+   "spec": "TS 23.502",
+   "clause": "4.3.4.2",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "cluster_load",
+     "file": "deploy/run/g5c-cluster.sh",
+     "fn": "-"
+    },
+    {
+     "ctest": "amf_e2e",
+     "file": "nf/amf/tests/test_amf_e2e.c",
+     "fn": "test_sessions"
+    },
+    {
+     "ctest": "amf_e2e",
+     "file": "nf/amf/tests/test_amf_e2e.c",
+     "fn": "test_context_reuse"
+    }
+   ],
+   "evidence": "Oracle S3 with every function ours except the AUSF and NRF (Open5GS's)."
+  },
+  {
+   "id": "P6-SYS-04",
+   "phase": 6,
+   "nf": "System",
+   "procedure": "S4: policy change while the session is up: PCF update -> SMF -> N4 modification -> NAS modification command -> N2 modify request",
+   "spec": "TS 23.502",
+   "clause": "4.3.3.2",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "amf_e2e",
+     "file": "nf/amf/tests/test_amf_e2e.c",
+     "fn": "test_sessions"
+    },
+    {
+     "ctest": "smf_e2e",
+     "file": "nf/smf/tests/test_smf_e2e.c",
+     "fn": "test_policy_update"
+    }
+   ],
+   "evidence": "Oracle S4 against our AMF, SMF, UPF, UDM and PCF; UERANSIM's gNB does not answer a modify request, so the NGAP request in the capture is the evidence there and the scripted gNB completes the procedure."
+  },
+  {
+   "id": "P6-SYS-05",
+   "phase": 6,
+   "nf": "System",
+   "procedure": "S5: connection release (inactivity), the UE returns with a service request, user plane resumes; network-triggered paging for downlink data",
+   "spec": "TS 23.502",
+   "clause": "4.2.3.2",
+   "also": [
+    "4.2.3.3"
+   ],
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "amf_e2e",
+     "file": "nf/amf/tests/test_amf_e2e.c",
+     "fn": "test_idle_service_paging"
+    }
+   ],
+   "evidence": "Oracle S5 (nr-cli ue-release, then ping); paging, its repetition and its failure with the scripted gNB."
+  },
+  {
+   "id": "P6-SCALE-01",
+   "phase": 6,
+   "nf": "System",
+   "procedure": "100 / 1,000 / 10,000 simulated UEs, each registering with 5G-AKA and establishing a PDU session, then de-registering; the functions in one process on real sockets (load_core)",
+   "spec": "TS 23.502",
+   "clause": "4.2.2.2.2",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "load_core_small",
+     "file": "nf/amf/tests/load_core.c",
+     "fn": "main"
+    }
+   ],
+   "evidence": "10,000 UEs over 32 gNBs: all registered with a session in 71 s, de-registered in 17 s, latency p50 9 ms / 195 ms (registration / session), no descriptor leak, AMF, SMF and UPF empty at the end. Run with G5C_LOAD_UES=10000; ctest runs 150."
+  },
+  {
+   "id": "P6-SCALE-02",
+   "phase": 6,
+   "nf": "System",
+   "procedure": "the same load against the daemons as separate processes in a private network namespace (deploy/run/g5c-cluster.sh ns load)",
+   "spec": "TS 23.502",
+   "clause": "4.2.2.2.2",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "cluster_load",
+     "file": "deploy/run/g5c-cluster.sh",
+     "fn": "-"
+    }
+   ],
+   "evidence": "10,000 UEs over 32 gNBs: registered with a session each in 20.7 s (484 UE/s), de-registered in 9.8 s; latency p50 38 ms / 25 ms / 29 ms (registration / session / de-registration), flat as the population grows. ctest runs 300 UEs x 2 waves."
+  },
+  {
+   "id": "P6-SCALE-03",
+   "phase": 6,
+   "nf": "AMF",
+   "procedure": "the unauthenticated-connection limit counts only connections that have not completed authentication",
+   "spec": "TS 38.413",
+   "clause": "8.6.1",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "load_core_small",
+     "file": "nf/amf/tests/load_core.c",
+     "fn": "main"
+    },
+    {
+     "ctest": "amf_e2e",
+     "file": "nf/amf/tests/test_amf_e2e.c",
+     "fn": "test_registration"
+    }
+   ],
+   "evidence": "Found by the first load run: the limit counted every connection, so an AMF refused new UEs with an overload Error Indication once 4,096 UEs were connected."
+  },
+  {
+   "id": "P6-FAIL-01",
+   "phase": 6,
+   "nf": "System",
+   "procedure": "network functions killed (SIGKILL) and restarted at random while the load runs; afterwards a clean wave of new UEs must pass in every detail",
+   "spec": "TS 23.502",
+   "clause": "4.2.2.2.2",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "cluster_chaos",
+     "file": "deploy/run/g5c-cluster.sh",
+     "fn": "-"
+    }
+   ],
+   "evidence": "30 s of load with 16 kills (UPF, SMF, AMF, UDM, PCF, AUSF, UDR): 8,762 UE cycles completed, the rest counted as failures, no hang; the recovery wave of 100 UEs passes."
+  },
+  {
+   "id": "P6-FAIL-02",
+   "phase": 6,
+   "nf": "SMF",
+   "procedure": "SMF restart: sessions come back from the state file, the UPF association is re-established with the same Recovery Time Stamp",
+   "spec": "TS 29.244",
+   "clause": "6.2.6",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "smf_e2e",
+     "file": "nf/smf/tests/test_smf_e2e.c",
+     "fn": "test_persistence"
+    },
+    {
+     "ctest": "cluster_chaos",
+     "file": "deploy/run/g5c-cluster.sh",
+     "fn": "-"
+    }
+   ],
+   "evidence": "In-process test with the real PFCP sockets; the chaos run restarts the SMF as a process."
+  },
+  {
+   "id": "P6-FAIL-02b",
+   "phase": 6,
+   "nf": "SMF",
+   "procedure": "UPF restart detected through the Recovery Time Stamp: sessions released towards the AMF and the N4 association set up again",
+   "spec": "TS 29.244",
+   "clause": "6.2.6",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "smf_e2e",
+     "file": "nf/smf/tests/test_smf_e2e.c",
+     "fn": "test_upf_outage"
+    },
+    {
+     "ctest": "cluster_chaos",
+     "file": "deploy/run/g5c-cluster.sh",
+     "fn": "-"
+    }
+   ],
+   "evidence": "Found by the chaos run: the association was not re-established, so the UPF refused new sessions (cause 72)."
+  },
+  {
+   "id": "P6-FAIL-03",
+   "phase": 6,
+   "nf": "AMF",
+   "procedure": "AMF restart: registered UEs come back CM-IDLE with their security context and are served by a service request",
+   "spec": "TS 23.502",
+   "clause": "4.2.3.2",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "amf_e2e",
+     "file": "nf/amf/tests/test_amf_e2e.c",
+     "fn": "test_persistence"
+    }
+   ],
+   "evidence": "In-process test; the chaos run restarts the AMF as a process."
+  },
+  {
+   "id": "P6-FAIL-04",
+   "phase": 6,
+   "nf": "AMF",
+   "procedure": "loss of the N2 association: UE contexts of that gNB go CM-IDLE, sessions are kept",
+   "spec": "TS 38.413",
+   "clause": "8.7.4.2.2",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "amf_e2e",
+     "file": "nf/amf/tests/test_amf_e2e.c",
+     "fn": "test_association_loss"
+    }
+   ],
+   "evidence": "Scripted gNB closes its SCTP association."
+  },
+  {
+   "id": "P6-FAIL-05",
+   "phase": 6,
+   "nf": "UDR",
+   "procedure": "UDR outage and restart under UDM / PCF load: a clean 503 while it is down, the first request after it is back succeeds, no leaked state",
+   "spec": "TS 29.504",
+   "clause": "-",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "soak_core",
+     "file": "tests/soak/soak_core.c",
+     "fn": "main"
+    }
+   ],
+   "evidence": "soak_core stops and restarts the UDR repeatedly under a mixed workload (also under ASan and TSan)."
+  },
+  {
+   "id": "P6-FAIL-06",
+   "phase": 6,
+   "nf": "UDR",
+   "procedure": "subscriber store persistence is a snapshot plus a journal of changed subscribers: a crash image recovers every flushed change, removals included, and a journal older than its snapshot is not replayed",
+   "spec": "TS 29.505",
+   "clause": "-",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "udr_patch_store_routes",
+     "file": "nf/udr/tests/test_udr.c",
+     "fn": "test_journal_recovery"
+    }
+   ],
+   "evidence": "test_journal_recovery copies the files of a running store (what a crash leaves) and reopens them."
+  },
+  {
+   "id": "P6-SOAK-01",
+   "phase": 6,
+   "nf": "System",
+   "procedure": "waves of register / session / de-register for a fixed time against the daemons; RSS of every function must stay flat between the second and the last wave",
+   "spec": "TS 23.502",
+   "clause": "4.2.2.2.2",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "cluster_soak",
+     "file": "deploy/run/g5c-cluster.sh",
+     "fn": "-"
+    }
+   ],
+   "evidence": "ns soak 500 UEs for 90 s (30 waves): no function grows beyond the tolerance; ctest runs 30 s. The strategy's 72 hour run uses the same command (`ns soak 500 259200`)."
+  },
+  {
+   "id": "P6-SOAK-02",
+   "phase": 6,
+   "nf": "System",
+   "procedure": "memory and descriptor leaks: the load run under ASan/UBSan (leak check at exit) and the chaos run",
+   "spec": "TS 23.502",
+   "clause": "-",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "load_core_small",
+     "file": "nf/amf/tests/load_core.c",
+     "fn": "main"
+    },
+    {
+     "ctest": "cluster_chaos",
+     "file": "deploy/run/g5c-cluster.sh",
+     "fn": "-"
+    }
+   ],
+   "evidence": "load_core under AddressSanitizer reports nothing at exit; descriptors return to their starting count (+ the bounded SBI connection pool)."
+  },
+  {
+   "id": "P6-GAP-01",
+   "phase": 6,
+   "nf": "System",
+   "procedure": "72 hour soak",
+   "spec": "TS 23.502",
+   "clause": "-",
+   "status": "gap",
+   "tests": [],
+   "evidence": "The harness exists and ran for minutes in this environment; the 72 hour run needs a host that can be left alone for three days (`ns soak 500 259200`)."
+  },
+  {
+   "id": "P6-GAP-02",
+   "phase": 6,
+   "nf": "System",
+   "procedure": "S1-S8 on srsRAN (ZMQ gNB / UE) and an O-RAN emulator",
+   "spec": "TS 38.413",
+   "clause": "-",
+   "status": "gap",
+   "tests": [],
+   "evidence": "Deferred by the owner until all eleven functions exist; the interop pass with srsUE and the OCUDU gNB is planned for that point together with the demo environment."
+  },
+  {
+   "id": "P6-GAP-03",
+   "phase": 6,
+   "nf": "System",
+   "procedure": "scripted UEs do not run user-plane traffic at scale (control plane and session setup only)",
+   "spec": "TS 29.281",
+   "clause": "-",
+   "status": "gap",
+   "tests": [],
+   "evidence": "UPF throughput is measured by its own benchmark (about 3.2 Gbit/s uplink, 1.8 Gbit/s downlink per core); a combined signalling + traffic run needs a traffic generator inside the namespace."
+  },
+  {
+   "id": "P6-GAP-04",
+   "phase": 6,
+   "nf": "SMF",
+   "procedure": "an SMF killed within the write-behind window of its state file leaves PFCP sessions on the UPF that the restarted SMF does not know",
+   "spec": "TS 29.244",
+   "clause": "6.2.6",
+   "status": "gap",
+   "tests": [],
+   "evidence": "The window is 25 ms or ten times the cost of a write. A graceful stop flushes. Closing it needs an N4 session audit (a Recovery Time Stamp change is not usable because the SMF keeps the stamp to keep its sessions)."
+  }
+ ]
+}

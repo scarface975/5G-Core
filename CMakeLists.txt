@@ -1,0 +1,68 @@
+# SPDX-License-Identifier: LicenseRef-Proprietary
+cmake_minimum_required(VERSION 3.20)
+project(g5c VERSION 0.9.0 LANGUAGES C)
+
+# the release version (VERSION at the top of the tree, `0.9.0-rc1` for a release candidate): in every binary's start-up log line and in the metric g5c_build_info
+file(STRINGS ${CMAKE_SOURCE_DIR}/VERSION G5C_VERSION LIMIT_COUNT 1)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/VERSION)
+
+set(CMAKE_C_STANDARD 17)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_C_EXTENSIONS OFF)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
+option(G5C_SANITIZE "Build with ASan+UBSan" OFF)
+option(G5C_TSAN "Build with ThreadSanitizer" OFF)
+option(G5C_COVERAGE "Build with gcov instrumentation" OFF)
+
+find_package(OpenSSL 3 REQUIRED)
+
+add_compile_options(
+  -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wformat=2 -Wcast-qual
+  -Wstrict-prototypes -Wmissing-prototypes -Werror
+  -fstack-protector-strong -fno-strict-overflow)
+add_compile_definitions(_FORTIFY_SOURCE=3 G5C_VERSION="${G5C_VERSION}")
+add_link_options(-Wl,-z,relro,-z,now)
+if(G5C_SANITIZE)
+  add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all -O1 -g)
+  add_link_options(-fsanitize=address,undefined)
+elseif(G5C_TSAN)
+  add_compile_options(-fsanitize=thread -fno-omit-frame-pointer -O1 -g)
+  add_link_options(-fsanitize=thread)
+elseif(G5C_COVERAGE)
+  add_compile_options(--coverage -O1 -g)
+  add_link_options(--coverage)
+else()
+  add_compile_options(-O2)
+endif()
+
+enable_testing()
+add_library(g5c_testkit INTERFACE)
+target_include_directories(g5c_testkit INTERFACE ${CMAKE_SOURCE_DIR}/libs/testkit/include)
+
+add_subdirectory(libs/crypto)
+add_subdirectory(libs/base)
+add_subdirectory(libs/gtpu)
+add_subdirectory(libs/pfcp)
+add_subdirectory(libs/nas)
+add_subdirectory(libs/ngap)
+add_subdirectory(libs/sbi)
+add_subdirectory(libs/oaschema)
+add_subdirectory(libs/nfcore)
+add_subdirectory(nf/udr)
+add_subdirectory(nf/udm)
+add_subdirectory(nf/ausf)
+add_subdirectory(nf/nssf)
+add_subdirectory(nf/nef)
+add_subdirectory(nf/scp)
+add_subdirectory(nf/bsf)
+add_subdirectory(nf/pcf)
+add_subdirectory(nf/upf)
+add_subdirectory(nf/smf)
+add_subdirectory(nf/amf)
+add_subdirectory(nf/nrf)
+add_subdirectory(ctl)
+add_subdirectory(tools/inspect)
+add_subdirectory(tests/soak)
+add_subdirectory(tests/conformance)
+add_subdirectory(fuzz)

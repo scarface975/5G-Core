@@ -1,0 +1,14 @@
+# Compose UPF configuration. The UPF is not an SBI function: `sbi` only serves /health/live, /health/ready and /metrics.
+name: upf-1
+plmn: { mcc: '001', mnc: '01' }
+sbi: { address: 0.0.0.0, port: 9091 }
+log: { level: info, json: true }
+upf:
+  # Specific addresses, not 0.0.0.0: they are advertised to the SMF as the N4 F-SEID and the N3 F-TEID.
+  pfcp: { address: 10.100.0.7, port: 8805 }
+  gtpu: { address: 10.100.0.7, port: 2152 }
+  n6: { device: ogstun }          # TUN device towards the data network (needs CAP_NET_ADMIN and /dev/net/tun)
+  check_source: true              # drop uplink packets whose source is not the session's UE address
+  heartbeat: { interval: 5, retries: 3, delete_on_loss: true }
+  buffer: { max_packets: 256, max_bytes: 1048576, max_age: 10 }
+  max_sessions: 65536

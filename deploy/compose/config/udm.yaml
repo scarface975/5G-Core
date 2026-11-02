@@ -1,0 +1,13 @@
+# Compose UDM configuration. Secrets are never inline: keys and tokens live in files (or the G5C_UDM_* environment variables).
+name: udm-1
+plmn: { mcc: '001', mnc: '01' }
+sbi:
+  address: 0.0.0.0
+  port: 7773
+  # tls: { cert: /etc/g5c/tls/udm.crt, key: /etc/g5c/tls/udm.key, ca: /etc/g5c/tls/ca.crt }   # ca set => mutual TLS
+log: { level: info, json: true }
+udr: { uri: 'http://udr:7790', token_file: /etc/g5c/keys/udr-provisioning.token }
+hn_keys:
+  - { id: 1, scheme: profile-a, private_key_file: /etc/g5c/keys/hn-1.key }
+master_key_file: /etc/g5c/keys/udm-master.key     # 64 hex chars; encrypts K/OPc at rest in the UDR
+admin_token_file: /etc/g5c/keys/udm-admin.token   # >= 16 chars; enables /admin/v1

@@ -1,0 +1,12 @@
+g5c 0.9.0-rc1
+Copyright (c) the g5c authors. All rights reserved.
+
+This product includes software of third parties, linked dynamically as system libraries; their notices apply to them:
+
+  - OpenSSL 3.5.5 (Apache-2.0)
+  - nghttp2 1.68.0 (MIT)
+  - libuv 1.51.0 (MIT)
+  - libpq 5.18 (PostgreSQL)
+
+The specifications this product implements are published by 3GPP and ETSI; the documents are not part of this distribution (only checksums and tables derived for testing).
+Open5GS (AGPL-3.0), UERANSIM (GPL-3.0) and MongoDB are used only to test interoperability on the developers' machines and are neither linked nor distributed.

@@ -1,0 +1,6 @@
+# The session AMBR on the user plane (B-02): the PCF gives every session 1 Mbit/s (run with G5C_AMBR_UL='1 Mbps' G5C_AMBR_DL='1 Mbps'),
+# each UE offers 4 Mbit/s uplink for 1.5 s, and the UPF has to let through about 1 Mbit/s per UE and drop the rest; the rate limiter's drops are counted.
+name: session AMBR enforced by the UPF
+steps:
+  - load: {ues: 4, gnbs: 2, traffic_mbps: 4, traffic_ms: 1500, expect_mbps: 1}
+  - assert: {metric: "upf:g5c_upf_dropped_packets_total{reason=rate_limit}", ">=": 100}

@@ -1,0 +1,321 @@
+#!/usr/bin/env python3
+"""g5c-scenario: a test as a list of steps in a YAML (or JSON) file, run against a running cluster (backlog B-01; the impairment step is B-08).
+
+  g5c-scenario validate FILE...             check the files (no cluster needed)
+  g5c-scenario run FILE... [--junit OUT]    run them; exit 1 when a step fails.  Normally started by `deploy/run/g5c-cluster.sh ns scenario FILE...`, which brings the cluster up
+                                            in a private namespace, sets G5C_CLUSTER_SH / G5C_CURL_ARGS / G5C_SCENARIO_NFS and removes any link impairment afterwards
+
+A scenario:
+    name: N4 slowed down while UEs register
+    steps:
+      - load: {ues: 30, gnbs: 8}                                  UEs register, get a PDU session and de-register through scripted gNBs (the load generator); passes when every UE completed
+      - load: {ues: 4, traffic_mbps: 4, traffic_ms: 1500, expect_mbps: 1}   as above, and every UE sends uplink traffic at 4 Mbit/s for 1.5 s once it has its session; the run fails unless the UPF
+                                                                  delivered 0.5x to 1.3x of expect_mbps per UE (the session AMBR the PCF gave; traffic_size sets the packet size, 1000 octets by default)
+      - load: {ues: 30, background: true, id: wave}               started and left running ... then
+      - join: wave                                                ... waited for (expect: pass | fail applies to the result)
+      - impair: {to: upf, delay_ms: 150, loss_pct: 0, duration_s: 5}   packets to that function are delayed / dropped; duration_s lifts it again, `impair: clear` lifts it now
+      - kill: smf          restart: smf          start: smf       a function is killed (SIGKILL) / restarted / started
+      - wait: 2                                                   seconds
+      - assert: {metric: "amf:g5c_amf_registrations_total{result=accepted}", ">=": 30}     <function>:<name>[{label=value,...}], summed over the series; ops >= <= > < ==
+      - kpi: {name: registration_success_rate, ">=": 99}          a KPI of deploy/ops/kpis.json, computed from the live metrics of all functions
+      - http: {nf: udm, method: GET, path: /health/live, expect: 200}
+      - log: "any text"
+A step may carry `expect: fail` (load, join, http) when failure is the point, or `expect: any` when the outcome is reported but not judged, and `name:` for the report."""
+import importlib.machinery
+import importlib.util
+import json
+import os
+import re
+import shlex
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+OPS = {">=": lambda a, b: a >= b, "<=": lambda a, b: a <= b, ">": lambda a, b: a > b, "<": lambda a, b: a < b, "==": lambda a, b: a == b}
+STEPS = {"load", "join", "impair", "kill", "restart", "start", "wait", "assert", "kpi", "http", "log"}
+
+
+def load_doc(path):
+    text = Path(path).read_text(encoding="utf-8")
+    try:
+        return json.loads(text)
+    except ValueError:
+        import yaml  # PyYAML, only needed for YAML files
+        return yaml.safe_load(text)
+
+
+def validate(doc):
+    """List of problems (empty: the scenario is well formed)."""
+    errs = []
+    if not isinstance(doc, dict) or not isinstance(doc.get("steps"), list) or not doc["steps"]:
+        return ["a scenario is a mapping with a non-empty `steps` list"]
+    ids = set()
+    for i, st in enumerate(doc["steps"], 1):
+        if not isinstance(st, dict):
+            errs.append("step %d: not a mapping" % i)
+            continue
+        kinds = [k for k in st if k in STEPS]
+        if len(kinds) != 1:
+            errs.append("step %d: exactly one of %s is needed, found %s" % (i, "/".join(sorted(STEPS)), sorted(st)))
+            continue
+        k, arg = kinds[0], st[kinds[0]]
+        if k == "load":
+            if not isinstance(arg, dict) or not isinstance(arg.get("ues"), int) or arg["ues"] < 1:
+                errs.append("step %d: load needs ues: <positive integer>" % i)
+            elif arg.get("background"):
+                if not arg.get("id"):
+                    errs.append("step %d: a background load needs an id" % i)
+                ids.add(arg.get("id"))
+        elif k == "join" and arg not in ids:
+            errs.append("step %d: join %r: no background load with that id before it" % (i, arg))
+        elif k == "impair":
+            if arg != "clear" and not (isinstance(arg, dict) and arg.get("to") and (arg.get("delay_ms") or arg.get("loss_pct"))):
+                errs.append("step %d: impair needs `clear` or {to, delay_ms and/or loss_pct}" % i)
+        elif k in ("kill", "restart", "start") and not isinstance(arg, str):
+            errs.append("step %d: %s needs a function name" % (i, k))
+        elif k == "wait" and not isinstance(arg, (int, float)):
+            errs.append("step %d: wait needs seconds" % i)
+        elif k in ("assert", "kpi", "http"):
+            if not isinstance(arg, dict):
+                errs.append("step %d: %s needs a mapping" % (i, k))
+            elif k == "assert" and (not re.match(r"^[a-z0-9]+:[A-Za-z_:][A-Za-z0-9_:]*(\{.*\})?$", str(arg.get("metric", ""))) or not any(o in arg for o in OPS)):
+                errs.append("step %d: assert needs metric: function:name{label=value} and one of %s" % (i, " ".join(OPS)))
+            elif k == "kpi" and (not arg.get("name") or not any(o in arg for o in OPS)):
+                errs.append("step %d: kpi needs name and one of %s" % (i, " ".join(OPS)))
+            elif k == "http" and (not arg.get("nf") or not arg.get("path")):
+                errs.append("step %d: http needs nf and path" % i)
+        if st.get("expect", "pass") not in ("pass", "fail", "any"):
+            errs.append("step %d: expect is pass, fail or any" % i)
+    return errs
+
+
+class ClusterRunner:
+    """The steps against a running cluster, through g5c-cluster.sh and the functions' own endpoints."""
+
+    def __init__(self):
+        self.sh = os.environ.get("G5C_CLUSTER_SH") or str(ROOT / "deploy" / "run" / "g5c-cluster.sh")
+        self.curl = shlex.split(os.environ.get("G5C_CURL_ARGS", ""))
+        self.nfs = os.environ.get("G5C_SCENARIO_NFS", "nrf scp bsf udr nssf nef udm ausf pcf upf smf amf").split()
+        self.bg = {}
+        spec = importlib.util.spec_from_loader("g5c_kpi", importlib.machinery.SourceFileLoader("g5c_kpi", str(ROOT / "tools" / "g5c-kpi")))
+        self.kpi = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.kpi)
+
+    def sh_run(self, *args, check=True):
+        p = subprocess.run(["bash", self.sh, *args], capture_output=True, text=True)
+        if check and p.returncode != 0:
+            raise RuntimeError("%s: %s" % (" ".join(args), (p.stderr or p.stdout).strip()[-300:]))
+        return p
+
+    def url(self, nf):
+        return self.sh_run("url", nf).stdout.strip()
+
+    def _load_cmd(self, a):
+        return ["bash", self.sh, "load", str(a["ues"]), str(a.get("gnbs", 8)), str(a.get("waves", 1))]
+
+    @staticmethod
+    def _load_env(a):
+        """Traffic profile of the load step (B-02): traffic_mbps per UE for traffic_ms with packets of traffic_size octets; expect_mbps is the per-UE rate the session AMBR allows."""
+        env = dict(os.environ)
+        for key, var in (("traffic_mbps", "G5C_LOAD_TRAFFIC_MBPS"), ("traffic_ms", "G5C_LOAD_TRAFFIC_MS"), ("traffic_size", "G5C_LOAD_TRAFFIC_SIZE"), ("expect_mbps", "G5C_LOAD_EXPECT_MBPS")):
+            if key in a:
+                env[var] = str(a[key])
+        return env
+
+    def load(self, a):
+        p = subprocess.run(self._load_cmd(a), capture_output=True, text=True, env=self._load_env(a))
+        for line in p.stderr.splitlines():
+            if line.startswith("traffic:"):
+                print("    " + line)
+        return p.stdout.strip().splitlines()[-1:] == ["0"]
+
+    def load_bg(self, a):
+        self.bg[a["id"]] = subprocess.Popen(self._load_cmd(a), stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, env=self._load_env(a))
+
+    def join(self, id_):
+        out, _ = self.bg.pop(id_).communicate()
+        return out.strip().splitlines()[-1:] == ["0"]
+
+    def impair(self, a):
+        if a == "clear":
+            self.sh_run("impair", "clear")
+            return
+        self.sh_run("impair", a["to"], str(a.get("delay_ms", 0)), str(a.get("loss_pct", 0)))
+        if a.get("duration_s"):
+            time.sleep(a["duration_s"])
+            self.sh_run("impair", "clear")
+
+    def kill(self, nf):
+        self.sh_run("kill", nf)
+
+    def restart(self, nf):
+        self.sh_run("restart", nf)
+
+    def start(self, nf):
+        self.sh_run("start", nf)
+
+    def sleep(self, s):
+        time.sleep(s)
+
+    def fetch(self, nf, path, method="GET", body=None):
+        cmd = ["curl", "-s", "--max-time", "20", "--http2-prior-knowledge", "-X", method, "-o", "-", "-w", "\n%{http_code}"] + self.curl
+        if body is not None:
+            cmd += ["-H", "content-type: application/json", "-d", json.dumps(body)]
+        p = subprocess.run(cmd + [self.url(nf) + path], capture_output=True, text=True)
+        text, _, code = p.stdout.rpartition("\n")
+        return int(code or 0), text
+
+    def metric(self, nf, name, labels):
+        _, text = self.fetch(nf, "/metrics")
+        total = 0.0
+        for (n, l, v) in self.kpi.parse_exposition(text):
+            if n == name and all(l.get(k) == v2 for k, v2 in labels.items()):
+                total += v
+        return total
+
+    def kpi_value(self, name):
+        defs = json.load(open(self.kpi.DEFAULT_DEFS))
+        samples = []
+        for nf in self.nfs:
+            samples += self.kpi.parse_exposition(self.fetch(nf, "/metrics")[1])
+        for r in self.kpi.compute(defs, samples):
+            if r["id"] == name:
+                return r["value"]
+        raise RuntimeError("no KPI named %s" % name)
+
+
+def parse_metric(spec):
+    nf, _, rest = spec.partition(":")
+    m = re.match(r"^([A-Za-z_:][A-Za-z0-9_:]*)(?:\{(.*)\})?$", rest)
+    labels = {}
+    for part in (m.group(2) or "").split(","):
+        if part.strip():
+            k, _, v = part.partition("=")
+            labels[k.strip()] = v.strip().strip('"')
+    return nf, m.group(1), labels
+
+
+def check_op(arg, value):
+    for op, fn in OPS.items():
+        if op in arg:
+            return fn(value, float(arg[op])), "%s %s %s" % (value, op, arg[op])
+    return False, "no comparison"
+
+
+def run_step(r, st):
+    """-> (ok, detail). Raises nothing the caller cannot report."""
+    expect = st.get("expect", "pass")
+
+    def meets(ok):  # pass: it must succeed; fail: it must fail; any: the outcome is reported but not judged
+        return True if expect == "any" else (ok if expect == "pass" else not ok)
+
+    if "load" in st:
+        a = st["load"]
+        if a.get("background"):
+            r.load_bg(a)
+            return True, "started %s" % a["id"]
+        ok = r.load(a)
+        return meets(ok), "%d UEs: %s" % (a["ues"], "completed" if ok else "did not complete")
+    if "join" in st:
+        ok = r.join(st["join"])
+        return meets(ok), "load %s %s" % (st["join"], "completed" if ok else "did not complete")
+    if "impair" in st:
+        r.impair(st["impair"])
+        return True, "clear" if st["impair"] == "clear" else "%s" % st["impair"]
+    for k in ("kill", "restart", "start"):
+        if k in st:
+            getattr(r, k)(st[k])
+            return True, "%s %s" % (k, st[k])
+    if "wait" in st:
+        r.sleep(float(st["wait"]))
+        return True, "%s s" % st["wait"]
+    if "assert" in st:
+        nf, name, labels = parse_metric(st["assert"]["metric"])
+        ok, d = check_op(st["assert"], r.metric(nf, name, labels))
+        return ok, "%s: %s" % (st["assert"]["metric"], d)
+    if "kpi" in st:
+        v = r.kpi_value(st["kpi"]["name"])
+        if v is None:
+            return False, "%s has no value (no traffic?)" % st["kpi"]["name"]
+        ok, d = check_op(st["kpi"], v)
+        return ok, "%s: %s" % (st["kpi"]["name"], d)
+    if "http" in st:
+        a = st["http"]
+        code, _ = r.fetch(a["nf"], a["path"], a.get("method", "GET"), a.get("body"))
+        ok = code == int(a.get("expect", 200)) if "expect" in a else (200 <= code < 300)
+        return meets(ok), "%s %s -> %d" % (a.get("method", "GET"), a["path"], code)
+    if "log" in st:
+        print("  " + str(st["log"]))
+        return True, str(st["log"])
+    return False, "unknown step"
+
+
+def run_scenario(doc, r, out=print):
+    results, t0 = [], time.time()
+    try:
+        for i, st in enumerate(doc["steps"], 1):
+            label = st.get("name") or next(k for k in st if k in STEPS)
+            t = time.time()
+            try:
+                ok, detail = run_step(r, st)
+            except Exception as e:  # a step that cannot run is a failed step, with the reason
+                ok, detail = False, "error: %s" % e
+            results.append({"step": i, "name": label, "ok": ok, "detail": detail, "seconds": round(time.time() - t, 2)})
+            out("  %s step %d %-10s %s" % ("PASS" if ok else "FAIL", i, label, detail))
+            if not ok and not st.get("continue_on_failure"):
+                break
+    finally:
+        try:
+            r.impair("clear")
+        except Exception:
+            pass
+    return results, time.time() - t0
+
+
+def junit(name, results, secs):
+    from xml.sax.saxutils import quoteattr
+    fails = sum(1 for x in results if not x["ok"])
+    body = "".join('<testcase classname=%s name=%s time="%s">%s</testcase>' % (quoteattr(name), quoteattr("%d %s" % (x["step"], x["name"])), x["seconds"],
+                                                                              "" if x["ok"] else "<failure message=%s/>" % quoteattr(x["detail"])) for x in results)
+    return '<testsuite name=%s tests="%d" failures="%d" time="%.1f">%s</testsuite>' % (quoteattr(name), len(results), fails, secs, body)
+
+
+def main(argv):
+    if len(argv) < 2 or argv[0] not in ("validate", "run"):
+        print(__doc__)
+        return 2
+    cmd, files, junit_out = argv[0], [], None
+    it = iter(argv[1:])
+    for a in it:
+        if a == "--junit":
+            junit_out = next(it)
+        else:
+            files.append(a)
+    rc, suites = 0, []
+    for f in files:
+        doc = load_doc(f)
+        errs = validate(doc)
+        if cmd == "validate":
+            print("%s: %s" % (f, "OK, %d steps" % len(doc["steps"]) if not errs else "; ".join(errs)))
+            rc |= 1 if errs else 0
+            continue
+        if errs:
+            print("%s: invalid: %s" % (f, "; ".join(errs)))
+            rc = 1
+            continue
+        name = doc.get("name", Path(f).stem)
+        print("scenario: %s" % name)
+        results, secs = run_scenario(doc, ClusterRunner())
+        failed = [x for x in results if not x["ok"]]
+        print("scenario %s: %s (%d steps, %.1f s)" % (name, "FAIL" if failed else "PASS", len(results), secs))
+        suites.append(junit(name, results, secs))
+        rc |= 1 if failed else 0
+    if junit_out and suites:
+        Path(junit_out).write_text("<testsuites>%s</testsuites>" % "".join(suites), encoding="utf-8")
+    return rc
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

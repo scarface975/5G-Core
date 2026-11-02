@@ -1,0 +1,33 @@
+# Sample UDR configuration (Nudr_DataRepository TS 29.504/29.505/29.519 and Nudr_GroupIDmap).
+name: udr-1
+plmn: { mcc: '001', mnc: '01' }
+sbi: { address: 0.0.0.0, port: 7790 }
+log: { level: info, json: true }
+nrf: { uri: 'http://nrf:7777' }
+
+# Where the data lives. `memory` loses it at exit; `file` is one snapshot plus a journal (development, small labs);
+# `postgres` is the production store: the connection string (a libpq string or URI) is read from the environment variable
+# G5C_UDR_PG_CONNINFO or from the file named here, never from this file.
+store:
+  type: file
+  path: /var/lib/g5c/udr.json
+# store: { type: postgres, conninfo_file: /etc/g5c/udr-pg.conninfo, pool: 8 }
+
+# Bearer token of the provisioning extensions (creating provisioned data, removing a subscriber, listing subscribers),
+# 16 characters at least; or G5C_UDR_PROVISIONING_TOKEN. Without one the extensions answer 403.
+provisioning:
+  token_file: /etc/g5c/keys/udr-provisioning.token
+
+# What the UDR publishes in its NRF profile (udrInfo, TS 29.510).
+udr:
+  group_id: udr-grp-1
+  supi_ranges: [{ start: '001010000000000', end: '001019999999999' }]
+  data_sets: [SUBSCRIPTION, POLICY, EXPOSURE, APPLICATION]
+
+subscriptions: { max_per_data_set: 10000, max_lifetime_s: 86400, notify_retries: 2 }
+cache: { max_age_s: 0 }
+validate: true
+
+# Nudr_GroupIDmap: the NF group of a subscriber, by NF type.
+group_ids:
+  - { nf_type: UDM, nf_group_id: udm-grp-1, supi_ranges: [{ start: '001010000000000', end: '001019999999999' }] }

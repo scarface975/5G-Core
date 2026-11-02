@@ -1,0 +1,9 @@
+# The link to the UPF is slowed down (N4 and N3 toward it) while UEs register: everything still completes, and the SMF's session
+# set-up time shows the delay (the 95th percentile of Create SM Context rises above 100 ms).
+name: delay toward the UPF
+steps:
+  - impair: {to: upf, delay_ms: 150}
+  - load: {ues: 12, gnbs: 4}
+  - kpi: {name: sm_context_create_p95, ">=": 0.1}
+  - impair: clear
+  - kpi: {name: registration_success_rate, ">=": 99}

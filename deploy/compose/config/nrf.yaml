@@ -1,0 +1,21 @@
+# Sample NRF configuration: the NF repository (Nnrf_NFManagement, Nnrf_NFDiscovery, Nnrf_AccessToken). The other functions name it with
+# `nrf: { uri: 'http://nrf:7777' }` and then find their peers through it.
+name: nrf-1
+plmn: { mcc: '001', mnc: '01' }
+sbi: { address: 0.0.0.0, port: 7777 }
+log: { level: info, json: true }
+# (the top-level `nrf:` key of the other functions is not used here: this is the NRF itself)
+registry:
+  heartbeat_timer: 10          # seconds the functions are told to heart-beat at
+  suspend_after: 3             # missed heart-beats before a function is SUSPENDED (not discoverable, subscribers notified)
+  purge_after: 3600            # seconds SUSPENDED before the profile is removed (0: never)
+  validity_period: 60          # seconds a discovery result may be cached by the consumer
+  subscription_validity: 86400 # seconds a status subscription lives unless refreshed
+  max_profiles: 100000
+  max_subscriptions: 100000
+  state_file: /var/lib/g5c/nrf-state.json   # the registry survives a restart (omit for none)
+  oauth2:
+    enabled: true              # Nnrf_AccessToken at /oauth2/token, public key at /oauth2/jwks
+    enforce: false             # true: discovery, retrieval and subscription need a bearer token (registration is authenticated by the transport)
+    key_file: /etc/g5c/keys/nrf-oauth2.pem    # ES256 signing key, created at the first start when absent
+    token_lifetime: 3600

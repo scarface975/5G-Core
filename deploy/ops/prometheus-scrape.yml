@@ -1,0 +1,22 @@
+# Prometheus scrape configuration for a cluster started by deploy/run/g5c-cluster.sh (addresses of that script's defaults). With mutual TLS (G5C_TLS=1) Prometheus is
+# one more client of the cluster's CA: issue it a certificate with `deploy/run/g5c-pki.sh issue <run>/pki prometheus 127.0.0.1` and point tls_config at the files.
+global:
+  scrape_interval: 15s
+rule_files:
+  - prometheus-rules.yml
+scrape_configs:
+  - job_name: g5c-nrf
+    scheme: https
+    tls_config: &tls {ca_file: /home/work/g5c-run/pki/ca.crt, cert_file: /home/work/g5c-run/pki/prometheus.crt, key_file: /home/work/g5c-run/pki/prometheus.key}
+    static_configs: [{targets: ['127.2.0.10:7777']}]
+  - {job_name: g5c-scp,  scheme: https, tls_config: *tls, static_configs: [{targets: ['127.2.0.16:7785']}]}
+  - {job_name: g5c-bsf,  scheme: https, tls_config: *tls, static_configs: [{targets: ['127.2.0.17:7786']}]}
+  - {job_name: g5c-udr,  scheme: https, tls_config: *tls, static_configs: [{targets: ['127.2.0.201:7790']}]}
+  - {job_name: g5c-nssf, scheme: https, tls_config: *tls, static_configs: [{targets: ['127.2.0.14:7783']}]}
+  - {job_name: g5c-nef,  scheme: https, tls_config: *tls, static_configs: [{targets: ['127.2.0.15:7784']}]}
+  - {job_name: g5c-udm,  scheme: https, tls_config: *tls, static_configs: [{targets: ['127.2.0.1:7773']}]}
+  - {job_name: g5c-ausf, scheme: https, tls_config: *tls, static_configs: [{targets: ['127.2.0.2:7774']}]}
+  - {job_name: g5c-pcf,  scheme: https, tls_config: *tls, static_configs: [{targets: ['127.2.0.3:7775']}]}
+  - {job_name: g5c-smf,  scheme: https, tls_config: *tls, static_configs: [{targets: ['127.2.0.4:7776']}]}
+  - {job_name: g5c-amf,  scheme: https, tls_config: *tls, static_configs: [{targets: ['127.2.0.5:7777']}]}
+  - {job_name: g5c-upf,  scheme: https, tls_config: *tls, static_configs: [{targets: ['127.2.0.7:9091']}]}

@@ -1,0 +1,646 @@
+{
+ "title": "Conformance matrix, Phase 3 (UPF: N4 PFCP, N3 GTP-U, N6)",
+ "note": "Same rules as phase1-2-matrix.json: every test reference, function and clause is checked by tools/check_matrix.py. verified = tests pass and a real peer or a byte-exact capture confirms it (Open5GS SMF + UERANSIM gNB against our UPF, scenarios S3/S4 with OUR_UPF=1).",
+ "specs": {
+  "TS 29.244": "29244-gd0.txt",
+  "TS 29.281": "29281-g20.txt",
+  "TS 38.415": "38415-g60.txt"
+ },
+ "rows": [
+  {
+   "id": "UPF-N4-01",
+   "phase": 3,
+   "nf": "UPF",
+   "procedure": "PFCP Heartbeat: answered with our recovery time stamp; our own heartbeats, loss detection after N misses, sessions removed",
+   "spec": "TS 29.244",
+   "clause": "6.2.2",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "upf_engine",
+     "file": "nf/upf/tests/test_upf_core.c",
+     "fn": "test_heartbeats"
+    }
+   ],
+   "evidence": "Open5GS's SMF exchanges heartbeats with our UPF throughout oracle scenarios S3 and S4."
+  },
+  {
+   "id": "UPF-N4-02",
+   "phase": 3,
+   "nf": "UPF",
+   "procedure": "PFCP Association Setup initiated by the CP function (Node ID, recovery time stamp, UP Function Features with FTUP and DLBD)",
+   "spec": "TS 29.244",
+   "clause": "6.2.6.2",
+   "also": [
+    "7.4.4.2"
+   ],
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "upf_engine",
+     "file": "nf/upf/tests/test_upf_core.c",
+     "fn": "test_open5gs_replay"
+    },
+    {
+     "ctest": "upf_runtime_sockets",
+     "file": "nf/upf/tests/test_upf_io.c",
+     "fn": "main"
+    }
+   ],
+   "evidence": "The real Association Setup Request captured from Open5GS is accepted; the Open5GS SMF associates with the running UPF in S3/S4. Our UP Function Features (FTUP, EMPU) make the SMF ask for CHOOSE F-TEIDs exactly as it does with Open5GS's UPF; claiming the wrong bits made it allocate TEIDs itself, which the differential analysis caught."
+  },
+  {
+   "id": "UPF-DIFF-01",
+   "phase": 3,
+   "nf": "UPF",
+   "procedure": "Differential PFCP analysis: the same Open5GS SMF and scenario against Open5GS's UPF and against ours (message sequence and the information elements of every answer)",
+   "spec": "TS 29.244",
+   "clause": "7.5.2",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "pfcp_differential",
+     "file": "tools/pfcp_diff.py",
+     "fn": "main"
+    }
+   ],
+   "evidence": "The SMF sends an identical request sequence to both UPFs; our Session Establishment and Modification responses match element for element; our usage report carries one extra element (Start Time, allowed by the spec). Captures: tests/fixtures/golden/s3_*."
+  },
+  {
+   "id": "UPF-N4-03",
+   "phase": 3,
+   "nf": "UPF",
+   "procedure": "PFCP Association Release; peer restart (changed recovery time stamp) removes the peer's sessions",
+   "spec": "TS 29.244",
+   "clause": "6.2.8",
+   "also": [
+    "5.8"
+   ],
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "upf_engine",
+     "file": "nf/upf/tests/test_upf_core.c",
+     "fn": "test_n4_lifecycle"
+    }
+   ],
+   "evidence": "Sessions are deleted on release, on restart detection and on heartbeat loss; the next association starts clean."
+  },
+  {
+   "id": "UPF-N4-04",
+   "phase": 3,
+   "nf": "UPF",
+   "procedure": "PFCP Association Update",
+   "spec": "TS 29.244",
+   "clause": "6.2.7.2",
+   "status": "partial",
+   "tests": [
+    {
+     "ctest": "upf_engine",
+     "file": "nf/upf/tests/test_upf_core.c",
+     "fn": "test_n4_lifecycle"
+    }
+   ],
+   "evidence": "Accepted for an established peer; its content (feature changes, graceful release) is not processed."
+  },
+  {
+   "id": "UPF-N4-05",
+   "phase": 3,
+   "nf": "UPF",
+   "procedure": "PFCP Association Setup initiated by the UP function",
+   "spec": "TS 29.244",
+   "clause": "6.2.6.3",
+   "status": "gap",
+   "tests": [],
+   "evidence": "The UPF waits for the SMF to associate (what Open5GS and our planned SMF do); add when an SMF requires UP-initiated association."
+  },
+  {
+   "id": "UPF-N4-06",
+   "phase": 3,
+   "nf": "UPF",
+   "procedure": "PFCP PFD Management",
+   "spec": "TS 29.244",
+   "clause": "7.4.3",
+   "status": "partial",
+   "tests": [
+    {
+     "ctest": "upf_engine",
+     "file": "nf/upf/tests/test_upf_core.c",
+     "fn": "test_open5gs_replay"
+    }
+   ],
+   "evidence": "Answered with success and ignored: there is no application detection."
+  },
+  {
+   "id": "UPF-N4-07",
+   "phase": 3,
+   "nf": "UPF",
+   "procedure": "PFCP Session Establishment (PDR, FAR, QER, URR, BAR; F-SEID; Created PDR with allocated F-TEIDs)",
+   "spec": "TS 29.244",
+   "clause": "7.5.2",
+   "also": [
+    "7.5.3",
+    "6.3.2"
+   ],
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "upf_engine",
+     "file": "nf/upf/tests/test_upf_core.c",
+     "fn": "test_open5gs_replay"
+    },
+    {
+     "ctest": "upf_engine",
+     "file": "nf/upf/tests/test_upf_core.c",
+     "fn": "test_rejections"
+    },
+    {
+     "ctest": "upf_engine",
+     "file": "nf/upf/tests/test_upf_core.c",
+     "fn": "test_malformed_rules"
+    }
+   ],
+   "evidence": "The 596-byte establishment captured from Open5GS is accepted and answered in the same shape (Created PDR for PDRs 2, 3 and 4, shared TEID for the shared choose id); 4 PDRs, 3 FARs, 1 QER, 1 URR, 1 BAR in S3/S4. 41 malformed rule shapes (missing, truncated, duplicated, too many, dangling) are each refused with the right cause and install nothing."
+  },
+  {
+   "id": "UPF-N4-08",
+   "phase": 3,
+   "nf": "UPF",
+   "procedure": "PFCP Session Modification: update FAR (buffering to forwarding, handover with end marker), create/update/remove rules, Query URR; all-or-nothing",
+   "spec": "TS 29.244",
+   "clause": "7.5.4",
+   "also": [
+    "6.3.3",
+    "7.5.4.10"
+   ],
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "upf_engine",
+     "file": "nf/upf/tests/test_upf_core.c",
+     "fn": "test_open5gs_replay"
+    },
+    {
+     "ctest": "upf_engine",
+     "file": "nf/upf/tests/test_upf_core.c",
+     "fn": "test_n4_lifecycle"
+    },
+    {
+     "ctest": "upf_engine",
+     "file": "nf/upf/tests/test_upf_core.c",
+     "fn": "test_buffering"
+    },
+    {
+     "ctest": "upf_engine",
+     "file": "nf/upf/tests/test_upf_core.c",
+     "fn": "test_modification_rules"
+    }
+   ],
+   "evidence": "Open5GS's modification (Update FAR with the gNB tunnel) releases the buffered packet; a modification that fails half-way changes nothing. 29 invalid modifications (unknown or missing ids, dangling references) are refused and leave the session working; valid creates, updates and removes of every rule kind change behaviour as asked."
+  },
+  {
+   "id": "UPF-N4-09",
+   "phase": 3,
+   "nf": "UPF",
+   "procedure": "PFCP Session Deletion with usage reports in the response",
+   "spec": "TS 29.244",
+   "clause": "7.5.6",
+   "also": [
+    "6.3.4"
+   ],
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "upf_engine",
+     "file": "nf/upf/tests/test_upf_core.c",
+     "fn": "test_open5gs_replay"
+    },
+    {
+     "ctest": "upf_runtime_sockets",
+     "file": "nf/upf/tests/test_upf_io.c",
+     "fn": "main"
+    }
+   ],
+   "evidence": "The usage report (URR id, UR-SEQN, TERMR trigger, times, volume measurement) has the layout of the report Open5GS's UPF sends; counts match the traffic."
+  },
+  {
+   "id": "UPF-N4-10",
+   "phase": 3,
+   "nf": "UPF",
+   "procedure": "PFCP Session Report: downlink data report and usage report, retransmission (T1 3 s, N1 3)",
+   "spec": "TS 29.244",
+   "clause": "6.3.5",
+   "also": [
+    "5.2.8.3"
+   ],
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "upf_engine",
+     "file": "nf/upf/tests/test_upf_core.c",
+     "fn": "test_open5gs_replay"
+    },
+    {
+     "ctest": "upf_engine",
+     "file": "nf/upf/tests/test_upf_core.c",
+     "fn": "test_usage_reports"
+    }
+   ],
+   "evidence": "Reports are acknowledged by the scripted SMF; an answer of 'session not found' deletes an orphaned session. The oracle SMF's handling of our reports is not exercised by the pinging scenarios."
+  },
+  {
+   "id": "UPF-N4-11",
+   "phase": 3,
+   "nf": "UPF",
+   "procedure": "Retransmitted requests are answered from a response cache; unsupported versions answered with Version Not Supported",
+   "spec": "TS 29.244",
+   "clause": "6.1",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "upf_engine",
+     "file": "nf/upf/tests/test_upf_core.c",
+     "fn": "test_n4_lifecycle"
+    }
+   ],
+   "evidence": "A repeated establishment does not create a second session."
+  },
+  {
+   "id": "UPF-RULE-01",
+   "phase": 3,
+   "nf": "UPF",
+   "procedure": "Packet detection: F-TEID, UE IP address, QFI, SDF filters (IPFilterRule, with 'assigned'), precedence",
+   "spec": "TS 29.244",
+   "clause": "5.2.1",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "upf_engine",
+     "file": "nf/upf/tests/test_upf_core.c",
+     "fn": "test_sdf_and_precedence"
+    },
+    {
+     "ctest": "upf_engine",
+     "file": "nf/upf/tests/test_upf_core.c",
+     "fn": "test_uplink_protection"
+    },
+    {
+     "ctest": "upf_units",
+     "file": "nf/upf/tests/test_upf_units.c",
+     "fn": "test_sdf_match"
+    },
+    {
+     "ctest": "upf_units",
+     "file": "nf/upf/tests/test_upf_units.c",
+     "fn": "test_flow_from_packet"
+    }
+   ],
+   "evidence": "The 'permit out ... to assigned' rule of Open5GS's IPv6 PDR parses and matches; uplink packets are matched against the downlink-oriented rule."
+  },
+  {
+   "id": "UPF-RULE-02",
+   "phase": 3,
+   "nf": "UPF",
+   "procedure": "F-TEID allocation by the UP function (CHOOSE, CHOOSE ID) and release",
+   "spec": "TS 29.244",
+   "clause": "5.5",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "upf_engine",
+     "file": "nf/upf/tests/test_upf_core.c",
+     "fn": "test_open5gs_replay"
+    }
+   ],
+   "evidence": "Real choose ids and CP-function F-TEIDs from Open5GS."
+  },
+  {
+   "id": "UPF-RULE-03",
+   "phase": 3,
+   "nf": "UPF",
+   "procedure": "Forwarding action rules: forward (towards access with Outer Header Creation, towards core), drop, buffer+notify, end marker on handover",
+   "spec": "TS 29.244",
+   "clause": "5.2.3",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "upf_engine",
+     "file": "nf/upf/tests/test_upf_core.c",
+     "fn": "test_open5gs_replay"
+    },
+    {
+     "ctest": "upf_engine",
+     "file": "nf/upf/tests/test_upf_core.c",
+     "fn": "test_n4_lifecycle"
+    }
+   ],
+   "evidence": "UE traffic flows through the UPF with Open5GS's SMF and UERANSIM (ping, 0% loss)."
+  },
+  {
+   "id": "UPF-RULE-04",
+   "phase": 3,
+   "nf": "UPF",
+   "procedure": "Buffering: BAR limits, notify the CP once, release in order, expiry",
+   "spec": "TS 29.244",
+   "clause": "5.2.4",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "upf_engine",
+     "file": "nf/upf/tests/test_upf_core.c",
+     "fn": "test_buffering"
+    }
+   ],
+   "evidence": "Packet-count and byte limits, age expiry, in-order release."
+  },
+  {
+   "id": "UPF-RULE-05",
+   "phase": 3,
+   "nf": "UPF",
+   "procedure": "QoS enforcement rules: gate status and MBR (token bucket) per QER, shared by PDRs (session-AMBR), QFI marking",
+   "spec": "TS 29.244",
+   "clause": "5.2.5",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "upf_engine",
+     "file": "nf/upf/tests/test_upf_core.c",
+     "fn": "test_qer"
+    }
+   ],
+   "evidence": "Burst and sustained-rate behaviour measured against the configured MBR. GBR is accepted but not guaranteed (no scheduler)."
+  },
+  {
+   "id": "UPF-RULE-06",
+   "phase": 3,
+   "nf": "UPF",
+   "procedure": "GBR enforcement (guaranteed rate)",
+   "spec": "TS 29.244",
+   "clause": "5.2.5",
+   "status": "gap",
+   "tests": [],
+   "evidence": "Needs a scheduler across flows; belongs with the Stage B datapath."
+  },
+  {
+   "id": "UPF-RULE-07",
+   "phase": 3,
+   "nf": "UPF",
+   "procedure": "Usage reporting rules: volume threshold, time threshold, periodic, immediate (Query URR), final report on deletion",
+   "spec": "TS 29.244",
+   "clause": "5.2.2",
+   "also": [
+    "5.2.2.3"
+   ],
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "upf_engine",
+     "file": "nf/upf/tests/test_upf_core.c",
+     "fn": "test_usage_reports"
+    },
+    {
+     "ctest": "upf_runtime_sockets",
+     "file": "nf/upf/tests/test_upf_io.c",
+     "fn": "main"
+    }
+   ],
+   "evidence": "Counters restart after each report; thresholds apply to the interval."
+  },
+  {
+   "id": "UPF-RULE-08",
+   "phase": 3,
+   "nf": "UPF",
+   "procedure": "UE IP address allocation by the UP function (CHV4 / CHV6)",
+   "spec": "TS 29.244",
+   "clause": "5.2.1",
+   "status": "gap",
+   "tests": [
+    {
+     "ctest": "upf_engine",
+     "file": "nf/upf/tests/test_upf_core.c",
+     "fn": "test_rejections"
+    }
+   ],
+   "evidence": "Refused with Rule creation failure; Open5GS's SMF and ours allocate UE addresses themselves."
+  },
+  {
+   "id": "UPF-RULE-09",
+   "phase": 3,
+   "nf": "UPF",
+   "procedure": "Multi-access (ATSSS), traffic endpoints, packet duplication, redundant transmission, Ethernet PDU sessions, lawful interception",
+   "spec": "TS 29.244",
+   "clause": "5.2.7",
+   "status": "out-of-scope",
+   "tests": [],
+   "evidence": "Not in the five-NF scope of the plan."
+  },
+  {
+   "id": "UPF-GTPU-01",
+   "phase": 3,
+   "nf": "UPF",
+   "procedure": "G-PDU encapsulation and decapsulation with the PDU Session Container (DL PDU session information, QFI)",
+   "spec": "TS 29.281",
+   "clause": "5.2.2.7",
+   "also": [
+    "TS 38.415 5.5.2.1"
+   ],
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "upf_engine",
+     "file": "nf/upf/tests/test_upf_core.c",
+     "fn": "test_golden_gtpu"
+    }
+   ],
+   "evidence": "A downlink G-PDU produced by our UPF is byte-identical to the one Open5GS's UPF produced for the same packet; the captured uplink G-PDU decapsulates to the original IP packet."
+  },
+  {
+   "id": "UPF-GTPU-02",
+   "phase": 3,
+   "nf": "UPF",
+   "procedure": "Echo Request / Response",
+   "spec": "TS 29.281",
+   "clause": "7.2.1",
+   "also": [
+    "7.2.2"
+   ],
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "upf_engine",
+     "file": "nf/upf/tests/test_upf_core.c",
+     "fn": "test_uplink_protection"
+    },
+    {
+     "ctest": "upf_runtime_sockets",
+     "file": "nf/upf/tests/test_upf_io.c",
+     "fn": "main"
+    }
+   ],
+   "evidence": "Sequence number echoed, Recovery IE returned, over a real socket."
+  },
+  {
+   "id": "UPF-GTPU-03",
+   "phase": 3,
+   "nf": "UPF",
+   "procedure": "Error Indication for a G-PDU with an unknown TEID (rate limited)",
+   "spec": "TS 29.281",
+   "clause": "7.3.1",
+   "also": [
+    "TS 29.244 5.10"
+   ],
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "upf_engine",
+     "file": "nf/upf/tests/test_upf_core.c",
+     "fn": "test_uplink_protection"
+    },
+    {
+     "ctest": "upf_runtime_sockets",
+     "file": "nf/upf/tests/test_upf_io.c",
+     "fn": "main"
+    }
+   ],
+   "evidence": "TEID data I and peer address IEs; at most 100 per second."
+  },
+  {
+   "id": "UPF-GTPU-04",
+   "phase": 3,
+   "nf": "UPF",
+   "procedure": "End Marker sent on path switch (SNDEM)",
+   "spec": "TS 29.281",
+   "clause": "7.3.2",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "upf_engine",
+     "file": "nf/upf/tests/test_upf_core.c",
+     "fn": "test_n4_lifecycle"
+    }
+   ],
+   "evidence": "Sent to the old tunnel endpoint when an update moves the FAR to a new one."
+  },
+  {
+   "id": "UPF-N6-01",
+   "phase": 3,
+   "nf": "UPF",
+   "procedure": "N6 through a TUN device to the data network",
+   "spec": "TS 29.244",
+   "clause": "5.2.3",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "upf_runtime_sockets",
+     "file": "nf/upf/tests/test_upf_io.c",
+     "fn": "main"
+    }
+   ],
+   "evidence": "Oracle S3/S4 run the UPF on a real TUN device; UERANSIM pings a host behind it (10.99.0.1) with 0% loss."
+  },
+  {
+   "id": "UPF-N6-02",
+   "phase": 3,
+   "nf": "UPF",
+   "procedure": "NAT / masquerade on N6",
+   "spec": "TS 29.244",
+   "clause": "5.2.3",
+   "status": "out-of-scope",
+   "tests": [],
+   "evidence": "Host configuration (routing and iptables/nftables on the TUN device), documented in deploy/upf/README.md; not done inside the UPF."
+  },
+  {
+   "id": "UPF-IP6-01",
+   "phase": 3,
+   "nf": "UPF",
+   "procedure": "IPv6 UE addresses: /64 prefix session lookup, SDF with 'assigned', source check with link-local exception",
+   "spec": "TS 29.244",
+   "clause": "5.2.1",
+   "status": "partial",
+   "tests": [
+    {
+     "ctest": "upf_engine",
+     "file": "nf/upf/tests/test_upf_core.c",
+     "fn": "test_ipv6"
+    }
+   ],
+   "evidence": "User-plane logic tested with synthetic packets. N3 over IPv6 (Outer Header Creation with IPv6) is refused; no real IPv6 UE in the interop runs."
+  },
+  {
+   "id": "UPF-NFR-01",
+   "phase": 3,
+   "nf": "UPF",
+   "procedure": "Stage A throughput: at least 1 Gbit/s on one host",
+   "spec": "strategy Phase 3 exit criterion",
+   "clause": "-",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "upf_io_bench_gate",
+     "file": "nf/upf/tests/bench_upf_io.c",
+     "fn": "main"
+    },
+    {
+     "ctest": "upf_bench_gate",
+     "file": "nf/upf/tests/bench_upf.c",
+     "fn": "main"
+    }
+   ],
+   "evidence": "Engine alone about 20 Mpps; end to end over real UDP sockets the UPF thread's capacity is 2.3 to 4.9 Gbit/s uplink and 1.4 to 2.2 Gbit/s downlink with 1400-byte packets on this (noisy) host; the gate takes the best of three attempts on capacity per CPU second. The 10 Gbit/s Stage B target needs AF_XDP and a real NIC."
+  },
+  {
+   "id": "UPF-NFR-02",
+   "phase": 3,
+   "nf": "UPF",
+   "procedure": "Robustness: fuzzing of N4, GTP-U and N6 input; ASan, UBSan, TSan",
+   "spec": "strategy 4.1",
+   "clause": "-",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "fuzz_replay_upf",
+     "file": "fuzz/fuzz_upf.c",
+     "fn": "LLVMFuzzerTestOneInput"
+    },
+    {
+     "ctest": "pfcp_typed_ies",
+     "file": "libs/pfcp/tests/test_pfcp_ie.c",
+     "fn": "test_robustness"
+    },
+    {
+     "ctest": "upf_units",
+     "file": "nf/upf/tests/test_upf_units.c",
+     "fn": "test_ptrmap"
+    }
+   ],
+   "evidence": "1.2 million mutated inputs under ASan+UBSan without a finding; every IE decoder survives every truncation."
+  },
+  {
+   "id": "UPF-NFR-03",
+   "phase": 3,
+   "nf": "UPF",
+   "procedure": "Configuration validated at start-up; health and metrics endpoints",
+   "spec": "operator interface",
+   "clause": "-",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "bad_configs_rejected",
+     "file": "tests/conformance/check_bad_configs.sh",
+     "fn": "expect"
+    },
+    {
+     "ctest": "sample_configs_load",
+     "file": "tests/conformance/check_configs.sh",
+     "fn": "-"
+    },
+    {
+     "ctest": "upf_runtime_sockets",
+     "file": "nf/upf/tests/test_upf_io.c",
+     "fn": "main"
+    }
+   ],
+   "evidence": "27 UPF-specific bad configurations are refused; packet, drop-reason, N4 and session metrics are exported."
+  }
+ ]
+}

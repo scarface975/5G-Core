@@ -1,0 +1,11 @@
+* text=auto
+*.sh text eol=lf
+*.c text eol=lf
+*.h text eol=lf
+CMakeLists.txt text eol=lf
+deploy/run/g5c-* text eol=lf
+tools/g5c-* text eol=lf
+*.xlsx binary
+*.pdf binary
+*.docx binary
+*.zip binary

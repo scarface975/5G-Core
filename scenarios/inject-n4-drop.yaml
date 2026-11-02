@@ -1,0 +1,7 @@
+# Failure injection at the SMF (run with G5C_SMF_EXTRA='  inject: { n4_drop_responses_percent: 10 }'): one in ten of the UPF's PFCP responses never arrives, the SMF
+# retransmits, and the wave completes because the N4 retransmission logic works. The core counts what it dropped.
+name: SMF loses a tenth of the N4 responses
+steps:
+  - load: {ues: 30, gnbs: 4}
+  - assert: {metric: "smf:g5c_smf_injected_total{kind=n4_response_dropped}", ">=": 3}
+  - kpi: {name: pdu_session_establishment_success_rate, ">=": 95}

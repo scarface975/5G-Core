@@ -1,0 +1,13 @@
+# The SMF is killed while a wave is running and brought back: the wave may lose UEs (not judged), and a clean wave afterwards must succeed.
+name: SMF killed during a wave
+steps:
+  - load: {ues: 600, gnbs: 8, id: wave, background: true}
+  - wait: 1
+  - kill: smf
+  - wait: 1
+  - start: smf
+  - join: wave
+    expect: any          # UEs in flight when the SMF dies may fail; that is not what is judged here
+  - wait: 3
+  - load: {ues: 10, gnbs: 4}
+  - http: {nf: smf, path: /health/ready}

@@ -1,0 +1,24 @@
+# Sample NSSF configuration (Nnssf_NSSelection TS 29.531 and Nnssf_NSSAIAvailability).
+name: nssf-1
+plmn: { mcc: '001', mnc: '01' }
+sbi: { address: 0.0.0.0, port: 7783 }
+log: { level: info, json: true }
+nrf: { uri: 'http://nrf:7777' }
+
+nssf:
+  # The network slices of the PLMN. `nrf` is the NRF that serves the network functions of the slice (default: the NRF above);
+  # `tais` / `tac_ranges` say where the slice exists (none: the whole PLMN); `restricted_for` lists home PLMNs of roamers for whom it is restricted.
+  slices:
+    - { snssai: { sst: 1 }, nsi_id: nsi-embb }
+    - { snssai: { sst: 1, sd: '000001' }, nrf: 'http://nrf:7777', tais: [ { mcc: '001', mnc: '01', tac: '000001' } ], restricted_for: [ '310-260' ] }
+    - { snssai: { sst: 2 }, tac_ranges: [ { mcc: '001', mnc: '01', start: '000001', end: '00000f' } ] }
+  # AMF sets (TS 23.003 2.10.1) and what they support when their AMFs have not reported it
+  amf_sets:
+    - { id: '001-01-01-001', snssais: [ { sst: 1 }, { sst: 2 } ], return_candidates: false }
+  # serving S-NSSAI <-> home S-NSSAI of roamers (TS 23.501 5.15.6)
+  mappings:
+    - { home_plmn: '310-260', serving: { sst: 1 }, home: { sst: 9 } }
+  policy: { include_subscribed: false, max_allowed: 8, max_configured: 16 }
+  subscriptions: { max: 10000, max_lifetime_s: 86400, notify_retries: 2 }
+  state_file: /var/lib/g5c/nssf.json
+  validate: true

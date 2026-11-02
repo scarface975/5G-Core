@@ -1,0 +1,388 @@
+#!/usr/bin/env python3
+"""g5c-subscribers: bulk import and export of subscribers for the UDM admin API (/admin/v1/subscribers).
+
+  g5c-subscribers import --format open5gs|free5gc|csv|g5c FILE|-  [--dry-run | --apply --udm URL --token-file F] [--out FILE]
+  g5c-subscribers export [--format json|csv] [--out FILE] --udm URL --token-file F
+
+import converts a subscriber list to the AdminSubscriber documents of the UDM and checks each one the way the UDM does (field names, hex lengths, slices, DNNs). By default it writes the
+documents as JSON lines on stdout (or --out); --apply sends them through `g5c-ctl subscriber add --json -` (TLS and the admin token come from g5c-ctl's own options and environment), one
+request per subscriber, and reports a summary. --dry-run only validates. Keys (K, OP, OPc) are never printed in messages; the JSON lines hold them in clear text, so keep that output private.
+
+Formats
+  open5gs   a mongoexport / open5gs-dbctl dump of the `subscribers` collection (array, JSON lines or one object)
+  free5gc   the web console's subscriber documents (AuthenticationSubscription, AccessAndMobilitySubscriptionData, SessionManagementSubscriptionData)
+  csv       header row, columns: supi,k,opc,op,amf,sqn,msisdn,slices,dnns,ue_ambr_ul,ue_ambr_dl  (slices "1;1:000001" = SST[:SD]; dnns "internet;ims/IPV4V6")
+  g5c       documents already in the UDM format (array or JSON lines)
+
+export reads the subscribers back (keys are never returned by the UDM, so an export cannot be re-imported on its own: it is an inventory for audit and migration planning)."""
+import argparse
+import csv
+import io
+import json
+import re
+import subprocess
+import sys
+
+TOP_KEYS = {"supi", "k", "opc", "op", "amf", "sqn", "auth_method", "slices", "dnns", "ue_ambr_ul", "ue_ambr_dl", "gpsi", "msisdn"}
+DNN_KEYS = {"qi5", "ambr_ul", "ambr_dl", "session_types"}
+TYPES = ("IPV4", "IPV6", "IPV4V6")
+UNITS = {0: "bps", 1: "Kbps", 2: "Mbps", 3: "Gbps", 4: "Tbps"}
+O5GS_TYPE = {1: "IPV4", 2: "IPV6", 3: "IPV4V6"}
+HEX = re.compile(r"^[0-9a-fA-F]+$")
+
+
+class Skip(Exception):
+    pass
+
+
+def num(v):
+    """Mongo extended JSON numbers ({"$numberLong": "5"}) and plain numbers / numeric strings."""
+    if isinstance(v, dict):
+        for k in ("$numberLong", "$numberInt", "$numberDouble"):
+            if k in v:
+                return int(float(v[k]))
+        raise Skip("unreadable number")
+    if isinstance(v, bool) or v is None:
+        raise Skip("missing number")
+    return int(v)
+
+
+def ambr_text(a):
+    """Open5GS {value, unit} or a free5GC string such as '1 Gbps'."""
+    if a is None:
+        return None
+    if isinstance(a, str):
+        return a
+    if isinstance(a, dict) and "value" in a:
+        return "%d %s" % (num(a["value"]), UNITS.get(num(a.get("unit", 0)), "bps"))
+    return None
+
+
+def snssai(s):
+    sst = num(s["sst"])
+    sd = s.get("sd")
+    out = {"sst": sst}
+    if sd not in (None, "", "FFFFFF", "ffffff"):
+        out["sd"] = str(sd).lower().zfill(6)
+    return out
+
+
+def from_open5gs(d):
+    if "imsi" not in d:
+        raise Skip("no imsi")
+    sec = d.get("security") or {}
+    out = {"supi": "imsi-" + str(d["imsi"]), "k": sec.get("k")}
+    if sec.get("opc"):
+        out["opc"] = sec["opc"]
+    elif sec.get("op"):
+        out["op"] = sec["op"]
+    if sec.get("amf"):
+        out["amf"] = sec["amf"]
+    if sec.get("sqn") is not None:
+        out["sqn"] = "%012x" % num(sec["sqn"])
+    slices, dnns = [], {}
+    for sl in d.get("slice") or []:
+        slices.append(snssai(sl))
+        for se in sl.get("session") or []:
+            name = se.get("name")
+            if not name or name in dnns:
+                continue
+            c = {}
+            qos = se.get("qos") or {}
+            if qos.get("index") is not None:
+                c["qi5"] = num(qos["index"])
+            if se.get("type") is not None:
+                c["session_types"] = [O5GS_TYPE.get(num(se["type"]), "IPV4")]
+            for key, side in (("ambr_ul", "uplink"), ("ambr_dl", "downlink")):
+                t = ambr_text((se.get("ambr") or {}).get(side))
+                if t:
+                    c[key] = t
+            dnns[name] = c
+    if slices:
+        out["slices"] = slices
+    if dnns:
+        out["dnns"] = dnns
+    for key, side in (("ue_ambr_ul", "uplink"), ("ue_ambr_dl", "downlink")):
+        t = ambr_text((d.get("ambr") or {}).get(side))
+        if t:
+            out[key] = t
+    ms = d.get("msisdn")
+    if isinstance(ms, list) and ms:
+        out["msisdn"] = str(ms[0])
+    return out
+
+
+def from_free5gc(d):
+    ue = d.get("ueId") or d.get("supi")
+    if not ue:
+        raise Skip("no ueId")
+    au = d.get("AuthenticationSubscription") or {}
+    out = {"supi": ue, "k": (au.get("permanentKey") or {}).get("permanentKeyValue")}
+    opc = (au.get("opc") or {}).get("opcValue")
+    op = ((au.get("milenage") or {}).get("op") or {}).get("opValue")
+    if opc:
+        out["opc"] = opc
+    elif op:
+        out["op"] = op
+    if au.get("authenticationManagementField"):
+        out["amf"] = au["authenticationManagementField"]
+    sq = au.get("sequenceNumber")
+    if isinstance(sq, dict):
+        sq = sq.get("sqn")
+    if isinstance(sq, str) and sq:
+        out["sqn"] = sq.lower().zfill(12)
+    if au.get("authenticationMethod") == "EAP_AKA_PRIME":
+        out["auth_method"] = "EAP_AKA_PRIME"
+    am = d.get("AccessAndMobilitySubscriptionData") or {}
+    nssai = am.get("nssai") or {}
+    slices = []
+    for s in (nssai.get("defaultSingleNssais") or []) + (nssai.get("singleNssais") or []):
+        v = snssai(s)
+        if v not in slices:
+            slices.append(v)
+    dnns = {}
+    sm = d.get("SessionManagementSubscriptionData") or []
+    if isinstance(sm, dict):
+        sm = [sm]
+    for entry in sm:
+        s = entry.get("singleNssai")
+        if s:
+            v = snssai(s)
+            if v not in slices:
+                slices.append(v)
+        for name, cfg in (entry.get("dnnConfigurations") or {}).items():
+            if name in dnns:
+                continue
+            c = {}
+            qi = (cfg.get("5gQosProfile") or {}).get("5qi")
+            if qi is not None:
+                c["qi5"] = num(qi)
+            allowed = (cfg.get("pduSessionTypes") or {}).get("allowedSessionTypes")
+            if allowed:
+                c["session_types"] = [t for t in allowed if t in TYPES]
+            amb = cfg.get("sessionAmbr") or {}
+            if amb.get("uplink"):
+                c["ambr_ul"] = amb["uplink"]
+            if amb.get("downlink"):
+                c["ambr_dl"] = amb["downlink"]
+            dnns[name] = c
+    if slices:
+        out["slices"] = slices
+    if dnns:
+        out["dnns"] = dnns
+    ua = am.get("subscribedUeAmbr") or {}
+    if ua.get("uplink"):
+        out["ue_ambr_ul"] = ua["uplink"]
+    if ua.get("downlink"):
+        out["ue_ambr_dl"] = ua["downlink"]
+    return out
+
+
+def from_csv_row(r):
+    out = {}
+    for key in ("supi", "k", "opc", "op", "amf", "sqn", "msisdn", "ue_ambr_ul", "ue_ambr_dl"):
+        v = (r.get(key) or "").strip()
+        if v:
+            out[key] = v
+    if (r.get("slices") or "").strip():
+        out["slices"] = []
+        for part in r["slices"].split(";"):
+            sst, _, sd = part.strip().partition(":")
+            out["slices"].append(snssai({"sst": sst, "sd": sd or None}))
+    if (r.get("dnns") or "").strip():
+        out["dnns"] = {}
+        for part in r["dnns"].split(";"):
+            name, _, typ = part.strip().partition("/")
+            out["dnns"][name] = {"session_types": [typ.upper()]} if typ else {}
+    return out
+
+
+def validate(s):
+    """The UDM's checks (nf/udm/src/admin.c provision), so a bad record is found before any request is sent."""
+    unknown = set(s) - TOP_KEYS
+    if unknown:
+        return "unknown field(s) " + ", ".join(sorted(unknown))
+    supi = s.get("supi") or ""
+    if not re.fullmatch(r"imsi-\d{6,15}", supi):
+        return "supi must be imsi-<6..15 digits>"
+    if not (isinstance(s.get("k"), str) and len(s["k"]) == 32 and HEX.match(s["k"])):
+        return "k must be 32 hex characters"
+    if ("opc" in s) == ("op" in s):
+        return "give exactly one of opc and op"
+    for key in ("opc", "op"):
+        if key in s and not (len(s[key]) == 32 and HEX.match(s[key])):
+            return key + " must be 32 hex characters"
+    if "amf" in s and not (len(s["amf"]) == 4 and HEX.match(s["amf"])):
+        return "amf must be 4 hex characters"
+    if "sqn" in s and not (len(s["sqn"]) == 12 and HEX.match(s["sqn"])):
+        return "sqn must be 12 hex characters"
+    if "msisdn" in s and not re.fullmatch(r"\d{5,15}", s["msisdn"]):
+        return "msisdn must be 5 to 15 digits"
+    sl = s.get("slices")
+    if sl is not None:
+        if not isinstance(sl, list) or not sl or len(sl) > 64:
+            return "slices must be 1 to 64 entries"
+        for e in sl:
+            if set(e) - {"sst", "sd"} or not (0 <= e.get("sst", -1) <= 255):
+                return "slice sst must be 0..=255"
+            if "sd" in e and not re.fullmatch(r"[0-9a-fA-F]{6}", e["sd"]):
+                return "sd must be 6 hex characters"
+    dn = s.get("dnns")
+    if dn is not None:
+        if not isinstance(dn, dict) or not dn or len(dn) > 256:
+            return "dnns must be 1 to 256 entries"
+        for name, c in dn.items():
+            if not name or set(c) - DNN_KEYS:
+                return "invalid dnn configuration for %r" % name
+            if "qi5" in c and not (0 <= c["qi5"] <= 255):
+                return "qi5 must be 0..=255"
+            if "session_types" in c and (not c["session_types"] or any(t not in TYPES for t in c["session_types"])):
+                return "session types must come from IPV4, IPV6, IPV4V6"
+    return None
+
+
+def read_records(text, fmt):
+    if fmt == "csv":
+        return list(csv.DictReader(io.StringIO(text)))
+    text = text.strip()
+    if not text:
+        return []
+    try:
+        j = json.loads(text)
+        if isinstance(j, dict):
+            j = j.get("subscribers", [j]) if isinstance(j.get("subscribers"), list) else [j]
+        return j
+    except json.JSONDecodeError:
+        recs = []
+        for n, line in enumerate(text.splitlines(), 1):
+            if line.strip():
+                try:
+                    recs.append(json.loads(line))
+                except json.JSONDecodeError as e:
+                    raise SystemExit("g5c-subscribers: line %d is not JSON: %s" % (n, e.msg))
+        return recs
+
+
+def convert(recs, fmt):
+    good, bad = [], []
+    for i, r in enumerate(recs, 1):
+        try:
+            if fmt == "open5gs":
+                s = from_open5gs(r)
+            elif fmt == "free5gc":
+                s = from_free5gc(r)
+            elif fmt == "csv":
+                s = from_csv_row(r)
+            else:
+                s = r
+            if fmt != "g5c":
+                s = {k: v for k, v in s.items() if v not in (None, "")}
+            err = validate(s)
+        except (Skip, KeyError, ValueError, TypeError, AttributeError) as e:
+            s, err = {}, "cannot read record: %s" % (e if isinstance(e, Skip) else type(e).__name__)
+        (bad if err else good).append((i, s.get("supi", "?") if isinstance(s, dict) else "?", err) if err else s)
+    return good, bad
+
+
+def ctl_cmd(a, *args):
+    cmd = [a.ctl]
+    if a.udm:
+        cmd += ["--udm", a.udm]
+    if a.token_file:
+        cmd += ["--token-file", a.token_file]
+    return cmd + list(args)
+
+
+def do_import(a):
+    text = sys.stdin.read() if a.file == "-" else open(a.file, encoding="utf-8").read()
+    good, bad = convert(read_records(text, a.format), a.format)
+    for i, supi, err in bad:
+        print("record %d (%s): %s" % (i, supi, err), file=sys.stderr)
+    applied = failed = 0
+    if a.apply:
+        for s in good:
+            p = subprocess.run(ctl_cmd(a, "subscriber", "add", "--json", "-"), input=json.dumps(s), capture_output=True, text=True)
+            if p.returncode == 0:
+                applied += 1
+            else:
+                failed += 1
+                print("%s: %s" % (s["supi"], (p.stderr.strip() or "failed")[:200]), file=sys.stderr)
+    elif not a.dry_run:
+        out = open(a.out, "w", encoding="utf-8") if a.out else sys.stdout
+        for s in good:
+            out.write(json.dumps(s, separators=(",", ":")) + "\n")
+        if a.out:
+            out.close()
+    msg = "%d read, %d valid, %d rejected" % (len(good) + len(bad), len(good), len(bad))
+    if a.apply:
+        msg += ", %d provisioned, %d failed" % (applied, failed)
+    print(msg, file=sys.stderr)
+    return 1 if bad or failed else 0
+
+
+def supis_of(listing):
+    if isinstance(listing, dict):
+        for k in ("subscribers", "supis", "items"):
+            if isinstance(listing.get(k), list):
+                listing = listing[k]
+                break
+    out = []
+    for e in listing if isinstance(listing, list) else []:
+        out.append(e if isinstance(e, str) else e.get("supi"))
+    return [x for x in out if x]
+
+
+def do_export(a):
+    p = subprocess.run(ctl_cmd(a, "subscriber", "list"), capture_output=True, text=True)
+    if p.returncode != 0:
+        print(p.stderr.strip() or "g5c-ctl failed", file=sys.stderr)
+        return 1
+    docs = []
+    for supi in supis_of(json.loads(p.stdout)):
+        g = subprocess.run(ctl_cmd(a, "subscriber", "get", supi), capture_output=True, text=True)
+        if g.returncode != 0:
+            print("%s: %s" % (supi, g.stderr.strip()[:200]), file=sys.stderr)
+            return 1
+        docs.append(json.loads(g.stdout))
+    out = open(a.out, "w", encoding="utf-8", newline="") if a.out else sys.stdout
+    if a.format == "csv":
+        w = csv.writer(out)
+        w.writerow(["supi", "authenticationMethod", "sqn", "amf", "slices", "dnns"])
+        for d in docs:
+            nssai = ((d.get("amData") or {}).get("nssai") or {}).get("defaultSingleNssais") or []
+            slices = ";".join(str(s.get("sst")) + (":" + s["sd"] if s.get("sd") else "") for s in nssai)
+            dnns = set()
+            for sd in (d.get("smData") or []) if isinstance(d.get("smData"), list) else []:
+                dnns.update((sd.get("dnnConfigurations") or {}).keys())
+            w.writerow([d.get("supi"), d.get("authenticationMethod"), d.get("sqn"), d.get("amf"), slices, ";".join(sorted(dnns))])
+    else:
+        json.dump(docs, out, indent=1)
+        out.write("\n")
+    if a.out:
+        out.close()
+    print("%d subscribers exported (without keys)" % len(docs), file=sys.stderr)
+    return 0
+
+
+def main():
+    ap = argparse.ArgumentParser(description="bulk subscriber import / export for the g5c UDM")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--ctl", default="g5c-ctl", help="path of g5c-ctl (default: from PATH)")
+    common.add_argument("--udm")
+    common.add_argument("--token-file")
+    common.add_argument("--out")
+    im = sub.add_parser("import", parents=[common])
+    im.add_argument("--format", choices=["open5gs", "free5gc", "csv", "g5c"], required=True)
+    im.add_argument("file")
+    g = im.add_mutually_exclusive_group()
+    g.add_argument("--dry-run", action="store_true")
+    g.add_argument("--apply", action="store_true")
+    ex = sub.add_parser("export", parents=[common])
+    ex.add_argument("--format", choices=["json", "csv"], default="json")
+    a = ap.parse_args()
+    return do_import(a) if a.cmd == "import" else do_export(a)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

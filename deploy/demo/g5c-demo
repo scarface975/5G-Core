@@ -1,0 +1,156 @@
+#!/usr/bin/env bash
+# g5c-demo: the commands of the ZMQ demo with our 5G core in place of Open5GS (see docs/demo/host-demo.md).
+#
+#   g5c-demo prepare            once, as your user: build and install our functions, check the OCUDU gNB and srsUE, make /home/work/g5c-demo
+#   g5c-demo check              Open5GS must not be running (the AMF takes the address of Open5GS's: 127.0.0.5:38412)
+#   sudo g5c-demo net           the data path of the host (the counterpart of Open5GS's netconf.sh): the ogstun device (10.45.0.1/16), forwarding, the namespace ue1 of the UE
+#   sudo g5c-demo <function>    one function in the foreground of its terminal, logging continuously: nrf scp udr udm ausf pcf nssf nef smf upf amf   (and bsf, optional)
+#   sudo g5c-demo provision     the subscriber of /etc/open5gs/ue.conf (IMSI, K, OPc) into our UDM (what the Open5GS web UI did)
+#   sudo g5c-demo ping [args]   ping from the UE's namespace (default: ping -c 5 10.45.0.1, the address of the core's data path)
+#   g5c-demo status             what runs, whether the gNB is connected, the UE's address
+#   sudo g5c-demo stop          stop the functions;   sudo g5c-demo reset: also remove ogstun, ue1 and the state of the demo (a fresh start)
+#
+# The gNB and the UE are started exactly as in the startup guide, with their configuration files as they are (the AMF's address and the TAC are read from gnb.yml); the UE
+# command has one more argument, --gw.netns=ue1, so that its tunnel is in the namespace ue1 and a ping from there has to cross the radio, the gNB and the core.
+# Environment: DEMO_TLS=0 (cleartext between the functions; the default is mutual TLS), DEMO_OAUTH2=0 (no access tokens between the functions), DEMO_CIPHERING=NEA2 (a UE that deciphers 5G NAS correctly), DEMO_BSF=1 (the optional twelfth function).
+set -u
+SELF="$(readlink -f "${BASH_SOURCE[0]}")"
+HERE="$(dirname "$SELF")"
+ROOT="$(cd "$HERE/../.." && pwd)"
+GNB_BIN="${GNB_BIN:-/home/work/ocudu/build/apps/gnb/gnb}"
+UE_BIN="${UE_BIN:-/home/work/srsRAN_4G/build/srsue/src/srsue}"
+GNB_CONF="${GNB_CONF:-/etc/open5gs/gnb.yml}"
+UE_CONF="${UE_CONF:-/etc/open5gs/ue.conf}"
+H="${G5C_HOME:-}"
+[ -n "$H" ] || H="$(getent passwd "${SUDO_USER:-$(id -un)}" | cut -d: -f6)"
+NFS="nrf scp udr udm ausf pcf nssf nef smf upf amf bsf"
+UE_NS="${DEMO_UE_NS:-ue1}"
+TUN_DEV="ogstun"
+CORE_IP="10.45.0.1"
+
+# what the demo core needs to match the gNB's configuration, read from it
+amf_addr="$(sed -n 's/^ *addrs: *\([0-9.]*\).*/\1/p' "$GNB_CONF" 2>/dev/null | head -1)"
+tac="$(sed -n 's/^ *- tac: *\([0-9]*\).*/\1/p' "$GNB_CONF" 2>/dev/null | head -1)"
+export G5C_HOME="$H" G5C_RUN="${G5C_RUN:-$H/g5c-demo-run}" G5C_BIN_DIR="${G5C_BIN_DIR:-$H/.cache/g5c-bin/bin}"
+export G5C_AMF_ADDR="${amf_addr:-127.0.0.5}" G5C_TAC="${tac:-7}" G5C_AMF_CIPHERING="${DEMO_CIPHERING:-NEA0}"
+export G5C_TLS="${DEMO_TLS:-1}" G5C_BSF="${DEMO_BSF:-0}" G5C_OAUTH2="${DEMO_OAUTH2:-1}"G5C_N6_DEV="$TUN_DEV" G5C_UE_POOL="${G5C_UE_POOL:-10.45.0.0/16}"
+export G5C_LOG_JSON=false G5C_LOG_LEVEL="${G5C_LOG_LEVEL:-info}"
+
+need_root() { [ "$(id -u)" = 0 ] || { echo "run it with sudo: sudo $SELF $*"; exit 1; }; }
+
+cmd_prepare() {
+  local ok=1
+  for f in "$GNB_BIN" "$UE_BIN" "$GNB_CONF" "$UE_CONF"; do [ -e "$f" ] || { echo "missing: $f"; ok=0; }; done
+  [ "$ok" = 1 ] || exit 1
+  echo "building and installing our functions into $G5C_BIN_DIR ..."
+  bash "$ROOT/scripts/c_install.sh" | tail -1
+  ln -sfn "$SELF" "$H/g5c-demo" && echo "command: $H/g5c-demo"
+  mkdir -p "$G5C_RUN"
+  echo "gNB configuration: AMF at $G5C_AMF_ADDR:38412, TAC $G5C_TAC (read from $GNB_CONF; the core is set to match)"
+  echo "UE configuration:  $(sed -n 's/^imsi *= *//p' "$UE_CONF" | head -1) (provisioned into our UDM by: sudo $H/g5c-demo provision)"
+  cmd_check
+  echo "ready. The steps are in $ROOT/docs/demo/host-demo.md"
+}
+
+cmd_check() {
+  local bad=0
+  if pgrep -a -f 'open5gs-[a-z]*d' >/dev/null 2>&1; then echo "Open5GS is still running: stop it (it uses the same addresses):"; pgrep -a -f 'open5gs-[a-z]*d' | cut -c1-120; bad=1; fi
+  if command -v ss >/dev/null 2>&1 && ss -lnH 2>/dev/null | grep -qE "(^|[ ])$G5C_AMF_ADDR:38412"; then
+    if ! pgrep -x amf >/dev/null 2>&1; then echo "something already listens on $G5C_AMF_ADDR:38412"; bad=1; fi
+  fi
+  [ "$bad" = 0 ] && echo "check: Open5GS is not running, $G5C_AMF_ADDR:38412 is free"
+  return $bad
+}
+
+cmd_net() {
+  need_root net
+  ip link show "$TUN_DEV" >/dev/null 2>&1 || ip tuntap add name "$TUN_DEV" mode tun
+  ip addr show dev "$TUN_DEV" | grep -q "$CORE_IP/" || ip addr add "$CORE_IP/16" dev "$TUN_DEV"
+  ip link set "$TUN_DEV" up
+  sysctl -qw net.ipv4.ip_forward=1 2>/dev/null || true
+  if command -v iptables >/dev/null 2>&1; then # the UE can reach the outside as well (best effort)
+    iptables -t nat -C POSTROUTING -s 10.45.0.0/16 ! -o "$TUN_DEV" -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -s 10.45.0.0/16 ! -o "$TUN_DEV" -j MASQUERADE 2>/dev/null || true
+  fi
+  ip netns list 2>/dev/null | grep -qw "$UE_NS" || ip netns add "$UE_NS"
+  ip netns exec "$UE_NS" ip link set lo up
+  echo "net: $TUN_DEV $CORE_IP/16 up, forwarding on, namespace $UE_NS for the UE"
+  ip -br addr show "$TUN_DEV"
+}
+
+cmd_nf() {
+  local nf="$1"
+  case " $NFS " in *" $nf "*) ;; *) echo "unknown function: $nf (one of: $NFS)"; exit 1;; esac
+  [ "$nf" = upf ] && need_root upf
+  [ "$nf" = bsf ] && [ "$G5C_BSF" != 1 ] && { echo "the BSF is optional: DEMO_BSF=1 sudo $SELF bsf (and start the PCF with DEMO_BSF=1 too)"; exit 1; }
+  mkdir -p "$G5C_RUN"
+  exec bash "$ROOT/deploy/windows/nf.sh" "$nf"
+}
+
+cmd_provision() {
+  need_root provision
+  local imsi k opc ctl="$G5C_BIN_DIR/g5c-ctl"
+  imsi="$(sed -n 's/^imsi *= *//p' "$UE_CONF" | head -1 | tr -d ' \r')"
+  k="$(sed -n 's/^k *= *//p' "$UE_CONF" | head -1 | tr -d ' \r')"
+  opc="$(sed -n 's/^opc *= *//p' "$UE_CONF" | head -1 | tr -d ' \r')"
+  [ -n "$imsi" ] && [ -n "$k" ] && [ -n "$opc" ] || { echo "no imsi / k / opc in $UE_CONF"; exit 1; }
+  [ -f "$G5C_RUN/keys/admin_token" ] || { echo "no admin token yet: start the NRF and the UDM first"; exit 1; }
+  local udm="http://${G5C_UDM_ADDR:-127.2.0.1}:7773"
+  if [ "$G5C_TLS" = 1 ]; then # mutual TLS: the operator certificate of the cluster's PKI
+    udm="https://${G5C_UDM_ADDR:-127.2.0.1}:7773"
+    export G5C_TLS_CA="$G5C_RUN/pki/ca.crt" G5C_TLS_CERT="$G5C_RUN/pki/admin.crt" G5C_TLS_KEY="$G5C_RUN/pki/admin.key"
+  fi
+  "$ctl" --udm "$udm" --token-file "$G5C_RUN/keys/admin_token" subscriber delete "imsi-$imsi" >/dev/null 2>&1
+  "$ctl" --udm "$udm" --token-file "$G5C_RUN/keys/admin_token" subscriber add --supi "imsi-$imsi" --k "$k" --opc "$opc" --slice 1 --dnn internet \
+    && echo "provisioned imsi-$imsi (slice 1, dnn internet) into the UDM at $udm"
+}
+
+cmd_ping() {
+  need_root ping
+  ip netns list | grep -qw "$UE_NS" || { echo "no namespace $UE_NS: sudo $SELF net, and start the UE"; exit 1; }
+  if [ $# -eq 0 ]; then set -- -c 5 "$CORE_IP"; fi
+  ip netns exec "$UE_NS" ip route replace default dev tun_srsue 2>/dev/null || true   # so that addresses beyond the core (the internet, through the UPF) can be pinged too
+  echo "UE namespace $UE_NS: $(ip netns exec "$UE_NS" ip -br addr show tun_srsue 2>/dev/null | tr -s ' ')"
+  exec ip netns exec "$UE_NS" ping "$@"
+}
+
+cmd_status() {
+  local nf
+  for nf in $NFS; do
+    if pgrep -x "$nf" >/dev/null 2>&1; then printf '  %-5s up   (pid %s)\n' "$nf" "$(pgrep -x "$nf" | head -1)"; else printf '  %-5s -\n' "$nf"; fi
+  done
+  pgrep -x gnb >/dev/null 2>&1 && echo "  gnb   up" || echo "  gnb   -"
+  pgrep -x srsue >/dev/null 2>&1 && echo "  srsue up" || echo "  srsue -"
+  if [ "$(id -u)" = 0 ]; then
+    ip -br addr show "$TUN_DEV" 2>/dev/null | sed 's/^/  /'
+    ip netns exec "$UE_NS" ip -br addr show tun_srsue 2>/dev/null | sed 's/^/  ue1: /'
+  fi
+}
+
+cmd_stop() {
+  need_root stop
+  for nf in amf smf upf pcf ausf udm nef nssf udr bsf scp nrf; do pkill -x "$nf" 2>/dev/null || true; done
+  pkill -x srsue 2>/dev/null || true
+  pkill -x gnb 2>/dev/null || true
+  echo "stopped"
+}
+
+cmd_reset() {
+  cmd_stop
+  ip netns del "$UE_NS" 2>/dev/null || true
+  ip link del "$TUN_DEV" 2>/dev/null || true
+  rm -rf "$G5C_RUN/state" "$G5C_RUN/log"
+  echo "reset: $TUN_DEV and $UE_NS removed, the state of the demo cleared (configuration and keys are kept)"
+}
+
+case "${1:-}" in
+  prepare) cmd_prepare ;;
+  check) cmd_check ;;
+  net) cmd_net ;;
+  provision) cmd_provision ;;
+  ping) shift; cmd_ping "$@" ;;
+  status) cmd_status ;;
+  stop) cmd_stop ;;
+  reset) cmd_reset ;;
+  nrf|scp|udr|udm|ausf|pcf|nssf|nef|smf|upf|amf|bsf) cmd_nf "$1" ;;
+  *) sed -n '2,19p' "$SELF" | sed 's/^# \{0,1\}//'; exit 1 ;;
+esac

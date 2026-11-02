@@ -1,0 +1,266 @@
+{
+ "note": "Phase definitions of the strategy PDF, extracted verbatim (no timelines by decision). The PDF is built from the same text.",
+ "phases": [
+  {
+   "phase": 0,
+   "name": "Foundations",
+   "goal": "Everything every NF needs, plus the legal and process groundwork, so the five NFs are built on one consistent base.",
+   "deliverables": [
+    "Repo scaffold, toolchain pin, CI pipeline, lint/format, container builds, licence scan + SBOM.",
+    "ADRs D1–D5 decided and recorded; spec baseline (Rel-16 TS list and versions) in docs/specs; clause-to-module traceability table.",
+    "libs/sbi: HTTP/2 server/client, JSON (de)serialisation, OpenAPI-driven model generation from 3GPP YAML, ProblemDetails, retry/timeouts, TLS, OAuth2 token hooks.",
+    "libs/nas (TS 24.501 5GMM/5GSM), libs/ngap (TS 38.413, own ASN.1 pipeline), libs/pfcp (TS 29.244), libs/gtpu (TS 29.281).",
+    "libs/crypto: Milenage, 5G-AKA / 5G key hierarchy (KAUSF→KSEAF→KAMF→KgNB), SUCI ECIES profiles A and B, NEA0-3 / NIA0-3.",
+    "libs/config, telemetry, testkit: YAML config with validation, logging/metrics/tracing, packet builders, mock-peer harness.",
+    "Compose environment bringing up UERANSIM and Open5GS (as oracle) so baseline traces exist from day one; capture golden pcaps of S1–S3 from Open5GS."
+   ],
+   "specs": [
+    "Not applicable (infrastructure)."
+   ],
+   "validation": [
+    "Codec round-trip tests on captured Open5GS/UERANSIM pcaps; decoders fuzzed for a fixed time budget.",
+    "Crypto matches published vectors in TS 35.208 and TS 33.501 annexes."
+   ],
+   "exit": [
+    "CI green on all libs; licence scan clean; fuzzing running.",
+    "Golden pcaps stored in tests/fixtures.",
+    "ADRs signed off."
+   ],
+   "risks": [
+    "ASN.1 toolchain choice can be a time sink – time-box and decide early.",
+    "Scope creep into “perfect” libs: implement Rel-16 SA subset needed for S1–S8 only."
+   ]
+  },
+  {
+   "phase": 1,
+   "name": "UDM (+ UDR-lite, AUSF-lite)",
+   "goal": "A working subscriber-data and authentication backbone, exercised by mock consumers, before any RAN exists.",
+   "deliverables": [
+    "UDM services: Nudm_UEAuthentication (generate auth data, auth-event confirm), Nudm_SubscriberDataManagement (AM, SM, NSSAI data; subscribe/notify), Nudm_UEContextManagement (AMF/SMF registration).",
+    "SUCI de-concealment (home network private key handling, profiles A/B) and SUPI resolution.",
+    "Subscriber provisioning: REST + CLI for IMSI, K/OPc, AMF field, SQN, DNN/slice profile. Secure storage of K/OPc (envelope encryption hook for later HSM/KMS).",
+    "SQN management and resynchronisation (AUTS handling).",
+    "shims/udr-lite (Nudr_DataRepository subset) and shims/ausf-lite (Nausf_UEAuthentication 5G-AKA subset) strictly as needed."
+   ],
+   "specs": [
+    "TS 33.501 §6.1 (5G-AKA), §6.12 (SUCI); TS 29.503; TS 29.504/29.505 (UDR subset); TS 29.509 (AUSF subset)."
+   ],
+   "validation": [
+    "Auth vectors compared with Open5GS UDM output for identical K/OPc/RAND/SQN.",
+    "Mock AMF/AUSF clients drive all UDM operations; negative tests (unknown SUPI, bad SUCI scheme, SQN mismatch)."
+   ],
+   "exit": [
+    "Bit-exact vectors match the oracle and spec.",
+    "Provisioning round-trip works; 1,000 auth req/s on one core-class instance (baseline)."
+   ],
+   "risks": [
+    "Key handling is security-critical: code review + threat note before exit.",
+    "Keep shims minimal or they become legacy we must migrate."
+   ]
+  },
+  {
+   "phase": 2,
+   "name": "PCF",
+   "goal": "Policy decisions available to SMF and AMF with subscriber-linked policy data.",
+   "deliverables": [
+    "Npcf_SMPolicyControl (create/update/delete; PCC rules, QoS (5QI, ARP, AMBR), session rules) and Npcf_AMPolicyControl.",
+    "Policy store via UDR-lite; default policy profile plus per-subscriber / per-DNN overrides; policy templates in config.",
+    "Policy-update notifications toward SMF (Npcf_SMPolicyControl_UpdateNotify).",
+    "Hooks reserved (not built) for UE policy (UCU), AF-influenced traffic (N5) and usage monitoring – Phase 7/8."
+   ],
+   "specs": [
+    "TS 23.503; TS 29.512 (SM policy); TS 29.507 (AM policy); TS 29.519 (policy data in UDR)."
+   ],
+   "validation": [
+    "Component tests with mock SMF/AMF; policy decision tables tested against spec examples.",
+    "Interop: Open5GS SMF ↔ our PCF, with identical QoS outcome in the SMF trace."
+   ],
+   "exit": [
+    "Open5GS SMF accepts our PCF decisions for S2-style sessions.",
+    "Policy change mid-session reaches the SMF."
+   ],
+   "risks": [
+    "Behavioural differences in optional IEs between implementations – capture in update.md as they surface."
+   ]
+  },
+  {
+   "phase": 3,
+   "name": "UPF",
+   "goal": "A correct, then fast, user plane that any spec-compliant SMF can drive.",
+   "deliverables": [
+    "PFCP (N4): association setup/heartbeat/release, session establishment/modification/deletion/report; PDR, FAR, QER, URR, BAR; UE IP pool hooks; SDF filter matching.",
+    "GTP-U (N3/N9): encapsulation/decapsulation, echo, error indication, end-marker, extension headers (PDU Session Container, QFI).",
+    "N6: TUN/TAP and routed interface to the data network; NAT/masquerade as config option.",
+    "QoS enforcement: session-AMBR, MBR/GBR per QER, QFI marking. Usage reports (volume/time) for future charging.",
+    "Stage A: userspace datapath for correctness. Stage B: AF_XDP/eBPF fast path; multi-queue, RSS, CPU pinning. Benchmarks published in docs."
+   ],
+   "specs": [
+    "TS 29.244; TS 29.281; TS 23.501 §5.8, §5.7 (QoS)."
+   ],
+   "validation": [
+    "Driven by a scripted PFCP client and (interop) Open5GS SMF ↔ our UPF with UERANSIM traffic.",
+    "Packet-level tests: golden GTP-U frames in/out; fuzzing of PFCP and GTP-U parsers.",
+    "iperf3/TRex throughput and latency at increasing UE/session counts."
+   ],
+   "exit": [
+    "Open5GS SMF + UERANSIM: ping and iperf through our UPF.",
+    "Stage A: ≥ 1 Gbps single host; target for Stage B set as an ADR (e.g. 10 Gbps)."
+   ],
+   "risks": [
+    "Performance work can swallow effort – gate it behind correctness.",
+    "Windows is a dev host only; UPF development and performance testing need Linux (WSL2/VM)."
+   ]
+  },
+  {
+   "phase": 4,
+   "name": "SMF",
+   "goal": "Complete PDU session lifecycle control across UDM, PCF, UPF and (mock) AMF.",
+   "deliverables": [
+    "Nsmf_PDUSession: Create/Update/Release SM Context (from AMF), N1N2 message transfer, status notify.",
+    "5GSM NAS handling via AMF (establishment accept/reject, modification, release) using libs/nas.",
+    "N4 control: UPF association management, UPF selection (DNN, slice, load/static), rule generation from PCC rules (PDR/FAR/QER).",
+    "IP address management (IPv4, IPv6 prefix, IPv4v6), DNN/DNS/MTU config, session AMBR, QoS flow mapping (default + dedicated).",
+    "UDM subscription retrieval (SM data) and PCF SM policy integration; session/SM-context persistence to external store.",
+    "Handling of UPF failure/restart, N4 session recovery; idempotent retries."
+   ],
+   "specs": [
+    "TS 23.502 §4.3 (PDU session procedures); TS 29.502; TS 24.501 (5GSM); TS 29.244."
+   ],
+   "validation": [
+    "Mock AMF drives full lifecycle; real UPF (ours) + real PCF/UDM (ours).",
+    "Interop: Open5GS AMF ↔ our SMF ↔ Open5GS UPF and our UPF (all combinations) with UERANSIM."
+   ],
+   "exit": [
+    "S2, S3, S5 (partial) pass with Open5GS AMF in front; pcap diff on N4 shows no semantic deviations.",
+    "Crash/restart test: sessions recovered or cleanly released."
+   ],
+   "risks": [
+    "QoS/PCC-to-PFCP mapping is the most intricate logic – build a rule-mapping test table from spec early."
+   ]
+  },
+  {
+   "phase": 5,
+   "name": "AMF",
+   "goal": "The last and most complex of the five: real UE and gNB attach to our core end to end.",
+   "deliverables": [
+    "N2/NGAP: SCTP endpoint, NG Setup, gNB/UE context, Initial UE Message, UL/DL NAS transport, Initial Context Setup, UE Context Release, PDU Session Resource Setup/Modify/Release, Paging, Reset, Error Indication.",
+    "NAS (5GMM): Registration (initial/mobility/periodic), Authentication, Security Mode (integrity + ciphering), Identity, Configuration Update, Service Request, Deregistration, Notification; GUTI allocation; 5G-TMSI paging.",
+    "UE context and registration-area management, tracking-area lists, allowed NSSAI from config/UDM, 5GMM timers.",
+    "SBI: Namf_Communication, Namf_EventExposure (basic), calls to AUSF (shim), UDM, PCF (AM policy), SMF.",
+    "Handover: Xn-based path switch, then N2-based handover (S6). Multi-gNB support.",
+    "Stateless-ready design: UE context externalised for later HA; SCTP multi-homing config."
+   ],
+   "specs": [
+    "TS 23.502 §4.2 (registration, service request, deregistration), §4.9 (handover); TS 24.501; TS 38.413; TS 29.518; TS 33.501 §6 (security procedures)."
+   ],
+   "validation": [
+    "Replay of captured Open5GS/UERANSIM NAS/NGAP traces as decoder and state-machine tests.",
+    "UERANSIM gNB + UE: S1, S2, S3, S4; then srsRAN and the ORAN emulator."
+   ],
+   "exit": [
+    "Phase-5 milestone: UERANSIM UE registers, establishes a PDU session and pings 8.8.8.8 through our 5 NFs (plus shims).",
+    "S1–S4 green on UERANSIM and on the ORAN emulator."
+   ],
+   "risks": [
+    "NAS/NGAP edge cases and timer behaviour are where interop bugs hide – use traces and fuzzing heavily.",
+    "Security-mode/ciphering errors look like generic failures – invest in good diagnostics early."
+   ]
+  },
+  {
+   "phase": 6,
+   "name": "Integration & validation of the 5-NF core",
+   "goal": "Prove the five-NF core works as a system, independently of any single-phase test, and establish the regression suite we keep forever.",
+   "deliverables": [
+    "Full S1–S8 on UERANSIM, srsRAN (ZMQ) and the ORAN emulator; multi-UE, multi-session scale tests (100 → 1,000 → 10,000 simulated UEs).",
+    "Conformance matrix: each procedure → clause → test → status, published in docs/specs; differential pcap analysis against Open5GS.",
+    "72-hour soak, memory-leak and FD-leak checks, failure injection (kill NF, drop N4/N11, SCTP flaps).",
+    "Bug-burn-down and performance baseline report; decision checkpoint before Phases 7–9."
+   ],
+   "specs": [
+    "Whole-system view of TS 23.502 procedures in scope."
+   ],
+   "validation": [
+    "As above."
+   ],
+   "exit": [
+    "≥ 95% of in-scope scenarios pass on all three RAN peers; no P1 bugs open; soak clean.",
+    "Baseline report stored in docs/."
+   ],
+   "risks": [
+    "Differences between RAN simulators’ behaviours – treat the spec as the tiebreaker, record rulings in ADRs."
+   ]
+  },
+  {
+   "phase": 7,
+   "name": "Remaining NFs and shim removal",
+   "goal": "Complete the 11-NF core and retire all temporary code.",
+   "deliverables": [
+    "NRF (Nnrf_NFManagement, NFDiscovery, AccessToken; heartbeat/status notify) – first, since every NF then switches from static config to discovery.",
+    "AUSF and UDR replace the shims (full 5G-AKA, EAP-AKA’ optional; full Nudr data sets, PostgreSQL-backed).",
+    "NSSF (slice selection, NSSAI availability), NEF (northbound exposure, AF traffic influence, monitoring events, CAPIF-ready hooks).",
+    "11th NF: SCP for indirect communication and routing (built, ADR-0023); BSF for PCF binding built as an optional twelfth (ADR-0024).",
+    "PCF extensions: UE policy, N5/AF interaction, usage monitoring. Optional: UDM/AMF event exposure completion."
+   ],
+   "specs": [
+    "TS 29.510, 29.531, 29.509, 29.504–29.505, 29.522, 29.521 and related."
+   ],
+   "validation": [
+    "Regression: the full Phase-6 suite must still pass, unchanged, after each shim is replaced."
+   ],
+   "exit": [
+    "All 11 NFs deployed; shims/ deleted; multi-slice scenarios (S8) green."
+   ],
+   "risks": [
+    "Regressions while swapping shims – keep the same external APIs and run the Phase-6 suite on every PR."
+   ]
+  },
+  {
+   "phase": 8,
+   "name": "Production hardening",
+   "goal": "Turn a working core into an operable, secure, scalable product.",
+   "deliverables": [
+    "HA and scale: stateless NF replicas, external session/UE stores (PostgreSQL / Redis-class), SCTP and N4 failover, rolling upgrades, horizontal autoscaling.",
+    "Security: mTLS between all NFs, OAuth2 with NRF tokens enforced, secrets management (KMS/HSM for K/OPc and home-network keys), threat model, pen-test, dependency and container scanning, SBOM and signed artifacts.",
+    "Operations: Helm charts/operators, config hot-reload, health probes, Prometheus + Grafana dashboards, alert rules, structured audit logs, runbooks.",
+    "Performance: UPF tuning (10–100 Gbps targets by ADR), control-plane registrations/sec and sessions/sec targets, latency SLOs.",
+    "Operator features: charging hooks/CDR export (Nchf integration point), lawful-intercept interface design (jurisdiction-dependent), subscriber provisioning API and UI/CLI, multi-PLMN.",
+    "Commercial testers: run the conformance scenarios with a commercial core-test tool (Keysight/Spirent class) or a partner lab."
+   ],
+   "specs": [
+    "TS 33.501 (security architecture), TS 28.xxx (management) as applicable."
+   ],
+   "validation": [
+    "Chaos/failure suite, 7-day soak, load tests to target, external pen-test with remediation."
+   ],
+   "exit": [
+    "SLOs and capacity targets met and documented; no critical/high security findings open; upgrade and rollback tested."
+   ],
+   "risks": [
+    "Lawful intercept and charging requirements depend on target markets – scope them with stakeholders early."
+   ]
+  },
+  {
+   "phase": 9,
+   "name": "Productisation and release",
+   "goal": "Package, document, license-audit and ship a release candidate.",
+   "deliverables": [
+    "Versioning and release process, packaged containers/Helm, installation and upgrade guides, operator/admin documentation, API reference.",
+    "Final third-party licence audit (automated + manual), NOTICE file, SBOM, patent/FRAND review outcome recorded.",
+    "Support tooling: diagnostics bundle, pcap capture, log redaction.",
+    "Pilot / field trial plan with a lab or partner network; feedback loop into the backlog."
+   ],
+   "specs": [
+    "n/a"
+   ],
+   "validation": [
+    "Release-candidate regression on full matrix."
+   ],
+   "exit": [
+    "GA-candidate tagged; licence audit signed off by counsel; pilot plan agreed."
+   ],
+   "risks": [
+    "Late discovery of licence or patent issues – mitigated by running checks from Phase 0."
+   ]
+  }
+ ]
+}

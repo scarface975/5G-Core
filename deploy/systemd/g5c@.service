@@ -1,0 +1,42 @@
+# One g5c network function as a service: systemctl start g5c@amf   (the instance name is the function: nrf scp bsf udr nssf nef udm ausf pcf smf amf upf)
+# The configuration is /etc/g5c/<function>.yaml; state files and stores are under /var/lib/g5c; keys under /etc/g5c/keys (mode 700, owner g5c).
+# SIGHUP reloads the certificates (no restart), SIGUSR1 / SIGUSR2 raise / restore the log level.
+[Unit]
+Description=g5c 5G core network function %i
+Documentation=file:///usr/share/doc/g5c/install.md
+After=network-online.target
+Wants=network-online.target
+PartOf=g5c.target
+
+[Service]
+Type=simple
+User=g5c
+Group=g5c
+ExecStart=/usr/local/bin/%i /etc/g5c/%i.yaml
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=2
+LimitNOFILE=65536
+# the functions are leaf processes: no privileges, a read-only system, one writable directory
+NoNewPrivileges=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+ReadWritePaths=/var/lib/g5c
+StateDirectory=g5c
+ConfigurationDirectory=g5c
+LogsDirectory=g5c
+
+[Install]
+WantedBy=g5c.target

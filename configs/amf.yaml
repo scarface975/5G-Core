@@ -1,0 +1,29 @@
+# Sample AMF configuration.
+name: amf-1
+plmn: { mcc: '001', mnc: '01' }
+sbi: { address: 0.0.0.0, port: 7777 }
+log: { level: info, json: true }
+nrf: { uri: 'http://nrf:7777' }
+amf:
+  self_uri: 'http://amf:7777'          # where the SMF, UDM and PCF reach the callbacks (default: the sbi address)
+  name: amf-1
+  guami: { region: 2, set: 1, pointer: 0 }
+  ngap: { address: 10.100.0.5, port: 38412 }   # SCTP, PPID 60
+  capacity: 255                        # relative AMF capacity (0..255)
+  tais: [ { tac: 1 }, { tac: 2 } ]     # tracking areas of the PLMN above; the registration area of every UE
+  slices: [ { sst: 1 } ]               # S-NSSAIs served (add `sd: '000001'` for a slice differentiator)
+  security:
+    integrity: [NIA2]                  # in order of preference; NIA0 is for emergency-only deployments
+    ciphering: [NEA2, NEA0]            # SNOW 3G and ZUC are not available (ADR-0012)
+  default_dnn: internet                # used when the UE names none
+  network_name: { full: 'g5c', short: 'g5c' }   # sent with the time in a configuration update after the first registration (omit for none)
+  # ausf: { uri: 'http://ausf:7777' }  # omit a peer to discover it through the NRF
+  # udm:  { uri: 'http://udm:7777' }
+  # pcf:  { uri: 'http://pcf:7777' }   # no PCF: no AM policy
+  # smf:  { uri: 'http://smf:7777' }
+  timers: { t3512: 3240, t3513: 6, t3522: 6, t3550: 6, t3555: 6, t3560: 6, t3570: 6 }   # seconds
+  paging_tries: 4
+  reachable_grace: 240                 # mobile reachable timer = T3512 + this; then implicit de-registration
+  workers: 8
+  max_unauthenticated: 4096            # connections that have not completed their registration
+  state_file: /var/lib/g5c/amf-state.json   # registered UEs are written here and restored at start-up (omit for none)

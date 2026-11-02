@@ -1,0 +1,3 @@
+# ThreadSanitizer suppressions for the daemons started by the cluster tests.
+# OpenSSL (libcrypto) is not instrumented: its internal locking and fetch cache show up as races between threads that each use their own contexts.
+race:libcrypto.so

@@ -1,0 +1,21 @@
+# Sample NEF configuration (northbound APIs of TS 29.522 and TS 29.122: TrafficInfluence, MonitoringEvent).
+name: nef-1
+plmn: { mcc: '001', mnc: '01' }
+sbi: { address: 0.0.0.0, port: 7784 }
+log: { level: info, json: true }
+nrf: { uri: 'http://nrf:7777' }
+
+nef:
+  # The application functions that may use the northbound APIs. `token_file` holds the bearer token the AF presents (or set G5C_NEF_AF_<ID>_TOKEN);
+  # `notify_hosts` are the hosts its notification destinations may name; `apis` limits what it may use (default: all).
+  afs:
+    - { id: af-1, token_file: /etc/g5c/keys/nef-af-1.token, notify_hosts: [ af1.example.com ], apis: [ traffic-influence, monitoring-event ], max_subscriptions: 1000 }
+  # Where the AMF reaches the NEF's callback endpoints (default: the SBI address above, which is wrong for 0.0.0.0).
+  callback_uri: http://nef:7784
+  # The functions behind the NEF are found through the NRF unless named here.
+  # udr: { uri: 'http://udr:7777', timeout_ms: 3000 }
+  # udm: { uri: 'http://udm:7777' }
+  # amf: { uri: 'http://amf:7777' }
+  subscriptions: { max_lifetime_s: 86400, notify_retries: 3, max_reports: 1000000 }
+  state_file: /var/lib/g5c/nef.json
+  validate: true

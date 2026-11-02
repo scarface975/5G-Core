@@ -1,0 +1,30 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y cmake pkg-config libssl-dev libnghttp2-dev libuv1-dev
+      - name: Build and test (plain, then under ASan + UBSan)
+        run: bash scripts/c_check.sh
+  static-analysis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y cmake pkg-config libssl-dev libnghttp2-dev libuv1-dev
+      - name: Banned functions, licences, gcc -fanalyzer
+        run: bash scripts/c_lint.sh
+  fuzz-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y clang cmake pkg-config libssl-dev libnghttp2-dev libuv1-dev
+      - name: Coverage-guided fuzzing, 30 s per target
+        run: |
+          CC=clang cmake -S . -B build-fuzz -DG5C_FUZZ=ON -DG5C_SANITIZE=OFF
+          cmake --build build-fuzz -j"$(nproc)"
+          for t in nas ngap pfcp_gtpu json_yaml; do
+            mkdir -p corpus/$t
+            ./build-fuzz/fuzz/fuzz_$t -max_total_time=30 corpus/$t
+          done

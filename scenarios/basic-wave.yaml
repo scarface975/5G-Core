@@ -1,0 +1,9 @@
+# The smallest useful scenario: UEs register and get sessions, the numbers add up, the KPIs are healthy.
+name: basic wave
+steps:
+  - load: {ues: 20, gnbs: 4}
+  - assert: {metric: "amf:g5c_amf_registrations_total{result=accepted}", ">=": 20}
+  - assert: {metric: "smf:g5c_smf_cdrs_written_total", ">=": 20}
+  - kpi: {name: registration_success_rate, ">=": 99}
+  - kpi: {name: pdu_session_establishment_success_rate, ">=": 99}
+  - http: {nf: udm, path: /health/live, expect: 200}

@@ -1,0 +1,21 @@
+# Sample SCP configuration (Service Communication Proxy, TS 29.500 6.10 indirect communication; TS 23.501 6.2.19).
+# The functions send their requests to this SCP when their configuration has `scp_client: { uri: 'http://scp:7785' }`.
+name: scp-1
+plmn: { mcc: '001', mnc: '01' }
+sbi: { address: 0.0.0.0, port: 7785 }
+log: { level: info, json: true }
+nrf: { uri: 'http://nrf:7777' }      # where the SCP discovers producers for requests with 3gpp-Sbi-Discovery-* headers (Model D)
+
+scp:
+  prefix: ''                          # the deployment-specific string of this SCP's apiRoot, e.g. /scp-1 (removed from the path of every request)
+  # next: { uri: 'http://scp-b:7785', delegate_discovery: false }   # a next-hop SCP (TS 23.501 6.2.19): requests go to it with the producer selected here
+  discovery: { delegated: true, cache_ttl_s: 60, cache_max: 1024 }  # Model D and the cache of the NRF's answers
+  routing:
+    attempts: 3                       # producers tried for one request (reselection on failure, TS 29.500 6.10.4)
+    timeout_ms: 5000                  # per attempt
+    retry_on_503: true
+    quarantine: { failures: 3, seconds: 10 }   # a producer that fails this often is left alone for this long
+    max_inflight: 4096                # requests handled at once (more: 503 NF_CONGESTION)
+    max_body: 1048576                 # largest request body (more: 413)
+    workers: 256                      # threads that forward; a request waits for its producer in one of them
+  targets: { allow: [] }              # where the SCP may forward to: host names, *.example.org, IPv4 CIDRs (empty: anywhere)

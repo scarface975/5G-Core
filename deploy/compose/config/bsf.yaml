@@ -1,0 +1,8 @@
+# Compose BSF configuration (see configs/bsf.yaml for every option).
+name: bsf-1
+plmn: { mcc: '001', mnc: '01' }
+sbi: { address: 0.0.0.0, port: 7786 }
+log: { level: info, json: true }
+nrf: { uri: 'http://nrf:7777' }
+bsf:
+  state_file: /var/lib/g5c/bsf.json

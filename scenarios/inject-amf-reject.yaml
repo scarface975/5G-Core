@@ -1,0 +1,9 @@
+# Failure injection at the AMF (run with G5C_AMF_EXTRA='  inject: { registration_reject: [{ supi: imsi-00101, cause: 11 }] }'): every registration is refused with
+# 5GMM cause #11, so a RAN can see how the UE side handles it (the load generator stops at the first refusal of each gNB). The core counts what it injected.
+name: AMF rejects registrations on purpose
+steps:
+  - load: {ues: 5, gnbs: 2}
+    expect: fail
+  - assert: {metric: "amf:g5c_amf_injected_total{kind=registration_reject}", ">=": 1}
+  - assert: {metric: "amf:g5c_amf_registrations_total{result=accepted}", "==": 0}
+  - http: {nf: amf, path: /health/ready}

@@ -1,0 +1,8 @@
+# The whole core: systemctl start g5c.target   (enable the functions you run on this host with: systemctl enable g5c@nrf g5c@amf ...)
+[Unit]
+Description=g5c 5G core
+Wants=g5c@nrf.service
+After=g5c@nrf.service
+
+[Install]
+WantedBy=multi-user.target

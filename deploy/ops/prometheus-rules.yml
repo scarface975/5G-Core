@@ -1,0 +1,120 @@
+# Prometheus alerting and recording rules for the g5c core. Every function serves /metrics on its SBI port (https with the cluster's client certificate when mutual TLS is on:
+# see deploy/ops/prometheus-scrape.yml). Metric names are those the functions register; `job` is the function name.
+groups:
+  - name: g5c-availability
+    rules:
+      - alert: G5cFunctionDown
+        expr: up{job=~"g5c-.*"} == 0
+        for: 1m
+        labels: {severity: critical}
+        annotations:
+          summary: "{{ $labels.job }} on {{ $labels.instance }} does not answer its metrics endpoint"
+          runbook: "docs/ops/runbooks.md#function-down"
+      - alert: G5cNrfRegisteredFunctionsLow
+        expr: sum(g5c_nrf_profiles) < 11
+        for: 2m
+        labels: {severity: warning}
+        annotations:
+          summary: "fewer than 11 functions are registered at the NRF ({{ $value }})"
+          runbook: "docs/ops/runbooks.md#nrf-registrations"
+      - alert: G5cNrfSuspendedFunctions
+        expr: increase(g5c_nrf_suspended_total[5m]) > 0
+        labels: {severity: warning}
+        annotations:
+          summary: "the NRF suspended a function after missed heart-beats"
+          runbook: "docs/ops/runbooks.md#nrf-registrations"
+  - name: g5c-security
+    rules:
+      - alert: G5cTokenChecksRejected
+        expr: sum by (job) (rate(g5c_oauth_checks_total{result!="ok"}[5m])) > 1
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $labels.job }} refuses {{ $value | humanize }} requests/s for a missing or invalid access token"
+          runbook: "docs/ops/runbooks.md#access-token-refusals"
+      - alert: G5cNasIntegrityFailures
+        expr: increase(g5c_amf_nas_integrity_failures_total[10m]) > 20
+        labels: {severity: warning}
+        annotations:
+          summary: "the AMF saw {{ $value }} NAS integrity failures in 10 minutes"
+          runbook: "docs/ops/runbooks.md#nas-integrity-failures"
+      - alert: G5cAuthenticationFailures
+        expr: sum(rate(g5c_amf_authentications_total{result="failed"}[5m])) / clamp_min(sum(rate(g5c_amf_authentications_total[5m])), 0.001) > 0.2
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "more than 20% of 5G-AKA runs fail"
+          runbook: "docs/ops/runbooks.md#authentication-failures"
+  - name: g5c-service
+    rules:
+      - alert: G5cRegistrationsRejected
+        expr: sum(rate(g5c_amf_registrations_total{result="rejected"}[5m])) / clamp_min(sum(rate(g5c_amf_registrations_total[5m])), 0.001) > 0.1
+        for: 10m
+        labels: {severity: critical}
+        annotations:
+          summary: "more than 10% of registrations are rejected"
+          runbook: "docs/ops/runbooks.md#registrations-rejected"
+      - alert: G5cSbiServerErrors
+        expr: sum by (job) (rate(g5c_sbi_requests_total{status=~"5.."}[5m])) / clamp_min(sum by (job) (rate(g5c_sbi_requests_total[5m])), 0.001) > 0.02
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: "{{ $labels.job }}: more than 2% of SBI requests end in a 5xx"
+          runbook: "docs/ops/runbooks.md#sbi-errors"
+      - alert: G5cSbiLatencyHigh
+        expr: histogram_quantile(0.99, sum by (job, le) (rate(g5c_sbi_request_duration_seconds_bucket[5m]))) > 0.5
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $labels.job }}: p99 SBI latency above 500 ms"
+          runbook: "docs/ops/runbooks.md#sbi-errors"
+      - alert: G5cUpfLost
+        expr: increase(g5c_smf_upf_lost_total[5m]) > 0 or increase(g5c_smf_upf_down_total[5m]) > 0
+        labels: {severity: critical}
+        annotations:
+          summary: "the SMF lost its association with a UPF"
+          runbook: "docs/ops/runbooks.md#upf-lost"
+      - alert: G5cN4Timeouts
+        expr: increase(g5c_smf_n4_timeouts_total[5m]) > 5
+        labels: {severity: warning}
+        annotations:
+          summary: "PFCP requests of the SMF time out"
+          runbook: "docs/ops/runbooks.md#upf-lost"
+      - alert: G5cNoGnbConnected
+        expr: g5c_amf_gnbs == 0
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "no gNB is connected to the AMF"
+          runbook: "docs/ops/runbooks.md#no-gnb"
+      - alert: G5cPduSessionsDropToZero
+        expr: g5c_smf_pdu_sessions_active == 0 and (max_over_time(g5c_smf_pdu_sessions_active[1h]) > 0)
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "all PDU sessions are gone while there were some in the last hour"
+          runbook: "docs/ops/runbooks.md#upf-lost"
+  - name: g5c-capacity
+    rules:
+      - alert: G5cUeAddressPoolHigh
+        expr: g5c_smf_ue_addresses_in_use > 0.8 * 65000
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "more than 80% of a /16 UE address pool is in use"
+          runbook: "docs/ops/runbooks.md#capacity"
+      - alert: G5cUpfDroppedPackets
+        expr: sum(rate(g5c_upf_dropped_packets_total[5m])) > 100
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "the UPF drops {{ $value | humanize }} packets/s"
+          runbook: "docs/ops/runbooks.md#capacity"
+  - name: g5c-recording
+    rules:
+      - record: g5c:registration_success_ratio:rate5m
+        expr: 1 - (sum(rate(g5c_amf_registrations_total{result="rejected"}[5m])) / clamp_min(sum(rate(g5c_amf_registrations_total[5m])), 0.001))
+      - record: g5c:sbi_request_rate:rate5m
+        expr: sum by (job) (rate(g5c_sbi_requests_total[5m]))
+      - record: g5c:sbi_latency_p99:5m
+        expr: histogram_quantile(0.99, sum by (job, le) (rate(g5c_sbi_request_duration_seconds_bucket[5m])))

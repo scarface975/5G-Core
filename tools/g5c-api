@@ -1,0 +1,227 @@
+#!/usr/bin/env python3
+"""g5c-api: start, watch and stop scenario runs from CI or a notebook over HTTP (backlog B-07).
+
+  g5c-api --token-file F [--bind 127.0.0.1] [--port 8480] [--cert C --key K] [--scenarios DIR] [--runner "CMD {files}"]
+
+  GET    /v1/scenarios                  the scenario files available (name, steps)
+  POST   /v1/runs                       {"scenarios": ["basic-wave", ...]} or {"yaml": "..."}  -> 202 {"id", "status": "running"}   (one run at a time: 409 while another runs)
+  GET    /v1/runs                       the runs of this process
+  GET    /v1/runs/{id}                  status (running | passed | failed | stopped), start and end time, exit code, the output so far
+  DELETE /v1/runs/{id}                  stop a running run
+  GET    /v1/metrics/{function}         the function's /metrics, fetched through the cluster script (404 when no cluster tooling is configured)
+  GET    /openapi.json                  this API, as OpenAPI (tools/g5c-sdk makes a Python client from it)
+Every request except /openapi.json needs `Authorization: Bearer <token>`; the token comes from a file (mode 0600) and is compared in constant time. The API binds to 127.0.0.1 by default and speaks
+plain HTTP/1.1 unless --cert and --key are given (then TLS); a run executes the runner command, by default `deploy/run/g5c-cluster.sh ns scenario {files}`, which brings a private cluster up for
+the run and removes it afterwards. HTTP/1.1 with polling is what this first version offers; a WebSocket stream of the output is not built."""
+import argparse
+import hmac
+import json
+import os
+import re
+import shlex
+import signal
+import ssl
+import subprocess
+import sys
+import threading
+import time
+import uuid
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+
+OPENAPI = {
+    "openapi": "3.0.3", "info": {"title": "g5c automation API", "version": "1"},
+    "paths": {
+        "/v1/scenarios": {"get": {"summary": "scenario files"}},
+        "/v1/runs": {"get": {"summary": "runs"}, "post": {"summary": "start a run"}},
+        "/v1/runs/{id}": {"get": {"summary": "status and output"}, "delete": {"summary": "stop"}},
+        "/v1/metrics/{function}": {"get": {"summary": "a function's metrics"}},
+    },
+}
+
+
+class Api:
+    def __init__(self, token, scenarios_dir, runner, metrics_cmd=None):
+        self.token, self.dir, self.runner, self.metrics_cmd = token, Path(scenarios_dir), runner, metrics_cmd
+        self.runs, self.lock = {}, threading.Lock()
+
+    def scenario_files(self):
+        return {f.stem: f for f in sorted(self.dir.glob("*.yaml")) + sorted(self.dir.glob("*.json"))}
+
+    def start(self, names=None, yaml_text=None):
+        with self.lock:
+            if any(r["status"] == "running" for r in self.runs.values()):
+                return 409, {"error": "another run is in progress"}
+            files = []
+            if yaml_text is not None:
+                import tempfile
+                fd, path = tempfile.mkstemp(suffix=".yaml", prefix="g5c-run-")
+                os.write(fd, yaml_text.encode())
+                os.close(fd)
+                files = [path]
+            else:
+                avail = self.scenario_files()
+                for n in names or []:
+                    if n not in avail:
+                        return 404, {"error": "no scenario named %s" % n}
+                    files.append(str(avail[n]))
+            if not files:
+                return 400, {"error": "give scenarios (names) or yaml"}
+            if yaml_text is not None:
+                from importlib.machinery import SourceFileLoader
+                import importlib.util
+                spec = importlib.util.spec_from_loader("sc", SourceFileLoader("sc", str(ROOT / "tools" / "g5c-scenario")))
+                sc = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(sc)
+                errs = sc.validate(sc.load_doc(files[0]))
+                if errs:
+                    return 400, {"error": "invalid scenario", "problems": errs}
+            rid = uuid.uuid4().hex[:12]
+            cmd = [a.replace("{files}", " ").strip() for a in shlex.split(self.runner)]
+            cmd = [c for c in cmd if c] + (files if "{files}" in self.runner else [])
+            run = {"id": rid, "status": "running", "started": time.time(), "ended": None, "exit": None, "output": "", "scenarios": files}
+            self.runs[rid] = run
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, start_new_session=True)
+            run["proc"] = proc
+            threading.Thread(target=self._pump, args=(run, proc), daemon=True).start()
+            return 202, {"id": rid, "status": "running"}
+
+    def _pump(self, run, proc):
+        for line in proc.stdout:
+            run["output"] = (run["output"] + line)[-200000:]
+        proc.wait()
+        run["exit"], run["ended"] = proc.returncode, time.time()
+        if run["status"] == "running":
+            run["status"] = "passed" if proc.returncode == 0 else "failed"
+
+    def stop(self, rid):
+        run = self.runs.get(rid)
+        if run is None:
+            return 404, {"error": "no such run"}
+        if run["status"] == "running":
+            run["status"] = "stopped"
+            try:
+                os.killpg(run["proc"].pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+        return 200, self.view(run, False)
+
+    @staticmethod
+    def view(run, output=True):
+        v = {k: run[k] for k in ("id", "status", "started", "ended", "exit", "scenarios")}
+        if output:
+            v["output"] = run["output"]
+        return v
+
+
+def make_handler(api):
+    class H(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def log_message(self, *a):
+            pass
+
+        def _reply(self, code, obj):
+            body = json.dumps(obj).encode()
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            if code == 401:
+                self.send_header("WWW-Authenticate", "Bearer")
+            self.end_headers()
+            self.wfile.write(body)
+
+        def _authed(self):
+            got = self.headers.get("Authorization", "")
+            return got.startswith("Bearer ") and hmac.compare_digest(got[7:].encode(), api.token.encode())
+
+        def _route(self, method):
+            path = self.path.split("?")[0]
+            if path == "/openapi.json" and method == "GET":
+                return self._reply(200, OPENAPI)
+            if not self._authed():
+                return self._reply(401, {"error": "bearer token required"})
+            if path == "/v1/scenarios" and method == "GET":
+                out = []
+                for n, f in api.scenario_files().items():
+                    try:
+                        text = f.read_text()
+                        out.append({"name": n, "steps": len(re.findall(r"^\s*- \w+:", text, re.M))})
+                    except OSError:
+                        pass
+                return self._reply(200, out)
+            if path == "/v1/runs" and method == "GET":
+                return self._reply(200, [api.view(r, False) for r in api.runs.values()])
+            if path == "/v1/runs" and method == "POST":
+                try:
+                    n = int(self.headers.get("Content-Length", "0"))
+                    body = json.loads(self.rfile.read(n) or b"{}") if n <= 1_000_000 else None
+                except ValueError:
+                    body = None
+                if not isinstance(body, dict):
+                    return self._reply(400, {"error": "a JSON object is expected"})
+                code, obj = api.start(body.get("scenarios"), body.get("yaml"))
+                return self._reply(code, obj)
+            m = re.fullmatch(r"/v1/runs/([0-9a-f]{12})", path)
+            if m:
+                run = api.runs.get(m.group(1))
+                if method == "GET":
+                    return self._reply(200, api.view(run)) if run else self._reply(404, {"error": "no such run"})
+                if method == "DELETE":
+                    code, obj = api.stop(m.group(1))
+                    return self._reply(code, obj)
+            m = re.fullmatch(r"/v1/metrics/([a-z]+)", path)
+            if m and method == "GET":
+                if not api.metrics_cmd:
+                    return self._reply(404, {"error": "no cluster tooling configured"})
+                p = subprocess.run(shlex.split(api.metrics_cmd.replace("{function}", m.group(1))), capture_output=True, text=True, timeout=30)
+                return self._reply(200 if p.returncode == 0 else 502, {"function": m.group(1), "metrics": p.stdout})
+            return self._reply(404, {"error": "not found"})
+
+        def do_GET(self): self._route("GET")
+        def do_POST(self): self._route("POST")
+        def do_DELETE(self): self._route("DELETE")
+
+    return H
+
+
+def serve(api, bind, port, cert=None, key=None):
+    srv = ThreadingHTTPServer((bind, port), make_handler(api))
+    if cert:
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ctx.load_cert_chain(cert, key)
+        srv.socket = ctx.wrap_socket(srv.socket, server_side=True)
+    srv.daemon_threads = True
+    return srv
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--token-file", required=True)
+    ap.add_argument("--bind", default="127.0.0.1")
+    ap.add_argument("--port", type=int, default=8480)
+    ap.add_argument("--cert")
+    ap.add_argument("--key")
+    ap.add_argument("--scenarios", default=str(ROOT / "scenarios"))
+    ap.add_argument("--runner", default="bash %s ns scenario {files}" % (ROOT / "deploy" / "run" / "g5c-cluster.sh"))
+    ap.add_argument("--metrics-cmd", help="command printing a function's metrics, {function} replaced")
+    a = ap.parse_args()
+    st = os.stat(a.token_file)
+    if st.st_mode & 0o077:
+        sys.exit("g5c-api: %s must not be readable by others (chmod 600)" % a.token_file)
+    token = Path(a.token_file).read_text().strip()
+    if len(token) < 16:
+        sys.exit("g5c-api: the token must have at least 16 characters")
+    srv = serve(Api(token, a.scenarios, a.runner, a.metrics_cmd), a.bind, a.port, a.cert, a.key)
+    print("g5c-api on %s:%d (%s)" % (a.bind, srv.server_address[1], "TLS" if a.cert else "plain HTTP"), flush=True)
+    try:
+        srv.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

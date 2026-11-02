@@ -1,0 +1,97 @@
+#!/usr/bin/env python3
+"""g5c-trace: the logs of all functions joined by trace id into one timeline per procedure (backlog C-03).
+
+  g5c-trace LOGDIR|LOGFILE... [--supi imsi-...] [--id TRACEID] [--min-functions N] [--json]
+
+Every function writes `trace=<id>` on a log line (or `"trace_id"` in JSON logs) written while it handles a request of a trace; the AMF starts one trace per UE connection and the SBI
+carries it to the other functions in the `traceparent` header (W3C trace context). The function is taken from the file name (amf.log -> amf). Without --id, the traces are listed with the
+functions they touched and how long they took; --supi keeps the traces in which that identity appears; --id prints the whole timeline of one trace. N4 (PFCP) carries no trace id, so
+the UPF shows only through what the SMF logs about it. Exporting to an OpenTelemetry collector is not built: the ids are standard, so a collector-side join of the same logs works."""
+import argparse
+import json
+import re
+import sys
+from pathlib import Path
+
+TEXT = re.compile(r"^(\S+)\s+(\w+)\s+(\S+?):\s(.*?)\s+trace=([0-9a-f]{32})\s*$")
+
+
+def parse_line(line):
+    line = line.rstrip("\n")
+    if line.startswith("{"):
+        try:
+            d = json.loads(line)
+        except ValueError:
+            return None
+        if "trace_id" in d:
+            return d.get("timestamp", ""), d.get("level", ""), d.get("target", ""), d.get("message", ""), d["trace_id"]
+        return None
+    m = TEXT.match(line)
+    return m.groups() if m else None
+
+
+def load(paths):
+    files = []
+    for p in paths:
+        p = Path(p)
+        files += sorted(p.glob("*.log")) if p.is_dir() else [p]
+    traces = {}
+    for f in files:
+        fn = f.stem
+        with open(f, encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                r = parse_line(line)
+                if r:
+                    ts, lvl, target, msg, tid = r
+                    traces.setdefault(tid, []).append({"ts": ts, "fn": fn, "level": lvl, "target": target, "msg": msg})
+    for ev in traces.values():
+        ev.sort(key=lambda e: e["ts"])
+    return traces
+
+
+def seconds(a, b):
+    from datetime import datetime
+    f = lambda s: datetime.strptime(s[:26], "%Y-%m-%dT%H:%M:%S.%f")
+    try:
+        return (f(b) - f(a)).total_seconds()
+    except ValueError:
+        return 0.0
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("paths", nargs="+")
+    ap.add_argument("--supi")
+    ap.add_argument("--id")
+    ap.add_argument("--min-functions", type=int, default=1)
+    ap.add_argument("--json", action="store_true")
+    a = ap.parse_args()
+    traces = load(a.paths)
+    if a.id:
+        traces = {k: v for k, v in traces.items() if k.startswith(a.id)}
+    if a.supi:
+        traces = {k: v for k, v in traces.items() if any(a.supi in e["msg"] for e in v)}
+    traces = {k: v for k, v in traces.items() if len({e["fn"] for e in v}) >= a.min_functions}
+    if a.json:
+        json.dump(traces, sys.stdout, indent=1)
+        print()
+        return 0 if traces else 1
+    if not traces:
+        print("no trace found")
+        return 1
+    if a.id:
+        for tid, ev in traces.items():
+            print("trace %s  (%d lines, %s, %.3f s)" % (tid, len(ev), ", ".join(sorted({e["fn"] for e in ev})), seconds(ev[0]["ts"], ev[-1]["ts"])))
+            t0 = ev[0]["ts"]
+            for e in ev:
+                print("  +%7.3f  %-5s %-5s %s" % (seconds(t0, e["ts"]), e["fn"], e["level"], e["msg"]))
+        return 0
+    for tid, ev in sorted(traces.items(), key=lambda kv: kv[1][0]["ts"]):
+        fns = sorted({e["fn"] for e in ev})
+        print("%s  %3d lines  %5.3f s  %s" % (tid, len(ev), seconds(ev[0]["ts"], ev[-1]["ts"]), ", ".join(fns)))
+    print("%d traces" % len(traces))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,17 @@
+# Compose AMF configuration. No NRF in this stack yet, so peers are addressed directly. The gNBs reach NGAP at 10.100.0.5:38412 (SCTP).
+name: amf-1
+plmn: { mcc: '001', mnc: '01' }
+sbi: { address: 0.0.0.0, port: 7779 }
+log: { level: info, json: true }
+amf:
+  self_uri: 'http://amf:7779'
+  guami: { region: 2, set: 1, pointer: 0 }
+  ngap: { address: 10.100.0.5, port: 38412 }
+  tais: [ { tac: 1 } ]
+  slices: [ { sst: 1 } ]
+  ausf: { uri: 'http://ausf:7774' }
+  udm: { uri: 'http://udm:7773' }
+  pcf: { uri: 'http://pcf:7777' }
+  smf: { uri: 'http://smf:7778' }
+  default_dnn: internet
+  state_file: /var/lib/g5c/amf-state.json

@@ -1,0 +1,372 @@
+﻿[
+    {
+        "spec":  "TS 23.003",
+        "version":  "16.12.0",
+        "release":  16,
+        "file":  "23003-gc0.zip",
+        "url":  "https://www.3gpp.org/ftp/Specs/archive/23_series/23.003/23003-gc0.zip",
+        "sha256":  "33a5785840cf38936b4b586972b71ff9fc7f0916e3c80739a665984d19b6f7f6",
+        "bytes":  744598,
+        "fetched":  "2026-10-05"
+    },
+    {
+        "spec":  "TS 23.501",
+        "version":  "16.20.0",
+        "release":  16,
+        "file":  "23501-gk0.zip",
+        "url":  "https://www.3gpp.org/ftp/Specs/archive/23_series/23.501/23501-gk0.zip",
+        "sha256":  "1c9864f75fedf87ab754689f23b027b08d0f7c6f3111a74df2cf64b59f14cd48",
+        "bytes":  5780358,
+        "fetched":  "2026-10-05"
+    },
+    {
+        "spec":  "TS 23.502",
+        "version":  "16.19.0",
+        "release":  16,
+        "file":  "23502-gj0.zip",
+        "url":  "https://www.3gpp.org/ftp/Specs/archive/23_series/23.502/23502-gj0.zip",
+        "sha256":  "1289941e25ee8c31e597981e2518dcd492838b446ae7e35070b28b11ac2102a6",
+        "bytes":  11338160,
+        "fetched":  "2026-10-05"
+    },
+    {
+        "spec":  "TS 23.503",
+        "version":  "16.15.0",
+        "release":  16,
+        "file":  "23503-gf0.zip",
+        "url":  "https://www.3gpp.org/ftp/Specs/archive/23_series/23.503/23503-gf0.zip",
+        "sha256":  "e4627cf6a1199e9ce2f5d861d0a75d04f44a1fc4b8f740ffb993843962139a40",
+        "bytes":  562720,
+        "fetched":  "2026-10-05"
+    },
+    {
+        "spec":  "TS 24.008",
+        "version":  "16.7.0",
+        "release":  16,
+        "file":  "24008-g70.zip",
+        "url":  "https://www.3gpp.org/ftp/Specs/archive/24_series/24.008/24008-g70.zip",
+        "sha256":  "a528c9fbc2b6b73c45186675e6bfa480ca0bd3a30fa974543bf7a77f8d29b229",
+        "bytes":  3744064,
+        "fetched":  "2026-10-09"
+    },
+    {
+        "spec":  "TS 24.501",
+        "version":  "16.15.0",
+        "release":  16,
+        "file":  "24501-g.zip",
+        "url":  "https://www.3gpp.org/ftp/Specs/archive/24_series/24.501/24501-gf0.zip",
+        "sha256":  "2b484ccb1e7a25e1d1c48f00ff0eb024bf9e65e63628540d60d1a4e9bed4ec3a",
+        "bytes":  3271490,
+        "fetched":  "2026-09-30"
+    },
+    {
+        "spec":  "TS 29.244",
+        "version":  "16.13.0",
+        "release":  16,
+        "file":  "29244-gd0.zip",
+        "url":  "https://www.3gpp.org/ftp/Specs/archive/29_series/29.244/29244-gd0.zip",
+        "sha256":  "72de37db0c59ecde3cbe2f6fb956c210b75f37901902928f9cdd7ca55ac779a8",
+        "bytes":  1530813,
+        "fetched":  "2026-10-05"
+    },
+    {
+        "spec":  "TS 29.281",
+        "version":  "16.2.0",
+        "release":  16,
+        "file":  "29281-g20.zip",
+        "url":  "https://www.3gpp.org/ftp/Specs/archive/29_series/29.281/29281-g20.zip",
+        "sha256":  "1cd5d70ebbe60393c215cf259196e7ac18622bea540c8c12d80fefceb10fdece",
+        "bytes":  162140,
+        "fetched":  "2026-10-05"
+    },
+    {
+        "spec":  "TS 29.500",
+        "version":  "16.15.0",
+        "release":  16,
+        "file":  "29500-gf0.zip",
+        "url":  "https://www.3gpp.org/ftp/Specs/archive/29_series/29.500/29500-gf0.zip",
+        "sha256":  "116c179a7e10ced1da5bdd8802d5a7f45d310cfe61dfca84fe90b5529573c2b0",
+        "bytes":  342223,
+        "fetched":  "2026-10-05"
+    },
+    {
+        "spec":  "TS 29.501",
+        "version":  "16.8.0",
+        "release":  16,
+        "file":  "29501-g80.zip",
+        "url":  "https://www.3gpp.org/ftp/Specs/archive/29_series/29.501/29501-g80.zip",
+        "sha256":  "478bd5828a8651989a88f53895359f3cf9bd56dd8e48dad2ee5b3540cd9995d6",
+        "bytes":  558672,
+        "fetched":  "2026-10-05"
+    },
+    {
+        "spec":  "TS 29.502",
+        "version":  "16.17.0",
+        "release":  16,
+        "file":  "29502-gh0.zip",
+        "url":  "https://www.3gpp.org/ftp/Specs/archive/29_series/29.502/29502-gh0.zip",
+        "sha256":  "4101f891835a40e5c62c8321b5089ba5670aa8d43bf79eff1fc73a851d1bd388",
+        "bytes":  1857666,
+        "fetched":  "2026-10-09"
+    },
+    {
+        "spec":  "TS 29.503",
+        "version":  "16.18.0",
+        "release":  16,
+        "file":  "29503-gi0.zip",
+        "url":  "https://www.3gpp.org/ftp/Specs/archive/29_series/29.503/29503-gi0.zip",
+        "sha256":  "f2ddc6ebf9f44d9638c9f114f9f3865e6826acea9e26117bcf57d3bd9f60fba6",
+        "bytes":  3082828,
+        "fetched":  "2026-10-05"
+    },
+    {
+        "spec":  "TS 29.504",
+        "version":  "16.14.0",
+        "release":  16,
+        "file":  "29504-ge0.zip",
+        "url":  "https://www.3gpp.org/ftp/Specs/archive/29_series/29.504/29504-ge0.zip",
+        "sha256":  "ae36ef329fd7e8c14bf838cbe49de9510beb37f00d6fc2bef43a6b60d1bf4549",
+        "bytes":  451448,
+        "fetched":  "2026-10-05"
+    },
+    {
+        "spec":  "TS 29.505",
+        "version":  "16.12.0",
+        "release":  16,
+        "file":  "29505-gc0.zip",
+        "url":  "https://www.3gpp.org/ftp/Specs/archive/29_series/29.505/29505-gc0.zip",
+        "sha256":  "9c88c27b3fc4155acafb7f575e0e4ceef550a3735e08eda93154dd3618eda45c",
+        "bytes":  582313,
+        "fetched":  "2026-10-05"
+    },
+    {
+        "spec":  "TS 29.507",
+        "version":  "16.11.0",
+        "release":  16,
+        "file":  "29507-gb0.zip",
+        "url":  "https://www.3gpp.org/ftp/Specs/archive/29_series/29.507/29507-gb0.zip",
+        "sha256":  "ba0af38d11cf42683883000d20f98288c534677239dc20419ee223b71abf1948",
+        "bytes":  974410,
+        "fetched":  "2026-10-05"
+    },
+    {
+        "spec":  "TS 29.509",
+        "version":  "16.11.0",
+        "release":  16,
+        "file":  "29509-gb0.zip",
+        "url":  "https://www.3gpp.org/ftp/Specs/archive/29_series/29.509/29509-gb0.zip",
+        "sha256":  "0d7c95a311e806cbed04dfe8afd1f385f32fd6f3d25bdf9105eeddbbd7d37dd8",
+        "bytes":  596842,
+        "fetched":  "2026-10-05"
+    },
+    {
+        "spec":  "TS 29.510",
+        "version":  "16.15.0",
+        "release":  16,
+        "file":  "29510-gf0.zip",
+        "url":  "https://www.3gpp.org/ftp/Specs/archive/29_series/29.510/29510-gf0.zip",
+        "sha256":  "8d88c5a4fa7ab0c2a8e6e4b5bf93c0cb40a6e7c9301b1e21ad618a2ef1ad7174",
+        "bytes":  1651008,
+        "fetched":  "2026-10-05"
+    },
+    {
+        "spec":  "TS 29.512",
+        "version":  "16.23.0",
+        "release":  16,
+        "file":  "29512-gn0.zip",
+        "url":  "https://www.3gpp.org/ftp/Specs/archive/29_series/29.512/29512-gn0.zip",
+        "sha256":  "f5512749cc94d5ca21d70f8a4f197c750050f5b96387c2ad92352552294ee36f",
+        "bytes":  1265497,
+        "fetched":  "2026-10-05"
+    },
+    {
+        "spec":  "TS 29.518",
+        "version":  "16.19.0",
+        "release":  16,
+        "file":  "29518-gj0.zip",
+        "url":  "https://www.3gpp.org/ftp/Specs/archive/29_series/29.518/29518-gj0.zip",
+        "sha256":  "68fa3abe4380f40aaf4a4e6ba498f896bca44fa4283cbfa28ca4bc5941f910e8",
+        "bytes":  1993687,
+        "fetched":  "2026-10-09"
+    },
+    {
+        "spec":  "TS 29.519",
+        "version":  "16.14.0",
+        "release":  16,
+        "file":  "29519-ge0.zip",
+        "url":  "https://www.3gpp.org/ftp/Specs/archive/29_series/29.519/29519-ge0.zip",
+        "sha256":  "92ff1b30635bf3f61495b4fbc434c4e0195b0c009208938c3b4ee3ac3fd468ca",
+        "bytes":  1113047,
+        "fetched":  "2026-10-05"
+    },
+    {
+        "spec":  "TS 29.571",
+        "version":  "16.15.0",
+        "release":  16,
+        "file":  "29571-gf0.zip",
+        "url":  "https://www.3gpp.org/ftp/Specs/archive/29_series/29.571/29571-gf0.zip",
+        "sha256":  "6cd31273284db59e000f8d9dcdcc1adbf6965cbef7ddf34d00e24d24c82881bb",
+        "bytes":  339595,
+        "fetched":  "2026-10-05"
+    },
+    {
+        "spec":  "TS 33.220",
+        "version":  "16.4.0",
+        "release":  16,
+        "file":  "33220-g40.zip",
+        "url":  "https://www.3gpp.org/ftp/Specs/archive/33_series/33.220/33220-g40.zip",
+        "sha256":  "2cbb45fb8dabb3db3e7c10ef54f3f43a6b621ffb6832d91dcc458ffe4b91baee",
+        "bytes":  407147,
+        "fetched":  "2026-10-05"
+    },
+    {
+        "spec":  "TS 33.401",
+        "version":  "16.4.0",
+        "release":  16,
+        "file":  "33401-g40.zip",
+        "url":  "https://www.3gpp.org/ftp/Specs/archive/33_series/33.401/33401-g40.zip",
+        "sha256":  "4666be3e16c7a36f0209cf05f8ee5a74450953286e9984cee7eb041a225f2dca",
+        "bytes":  1267992,
+        "fetched":  "2026-10-01"
+    },
+    {
+        "spec":  "TS 33.501",
+        "version":  "16.20.0",
+        "release":  16,
+        "file":  "33501-gk0.zip",
+        "url":  "https://www.3gpp.org/ftp/Specs/archive/33_series/33.501/33501-gk0.zip",
+        "sha256":  "f3cf4b2e8056388363797e716575cfbd4b892019f745093f9a2c2d3832a32952",
+        "bytes":  3958961,
+        "fetched":  "2026-10-05"
+    },
+    {
+        "spec":  "TS 35.208",
+        "version":  "16.0.0",
+        "release":  16,
+        "file":  "35208-g00.zip",
+        "url":  "https://www.3gpp.org/ftp/Specs/archive/35_series/35.208/35208-g00.zip",
+        "sha256":  "98128c768443d870103e436a00069dcfb089d7e1de6daeca46c576688becb397",
+        "bytes":  52128,
+        "fetched":  "2026-10-01"
+    },
+    {
+        "spec":  "TS 38.413",
+        "version":  "16.18.0",
+        "release":  16,
+        "file":  "38413-gi0.zip",
+        "url":  "https://www.3gpp.org/ftp/Specs/archive/38_series/38.413/38413-gi0.zip",
+        "sha256":  "b004072805f25c57ef8abac49c640acb4f98f38f73af3d0d00643b54d8fb4fcb",
+        "bytes":  2582760,
+        "fetched":  "2026-09-30"
+    },
+    {
+        "spec":  "TS 38.415",
+        "version":  "16.6.0",
+        "release":  16,
+        "file":  "38415-g60.zip",
+        "url":  "https://www.3gpp.org/ftp/Specs/archive/38_series/38.415/38415-g60.zip",
+        "sha256":  "0a54fa84efb85eb7c377160e4458cb8cf90f91cce57f5598fd5f06da4c7c9f6f",
+        "bytes":  779405,
+        "fetched":  "2026-10-05"
+    },
+    {
+        "spec":  "RFC 4187",
+        "version":  "0",
+        "release":  0,
+        "file":  "txt/rfc4187.txt",
+        "url":  "https://www.rfc-editor.org/rfc/rfc4187.txt",
+        "sha256":  "383688f625086ba98517dc6da4c51269b63d11f0bc22253c3302731070fde05e",
+        "bytes":  194958,
+        "fetched":  "2026-10-21"
+    },
+    {
+        "spec":  "RFC 5448",
+        "version":  "0",
+        "release":  0,
+        "file":  "txt/rfc5448.txt",
+        "url":  "https://www.rfc-editor.org/rfc/rfc5448.txt",
+        "sha256":  "7af030a5873876612d64db54dc90b642a561e528d08c42f3e2e90e2394c1cd6b",
+        "bytes":  60641,
+        "fetched":  "2026-10-21"
+    },
+    {
+        "spec":  "RFC 9048",
+        "version":  "0",
+        "release":  0,
+        "file":  "txt/rfc9048.txt",
+        "url":  "https://www.rfc-editor.org/rfc/rfc9048.txt",
+        "sha256":  "c9d9d2d9189eaff6c45468b67603ba917430a23693beec6d8441c44581e35867",
+        "bytes":  104997,
+        "fetched":  "2026-10-21"
+    },
+    {
+        "spec":  "TS 31.102",
+        "version":  "16.17.0",
+        "release":  16,
+        "file":  "31102-gh0.zip",
+        "url":  "https://www.3gpp.org/ftp/Specs/archive/31_series/31.102/31102-gh0.zip",
+        "sha256":  "0bfee001547ec9a23c1032f297c749c29908ef2393d729d4487fce574f306d91",
+        "bytes":  1267541,
+        "fetched":  "2026-10-21"
+    },
+    {
+        "spec":  "TS 29.531",
+        "version":  "16.11.0",
+        "release":  16,
+        "file":  "29531-gb0.zip",
+        "url":  "https://www.3gpp.org/ftp/Specs/archive/29_series/29.531/29531-gb0.zip",
+        "sha256":  "533432bbd5e932d015ddde0341528f9d38ccf303a8d49d9a9a46cf1e5e2a1382",
+        "bytes":  454193,
+        "fetched":  "2026-10-22"
+    },
+    {
+        "spec":  "TS 29.522",
+        "version":  "16.18.0",
+        "release":  16,
+        "file":  "29522-gi0.zip",
+        "url":  "https://www.3gpp.org/ftp/Specs/archive/29_series/29.522/29522-gi0.zip",
+        "sha256":  "06e8bfe312b44e2110258cf7784d2b1ae82eaf46801ec8d96e15c2ade2fcdd85",
+        "bytes":  1201595,
+        "fetched":  "2026-10-23"
+    },
+    {
+        "spec":  "TS 29.591",
+        "version":  "16.7.0",
+        "release":  16,
+        "file":  "29591-g70.zip",
+        "url":  "https://www.3gpp.org/ftp/Specs/archive/29_series/29.591/29591-g70.zip",
+        "sha256":  "e67fdf39cbc1fad97f7e8ed4d2199b6744708b3617338ca8304cf4cf54ea05ec",
+        "bytes":  211792,
+        "fetched":  "2026-10-23"
+    },
+    {
+        "spec":  "TS 29.514",
+        "version":  "16.23.0",
+        "release":  16,
+        "file":  "29514-gn0.zip",
+        "url":  "https://www.3gpp.org/ftp/Specs/archive/29_series/29.514/29514-gn0.zip",
+        "sha256":  "e1a1e45fdaf16a260f530a7dd1e4f7eaf030d59a7dc7e2e434df2c815d7830c7",
+        "bytes":  1204993,
+        "fetched":  "2026-10-23"
+    },
+    {
+        "spec":  "TS 29.122",
+        "version":  "16.19.0",
+        "release":  16,
+        "file":  "29122-gj0.zip",
+        "url":  "https://www.3gpp.org/ftp/Specs/archive/29_series/29.122/29122-gj0.zip",
+        "sha256":  "fb32407a667b2044885b763b62c06332ee6b5fe3cf499f65f0e202ee04a2a1dd",
+        "bytes":  1301101,
+        "fetched":  "2026-10-23"
+    },
+    {
+        "spec":  "TS 29.521",
+        "version":  "16.11.0",
+        "release":  16,
+        "file":  "29521-gb0.zip",
+        "url":  "https://www.3gpp.org/ftp/Specs/archive/29_series/29.521/29521-gb0.zip",
+        "sha256":  "1372f0ebb474cd717d69aa9d31e58567198ffd7cad1b3a9fe4269aa14fea86ec",
+        "bytes":  871270,
+        "fetched":  "2026-10-26"
+    }
+]

@@ -1,0 +1,8 @@
+# Compose udr configuration (see configs/udr.yaml for every option).
+name: udr-1
+plmn: { mcc: '001', mnc: '01' }
+sbi: { address: 0.0.0.0, port: 7790 }
+log: { level: info, json: true }
+nrf: { uri: 'http://nrf:7777' }
+store: { type: file, path: /var/lib/g5c/udr.json }
+provisioning: { token_file: /etc/g5c/keys/udr-provisioning.token }

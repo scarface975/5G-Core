@@ -1,0 +1,5 @@
+# User plane traffic profile (B-02), no limit in the way: each UE sends 2 Mbit/s uplink for 1.5 s through the UPF and the UPF forwards what it was given.
+# Run in a cluster with the default session AMBR (1 Gbit/s).
+name: uplink traffic, nothing limiting
+steps:
+  - load: {ues: 4, gnbs: 2, traffic_mbps: 2, traffic_ms: 1500, expect_mbps: 2}

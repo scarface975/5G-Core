@@ -1,0 +1,582 @@
+{
+ "title": "Conformance matrix, Phase 8 (production hardening): security",
+ "note": "Same rules as the other matrices. The functions that take part in the tested rows are ours on both sides: Open5GS's functions send and check no access tokens.",
+ "specs": {
+  "TS 33.501": "33501-gk0.txt"
+ },
+ "rows": [
+  {
+   "id": "SEC-OA-01",
+   "phase": 8,
+   "nf": "all",
+   "procedure": "producer side: a request for a service of the function needs a bearer token that the NRF signed; the signature is checked against the NRF's key set (/oauth2/jwks), fetched on first use and again when the key id is unknown or the set is old (never more than every two seconds); no token, a damaged one, one with another algorithm (alg none), another key or another payload are 401 with WWW-Authenticate; when the NRF cannot be reached and no key is held, 503",
+   "spec": "TS 33.501",
+   "clause": "13.4.1.1.2",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "nrf_oauth2",
+     "file": "nf/nrf/tests/test_oauth2.c",
+     "fn": "test_guard_and_tokens"
+    },
+    {
+     "ctest": "nrf_oauth2",
+     "file": "nf/nrf/tests/test_oauth2.c",
+     "fn": "test_refused_and_unreachable"
+    }
+   ],
+   "evidence": "Oracle S4, S7 and S8 with every function ours (OUR_OAUTH2=1): every request between the functions that is for a service carries the access token of the NRF and every function refuses one without."
+  },
+  {
+   "id": "SEC-OA-02",
+   "phase": 8,
+   "nf": "all",
+   "procedure": "the claims: exp (a token is not accepted on or after it, with the configured leeway), iat and nbf not in the future, a subject; the audience is the function's NF type or its instance id (a string or a list); the scope holds the service the request is for; wrong audience or scope is 403 with the error of RFC 6750",
+   "spec": "TS 33.501",
+   "clause": "13.4.1.1.2",
+   "also": [
+    "13.4.1.1.1"
+   ],
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "nrf_oauth2",
+     "file": "nf/nrf/tests/test_oauth2.c",
+     "fn": "test_guard_and_tokens"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "SEC-OA-03",
+   "phase": 8,
+   "nf": "all",
+   "procedure": "what the check applies to: the requests for the services the function registers (the first path segment); health, metrics, callbacks, the admin and northbound APIs are not services of the NRF's token and are left to their own handling; a route that authenticates its callers itself (G5C_ROUTE_OWN_AUTH: the UDR's provisioning extensions) is left alone; the guard the function had before still runs for what passes",
+   "spec": "TS 33.501",
+   "clause": "13.4.1.1.2",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "nrf_oauth2",
+     "file": "nf/nrf/tests/test_oauth2.c",
+     "fn": "test_guard_and_tokens"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "SEC-OA-04",
+   "phase": 8,
+   "nf": "all",
+   "procedure": "consumer side: the SBI client of every function gets a token from the NRF (client credentials; the instance id, the NF type, the target type and the service as the scope) for a request to a service of another function and sends it; one request for a token per service, kept until shortly before it expires (exp is truncated to a second, so a second is taken off and the token is renewed at 80% of the rest), one request at a time per service; a refusal is remembered for 2 s; an Authorization header that is there is not replaced",
+   "spec": "TS 33.501",
+   "clause": "13.4.1.1.2",
+   "also": [
+    "13.4.1.1.1"
+   ],
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "nrf_oauth2",
+     "file": "nf/nrf/tests/test_oauth2.c",
+     "fn": "test_guard_and_tokens"
+    },
+    {
+     "ctest": "nrf_oauth2",
+     "file": "nf/nrf/tests/test_oauth2.c",
+     "fn": "test_refused_and_unreachable"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "SEC-OA-05",
+   "phase": 8,
+   "nf": "all",
+   "procedure": "the services of the NRF itself take a token as well when the consumer is configured to ask for one (optional, TS 33.501 13.3.1.3): discovery and subscriptions yes, the registration, heart-beat and deregistration of an instance no (the NRF lets them in)",
+   "spec": "TS 33.501",
+   "clause": "13.3.1.3",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "nrf_oauth2",
+     "file": "nf/nrf/tests/test_oauth2.c",
+     "fn": "test_guard_and_tokens"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "SEC-OA-06",
+   "phase": 8,
+   "nf": "all",
+   "procedure": "configuration (common section `oauth2: { enforce, acquire, leeway_s, jwks_refresh_s }`, needs `nrf.uri`): every wrong value is refused at start with the key that is wrong",
+   "spec": "TS 33.501",
+   "clause": "13.4.1",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "nrf_oauth2",
+     "file": "nf/nrf/tests/test_oauth2.c",
+     "fn": "test_config"
+    },
+    {
+     "ctest": "bad_configs_rejected",
+     "file": "tests/conformance/check_bad_configs.sh",
+     "fn": "-"
+    }
+   ],
+   "evidence": "5 bad configurations per function are rejected by the binaries (11 functions)."
+  },
+  {
+   "id": "SEC-OA-07",
+   "phase": 8,
+   "nf": "all",
+   "procedure": "the cluster enforces and acquires by default (G5C_OAUTH2=1): every function requires the token and asks for one; load, chaos and soak runs pass through it",
+   "spec": "TS 33.501",
+   "clause": "13.4.1",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "cluster_load",
+     "file": "deploy/run/g5c-cluster.sh",
+     "fn": "-"
+    },
+    {
+     "ctest": "cluster_chaos",
+     "file": "deploy/run/g5c-cluster.sh",
+     "fn": "-"
+    },
+    {
+     "ctest": "cluster_soak",
+     "file": "deploy/run/g5c-cluster.sh",
+     "fn": "-"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "SEC-OA-08",
+   "phase": 8,
+   "nf": "all",
+   "procedure": "the oracle with every function ours (OUR_OAUTH2=1) passes the registration, PDU session, policy push, AS session with QoS and the BSF binding scenarios",
+   "spec": "TS 33.501",
+   "clause": "13.4.1",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "sbi_oracle_interop",
+     "file": "tests/conformance/CMakeLists.txt",
+     "fn": "-"
+    }
+   ],
+   "evidence": "Oracle S4, S7 and S8 with every function ours (OUR_OAUTH2=1): every request between the functions that is for a service carries the access token of the NRF and every function refuses one without. Open5GS's functions send no tokens and check none, so they are not in these runs."
+  },
+  {
+   "id": "SEC-OA-09",
+   "phase": 8,
+   "nf": "UDR",
+   "procedure": "the provisioning token of the UDR's extension routes travels in its own header (x-g5c-provisioning-token; the bearer form is still accepted) so that Authorization is free for the NRF's token on the same requests",
+   "spec": "TS 33.501",
+   "clause": "13.4.1",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "cluster_load",
+     "file": "deploy/run/g5c-cluster.sh",
+     "fn": "-"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "SEC-TLS-01",
+   "phase": 8,
+   "nf": "all",
+   "procedure": "every SBI listener is TLS 1.2 or later with ALPN h2 and demands a client certificate signed by the cluster CA (mutual TLS); every outgoing request validates the server certificate against the CA (by IP address SAN or name) and presents the function's own certificate",
+   "spec": "TS 33.501",
+   "clause": "13.1",
+   "also": [
+    "13.3.2.1"
+   ],
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "sbi_router_h2_tls",
+     "file": "libs/sbi/tests/test_sbi.c",
+     "fn": "test_tls"
+    },
+    {
+     "ctest": "sbi_router_h2_tls",
+     "file": "libs/sbi/tests/test_sbi.c",
+     "fn": "test_tls_negative"
+    },
+    {
+     "ctest": "cluster_load_tls",
+     "file": "deploy/run/g5c-cluster.sh",
+     "fn": "-"
+    }
+   ],
+   "evidence": "libs/sbi test: a client trusting the CA works, one trusting another CA fails, a client without a certificate and one with a certificate of another CA are refused, a server certificate for another name is refused. The cluster runs 2000 UEs with TLS on every function (every function, the UPF's listener included)."
+  },
+  {
+   "id": "SEC-TLS-02",
+   "phase": 8,
+   "nf": "all",
+   "procedure": "a cluster PKI (deploy/run/g5c-pki.sh): a CA, one certificate per function (EC P-256, SANs of its addresses, server and client authentication), one for the operator; the cluster script makes it and writes https URIs and `sbi.tls` into every configuration (G5C_TLS=1; the demo launcher does by default)",
+   "spec": "TS 33.501",
+   "clause": "13.1",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "cluster_tls",
+     "file": "deploy/run/g5c-cluster.sh",
+     "fn": "do_tls"
+    },
+    {
+     "ctest": "cluster_load_tls",
+     "file": "deploy/run/g5c-cluster.sh",
+     "fn": "-"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "SEC-TLS-03",
+   "phase": 8,
+   "nf": "all",
+   "procedure": "refusals: a cleartext request to a TLS listener, a request without a client certificate, with a certificate of another CA, and a client that trusts another CA are all refused by a running cluster; the request with the cluster's certificate is served; no function warns about missing TLS",
+   "spec": "TS 33.501",
+   "clause": "13.3.2.1",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "cluster_tls",
+     "file": "deploy/run/g5c-cluster.sh",
+     "fn": "do_tls"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "SEC-TLS-04",
+   "phase": 8,
+   "nf": "all",
+   "procedure": "certificate rotation without a restart: SIGHUP makes every function read its certificate, key and CA again and use them for new connections as server and as client (server and client contexts are swapped under a lock, connections in progress keep theirs); a damaged or mismatching file is refused and the old certificates stay in use; all twelve listeners (the UPF's included) log the reload; traffic works through the rotated certificates",
+   "spec": "TS 33.501",
+   "clause": "13.1",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "sbi_router_h2_tls",
+     "file": "libs/sbi/tests/test_sbi.c",
+     "fn": "test_tls_rotation"
+    },
+    {
+     "ctest": "cluster_tls",
+     "file": "deploy/run/g5c-cluster.sh",
+     "fn": "do_tls"
+    }
+   ],
+   "evidence": "ASan and TSan runs pass the library test and the cluster test (the cluster runs the sanitized binaries)."
+  },
+  {
+   "id": "SEC-TLS-05",
+   "phase": 8,
+   "nf": "all",
+   "procedure": "chaos under mutual TLS: functions killed with SIGKILL and restarted under load recover and a clean wave passes",
+   "spec": "TS 33.501",
+   "clause": "13.1",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "cluster_chaos_tls",
+     "file": "deploy/run/g5c-cluster.sh",
+     "fn": "-"
+    }
+   ],
+   "evidence": "ctest cluster_chaos_tls (the chaos mode with G5C_TLS=1), also run by scripts/g5c_regress.sh with 200 UEs."
+  },
+  {
+   "id": "SEC-SEC-01",
+   "phase": 8,
+   "nf": "all",
+   "procedure": "secrets hygiene: no master key, home network key, admin or provisioning token, AF token by value in a log, a configuration or a state file; K and OPc not in the clear in any state file; key files and PKI private keys mode 600; configurations name files, never key values",
+   "spec": "TS 33.501",
+   "clause": "5.2.4",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "cluster_secrets",
+     "file": "deploy/run/g5c-cluster.sh",
+     "fn": "do_secrets"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "OPS-01",
+   "phase": 8,
+   "nf": "all",
+   "procedure": "Prometheus alert rules (availability, security, service, capacity), recording rules, scrape configuration with the cluster's client certificate, and a Grafana dashboard: every metric they use is registered by a function (checked against the sources)",
+   "spec": "-",
+   "clause": "-",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "ops_files_check",
+     "file": "tools/check_ops.py",
+     "fn": "-"
+    }
+   ],
+   "evidence": "deploy/ops/*; runbooks per alert in docs/ops/runbooks.md."
+  },
+  {
+   "id": "OPS-02",
+   "phase": 8,
+   "nf": "UDM / PCF",
+   "procedure": "audit log of provisioning and policy changes (tag g5c_audit: subscriber provisioned / deleted, policy put / deleted, session terminated)",
+   "spec": "-",
+   "clause": "-",
+   "status": "verified",
+   "tests": [
+    {
+     "ctest": "cluster_secrets",
+     "file": "deploy/run/g5c-cluster.sh",
+     "fn": "do_secrets"
+    }
+   ],
+   "evidence": "The lines are written by the admin handlers; the secrets check shows they carry no key."
+  },
+  {
+   "id": "NSSF-C-01",
+   "phase": 8,
+   "nf": "AMF",
+   "procedure": "the AMF as a consumer of Nnssf_NSSelection (registration): the subscribed and requested S-NSSAIs and the tracking area go to the NSSF (found through the NRF or `amf.nssf.uri`); the allowed NSSAI of the Registration Accept and the rejected S-NSSAIs come from its answer, cut to what the AMF serves; 403 (nothing available) rejects the registration with cause #62; no answer falls back to the AMF's own lists",
+   "spec": "TS 29.531",
+   "clause": "5.2.2.2.2",
+   "also": [
+    "TS 23.502 4.2.2.2.3"
+   ],
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "cluster_load",
+     "file": "deploy/run/g5c-cluster.sh",
+     "fn": "-"
+    }
+   ],
+   "evidence": "The cluster load (every UE registers through the NSSF) shows g5c_amf_nssf_selections_total{result=ok}; the unit and end-to-end tests of the AMF still run with its own lists."
+  },
+  {
+   "id": "NSSF-C-GAP",
+   "phase": 8,
+   "nf": "AMF",
+   "procedure": "not done: using the NSI information of the answer to pick the SMF / NRF of the slice, the AMF re-allocation (target AMF set), the NSSAI availability (Nnssf_NSSAIAvailability) updates from the AMF, and a scenario with two slices end to end through a UE (per-slice SMF and UPF selection)",
+   "spec": "TS 29.531",
+   "clause": "5.2.2.2",
+   "status": "gap",
+   "tests": [],
+   "evidence": ""
+  },
+  {
+   "id": "CHG-01",
+   "phase": 8,
+   "nf": "SMF / UPF",
+   "procedure": "charging data records: the SMF installs a usage reporting rule (Create URR: volume and duration measurement) with the session when `smf.cdr.file` is set, refers to it from the session's PDRs, reads the Usage Report of the Session Deletion Response (Volume Measurement octets and packets, Duration) and writes one JSON record per released PDU session (SUPI, PDU session id, DNN, S-NSSAI, UE address, UPF, start, end, duration, octets and packets up and down, close cause, sequence number); a session whose UPF could not report still gets a record with `usageReported: false`",
+   "spec": "TS 29.244",
+   "clause": "5.2.2",
+   "also": [
+    "7.5.2.4",
+    "7.5.7.2"
+   ],
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "smf_e2e",
+     "file": "nf/smf/tests/test_smf_e2e.c",
+     "fn": "test_happy_path"
+    },
+    {
+     "ctest": "cluster_ops",
+     "file": "deploy/run/g5c-cluster.sh",
+     "fn": "do_ops"
+    }
+   ],
+   "evidence": "The e2e test checks the record of a session that sent 60 octets; `ns ops` checks 10 records after a load; the host demo run prints the record of the 5 pings (468 octets up, 420 down)."
+  },
+  {
+   "id": "CHG-GAP",
+   "phase": 8,
+   "nf": "SMF",
+   "procedure": "not done: Nchf (Converged Charging) client and online charging, CDR rotation / transfer (the file is opened for every record so a rename rotates it), interim records by time or volume threshold, per-flow (rating group) records",
+   "spec": "TS 32.255",
+   "clause": "-",
+   "status": "gap",
+   "tests": [],
+   "evidence": ""
+  },
+  {
+   "id": "NSSF-C-02",
+   "phase": 8,
+   "nf": "AMF",
+   "procedure": "the AMF consults the NSSF for every PDU session establishment (slice-info-request-for-pdu-session with the S-NSSAI and the tracking area): 403 stops the session (5GMM cause #90), no answer lets it continue; the NSSF's registration decision (slice 1 allowed, slice 2 rejected) and PDU session decisions (slice 1 accepted, slice 2 refused) are checked on the real cluster",
+   "spec": "TS 29.531",
+   "clause": "5.2.2.2.3",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "cluster_slices",
+     "file": "deploy/run/g5c-cluster.sh",
+     "fn": "do_slices"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "OPS-03",
+   "phase": 8,
+   "nf": "all",
+   "procedure": "run-time operations: SIGUSR1 raises the log level of a running function to debug and SIGUSR2 restores it (no restart); the release version is in the first log line and in `g5c_build_info`; a secret may be read from the output of a command (`exec:<absolute path> args`, no shell, 10 s, exit 0)",
+   "spec": "-",
+   "clause": "-",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "cluster_ops",
+     "file": "deploy/run/g5c-cluster.sh",
+     "fn": "do_ops"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "SEC-KEY-01",
+   "phase": 8,
+   "nf": "UDM",
+   "procedure": "rotation of the master key that protects K and OPc: current and previous key, the credentials stored under the previous key still open, `POST /admin/v1/keys/rewrap` protects them under the current key, then the previous key is removed; a wrong key does not open the credentials",
+   "spec": "TS 33.501",
+   "clause": "6.1.3",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "cluster_ops",
+     "file": "deploy/run/g5c-cluster.sh",
+     "fn": "do_ops"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "OPS-04",
+   "phase": 8,
+   "nf": "all",
+   "procedure": "upgrade and rollback under load: every function stopped gracefully and started again one at a time with the same binaries (upgrade) and then with a copy of the previous binaries (rollback) while UEs register and de-register; a clean wave with new subscribers passes at the end",
+   "spec": "-",
+   "clause": "-",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "cluster_upgrade",
+     "file": "deploy/run/g5c-cluster.sh",
+     "fn": "do_upgrade"
+    }
+   ],
+   "evidence": ""
+  },
+  {
+   "id": "OPS-05",
+   "phase": 8,
+   "nf": "all",
+   "procedure": "service level objectives with gates: control-plane throughput of at least 50 UE/s and p99 of registration (1 s), PDU session (0.5 s) and de-registration (0.5 s) on the cluster load logs; UPF one-core forwarding gate; authentication vector rate gate; flat memory",
+   "spec": "-",
+   "clause": "-",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "cluster_load",
+     "file": "deploy/run/g5c-cluster.sh",
+     "fn": "-"
+    }
+   ],
+   "evidence": "docs/ops/slo.md; `tools/check_slo.py` runs on the 2000-UE logs in scripts/g5c_regress.sh. The 10 to 100 Gbit/s UPF target is not measured (needs a NIC)."
+  },
+  {
+   "id": "OPS-GAP",
+   "phase": 8,
+   "nf": "all",
+   "procedure": "not done: shared-state high availability (AMF / SMF contexts in an external store, N4 failover to a second UPF, SCTP multi-homing), horizontal autoscaling, a Kubernetes operator, Helm chart, configuration hot reload other than certificates and the log level; the container image and the Kubernetes manifests are written but were never built or applied (no runtime available)",
+   "spec": "-",
+   "clause": "-",
+   "status": "gap",
+   "tests": [],
+   "evidence": ""
+  },
+  {
+   "id": "SUP-01",
+   "phase": 8,
+   "nf": "all",
+   "procedure": "support tooling: a diagnostics bundle (versions, host, processes, metrics of every function, configurations, last log lines, certificate expiry, audit lines) with IMSI / SUPI, MSISDN, IMEI, GUTI, tokens, keys and addresses redacted, and no key file or state file in it; a capture helper with the filters of N2, N3, N4 and the SBI; a redaction filter",
+   "spec": "-",
+   "clause": "-",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "cluster_support",
+     "file": "deploy/run/g5c-cluster.sh",
+     "fn": "do_support"
+    },
+    {
+     "ctest": "redact_tool",
+     "file": "tests/support/test_redact.py",
+     "fn": "main"
+    }
+   ],
+   "evidence": "The bundle is searched for the subscribers of the load run, every key and token of the cluster, K and OPc of a provisioned subscriber."
+  },
+  {
+   "id": "REL-01",
+   "phase": 8,
+   "nf": "release",
+   "procedure": "release engineering: one VERSION compiled into every binary, signed archives with checksums (GnuPG detached signatures), a source archive, an SBOM of all functions, the automated licence audit (SPDX identifiers, no copyleft or foreign copyright in product files, SBOM and THIRD_PARTY agree, test-only tools not in build files) with NOTICE, the API reference generated from the sources and checked for drift, systemd units and an installer tested into a staging root",
+   "spec": "-",
+   "clause": "-",
+   "status": "tested",
+   "tests": [
+    {
+     "ctest": "licence_audit",
+     "file": "tools/licence_audit.py",
+     "fn": "main"
+    },
+    {
+     "ctest": "api_docs_fresh",
+     "file": "tools/gen_api_docs.py",
+     "fn": "main"
+    }
+   ],
+   "evidence": "`tools/release.sh` runs the gates, builds the archives, verifies checksums and signatures and installs the archive into a staging root."
+  },
+  {
+   "id": "REL-GAP",
+   "phase": 8,
+   "nf": "release",
+   "procedure": "not done and not possible here: counsel's sign-off of the licence audit and the patent / FRAND review (recorded for counsel), a scan of the SBOM against a vulnerability database (no scanner installed), signing with the offline release key (the candidate is signed with a test key), a container image build and scan, a pilot with a partner, the external penetration test, the 7 day soak",
+   "spec": "-",
+   "clause": "-",
+   "status": "gap",
+   "tests": [],
+   "evidence": ""
+  },
+  {
+   "id": "SEC-GAP-02",
+   "phase": 8,
+   "nf": "all",
+   "procedure": "not done: the CA key on a production cluster (an HSM or an offline CA), certificate revocation (CRL, OCSP), rotation of the AUSF's master key and a key id in the stored ciphertext (the UDM rotates with a previous key), client credentials assertions (13.3.8), additional scope (resources and operations) in the token, NSSAI / NSI / NF set claims checked by the producer, roaming PLMN checks (13.4.1.2), the SCP obtaining tokens for delegated discovery (TS 29.500 6.10.11), revocation, a key set with more than one key (the NRF publishes one)",
+   "spec": "TS 33.501",
+   "clause": "13.4.1",
+   "status": "gap",
+   "tests": [],
+   "evidence": ""
+  }
+ ]
+}

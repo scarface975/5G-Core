@@ -1,0 +1,105 @@
+# Our NFs. The NRF runs here, but the configurations of the other functions still name their peers (to use discovery, add `nrf: { uri: 'http://nrf:7777' }`
+# to a function and remove its peer blocks). UNVERIFIED: the Docker daemon
+# was not available when this was written. Run ./gen-secrets.sh first, then `docker compose up --build`.
+name: g5c
+x-nf: &nf
+  build: { context: ../.., dockerfile: deploy/docker/Dockerfile }
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  restart: unless-stopped
+services:
+  nrf:
+    <<: *nf
+    command: ["nrf", "/etc/g5c/nrf.yaml"]
+    volumes: ["./config/nrf.yaml:/etc/g5c/nrf.yaml:ro", "nrf-data:/var/lib/g5c", "nrf-keys:/etc/g5c/keys"]
+  scp:
+    <<: *nf
+    command: ["scp", "/etc/g5c/scp.yaml"]
+    depends_on: [nrf]
+    volumes: ["./config/scp.yaml:/etc/g5c/scp.yaml:ro"]
+  bsf:
+    <<: *nf
+    command: ["bsf", "/etc/g5c/bsf.yaml"]
+    depends_on: [nrf]
+    volumes: ["./config/bsf.yaml:/etc/g5c/bsf.yaml:ro", "bsf-data:/var/lib/g5c"]
+  udr:
+    <<: *nf
+    command: ["udr", "/etc/g5c/udr.yaml"]
+    volumes:
+      - ./config/udr.yaml:/etc/g5c/udr.yaml:ro
+      - ./secrets/udr-provisioning.token:/etc/g5c/keys/udr-provisioning.token:ro
+      - udr-data:/var/lib/g5c
+  udm:
+    <<: *nf
+    command: ["udm", "/etc/g5c/udm.yaml"]
+    depends_on: [udr]
+    volumes:
+      - ./config/udm.yaml:/etc/g5c/udm.yaml:ro
+      - ./secrets/udm-master.key:/etc/g5c/keys/udm-master.key:ro
+      - ./secrets/hn-1.key:/etc/g5c/keys/hn-1.key:ro
+      - ./secrets/admin.token:/etc/g5c/keys/udm-admin.token:ro
+      - ./secrets/udr-provisioning.token:/etc/g5c/keys/udr-provisioning.token:ro
+    ports: ["127.0.0.1:7773:7773"]
+  ausf:
+    <<: *nf
+    command: ["ausf", "/etc/g5c/ausf.yaml"]
+    depends_on: [udm]
+    volumes: ["./config/ausf.yaml:/etc/g5c/ausf.yaml:ro"]
+  nssf:
+    <<: *nf
+    command: ["nssf", "/etc/g5c/nssf.yaml"]
+    depends_on: [nrf]
+    volumes: ["./config/nssf.yaml:/etc/g5c/nssf.yaml:ro", "nssf-data:/var/lib/g5c"]
+  nef:
+    <<: *nf
+    command: ["nef", "/etc/g5c/nef.yaml"]
+    depends_on: [nrf, udr, udm]
+    volumes: ["./config/nef.yaml:/etc/g5c/nef.yaml:ro", "nef-data:/var/lib/g5c", "./keys/nef-af-1.token:/etc/g5c/keys/nef-af-1.token:ro"]
+  pcf:
+    <<: *nf
+    command: ["pcf", "/etc/g5c/pcf.yaml"]
+    depends_on: [udr]
+    volumes:
+      - ./config/pcf.yaml:/etc/g5c/pcf.yaml:ro
+      - ./secrets/admin.token:/etc/g5c/keys/pcf-admin.token:ro
+    ports: ["127.0.0.1:7777:7777"]
+  upf:
+    <<: *nf
+    command: ["upf", "/etc/g5c/upf.yaml"]
+    cap_add: [NET_ADMIN] # attach to / create the N6 TUN device
+    devices: ["/dev/net/tun"]
+    volumes: ["./config/upf.yaml:/etc/g5c/upf.yaml:ro"]
+    networks:
+      default:
+        ipv4_address: 10.100.0.7 # the address the SMF is told (see config/upf.yaml)
+  amf:
+    <<: *nf
+    command: ["amf", "/etc/g5c/amf.yaml"]
+    depends_on: [ausf, udm, pcf, smf]
+    volumes: ["./config/amf.yaml:/etc/g5c/amf.yaml:ro", "amf-data:/var/lib/g5c"]
+    ports: ["127.0.0.1:7779:7779"]
+    networks:
+      default:
+        ipv4_address: 10.100.0.5 # the NGAP address gNBs connect to (see config/amf.yaml)
+  smf:
+    <<: *nf
+    command: ["smf", "/etc/g5c/smf.yaml"]
+    depends_on: [udm, pcf, upf]
+    volumes: ["./config/smf.yaml:/etc/g5c/smf.yaml:ro"]
+    ports: ["127.0.0.1:7778:7778"]
+    networks:
+      default:
+        ipv4_address: 10.100.0.4 # the N4 address the UPF sends reports to (see config/smf.yaml)
+networks:
+  default:
+    ipam:
+      config: [{ subnet: 10.100.0.0/24 }]
+volumes:
+  nrf-data: {}
+  nrf-keys: {}
+  udr-data:
+  nssf-data: {}
+  nef-data: {}
+  bsf-data: {}
+  amf-data:

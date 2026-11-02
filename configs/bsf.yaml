@@ -1,0 +1,18 @@
+# Sample BSF configuration (Binding Support Function, Nbsf_Management, TS 29.521).
+# The PCFs register the binding of every PDU session that has a UE address; an NEF or AF asks for the PCF of a UE address.
+name: bsf-1
+plmn: { mcc: '001', mnc: '01' }
+sbi: { address: 0.0.0.0, port: 7786 }
+log: { level: info, json: true }
+nrf: { uri: 'http://nrf:7777' }
+
+bsf:
+  max_bindings: 200000                # most bindings held at once (more: 503)
+  features: [ MultiUeAddr, BindingUpdate, SamePcf, ExtendedSamePcf ]   # offered to the consumers (TS 29.521 5.8); what is negotiated is the intersection
+  purge_on_recovery: true             # a PCF that registers with a newer recoveryTime has its older bindings removed
+  replace_stale: true                 # a binding for a UE address, DNN, S-NSSAI and IP domain that another binding holds replaces it
+  # info:                             # the bsfInfo of the NF profile at the NRF: what this BSF serves (default: everything)
+  #   dnn_list: [ internet ]
+  #   ipv4_address_ranges: [ { start: 10.45.0.0, end: 10.45.255.255 } ]
+  state_file: /var/lib/g5c/bsf.json
+  validate: true                      # check bodies against the OpenAPI schemas of TS 29.521

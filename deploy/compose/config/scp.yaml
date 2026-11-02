@@ -1,0 +1,9 @@
+# Compose SCP configuration (see configs/scp.yaml for every option).
+name: scp-1
+plmn: { mcc: '001', mnc: '01' }
+sbi: { address: 0.0.0.0, port: 7785 }
+log: { level: info, json: true }
+nrf: { uri: 'http://nrf:7777' }
+scp:
+  routing: { attempts: 3, timeout_ms: 5000 }
+  targets: { allow: [ '10.100.0.0/24', nrf, udr, udm, ausf, pcf, smf, amf, nssf, nef, upf ] }

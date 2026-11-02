@@ -1,0 +1,11 @@
+# Compose NEF configuration (see configs/nef.yaml for every option).
+name: nef-1
+plmn: { mcc: '001', mnc: '01' }
+sbi: { address: 0.0.0.0, port: 7784 }
+log: { level: info, json: true }
+nrf: { uri: 'http://nrf:7777' }
+nef:
+  afs:
+    - { id: af-1, token_file: /etc/g5c/keys/nef-af-1.token, notify_hosts: [ af ] }
+  callback_uri: http://nef:7784
+  state_file: /var/lib/g5c/nef.json

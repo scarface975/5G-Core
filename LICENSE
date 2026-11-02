@@ -1,0 +1,7 @@
+g5c 5G core: proprietary software. Copyright (c) the g5c authors. All rights reserved.
+
+This is the licence marker the source files already carry (SPDX-License-Identifier: LicenseRef-Proprietary). The licence terms under which a release is offered to customers or partners are a decision of
+the owner and are to be replaced here by the agreed text before a release leaves the owner's organisation (docs/legal/audit-<version>.md lists what is third-party and how it is licensed; NOTICE
+carries the notices of the third-party libraries).
+
+Third-party libraries (OpenSSL, nghttp2, libuv, libpq) are linked dynamically and remain under their own licences (docs/legal/THIRD_PARTY.md).

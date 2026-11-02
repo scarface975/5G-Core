@@ -1,0 +1,21 @@
+# Sample AUSF configuration. The UDM is found through the NRF; name it (`udm: { uri: ... }`) to skip discovery.
+name: ausf-1
+plmn: { mcc: '001', mnc: '01' }
+sbi:
+  address: 0.0.0.0
+  port: 7774
+  # tls: { cert: /etc/g5c/tls/ausf.crt, key: /etc/g5c/tls/ausf.key, ca: /etc/g5c/tls/ca.crt }   # ca set => mutual TLS
+log: { level: info, json: true }
+nrf: { uri: 'http://nrf:7777' }
+# udm: { uri: 'http://udm:7773' }
+ausf:
+  context_lifetime: 30            # seconds a started authentication waits for the UE's answer
+  result_retention: 86400         # seconds a finished authentication stays addressable for the removal of its result
+  max_contexts: 1000000
+  max_ue_contexts: 2000000        # security contexts: the latest KAUSF per SUPI, for the SoR and UPU protection
+  # serving_networks: ['5G:mnc001.mcc001.3gppnetwork.org']   # when set, only these serving network names may authenticate (TS 33.501 6.1.2)
+  eap: { result_indication: false }   # ask EAP-AKA' peers for protected success indications (RFC 4187 6.2)
+  state_file: /var/lib/g5c/ausf.json   # keeps the KAUSF values (wrapped with the master key) and the SoR / UPU counters over a restart
+  master_key_file: /etc/g5c/keys/ausf-master.key   # 64 hex characters; or the G5C_AUSF_MASTER_KEY environment variable
+  # supi_ranges: [{ start: '001010000000000', end: '001010999999999' }]   # published in the NRF profile (ausfInfo)
+  # routing_indicators: ['0']

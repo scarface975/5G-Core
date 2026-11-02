@@ -1,0 +1,1 @@
+{"date": "2026-11-02", "metrics": {"p99_registration_ms": 177.1, "p99_registration_ms_tls": 443.8, "reg_per_s": 127.0, "reg_per_s_tls": 93.0, "upf_downlink_gbit": 2.09, "upf_uplink_gbit": 3.6}, "note": "first entry: the release candidate run before the log-level fix", "version": "0.9.0-rc1"}

@@ -1,0 +1,19 @@
+build/
+target/
+*.pcap
+*.pcapng
+.env
+*.key
+*.pem
+
+# downloaded 3GPP spec documents (not redistributed); derived ASN.1/tables are kept
+docs/specs/src/
+
+# licensed ETSI/SAGE algorithm documents (SNOW 3G, ZUC) must never be committed
+docs/specs/restricted/
+
+# generated or not part of the project
+__pycache__/
+*.pyc
+*.whl
+release/

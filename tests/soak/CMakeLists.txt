@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: LicenseRef-Proprietary
+add_executable(soak_core soak_core.c)
+target_link_libraries(soak_core g5c_udm g5c_pcf g5c_udr g5c_testkit)
+if(G5C_SANITIZE OR G5C_TSAN OR G5C_COVERAGE)
+  set(_soak_env "G5C_SOAK_SECONDS=5;G5C_SOAK_CHECK_MEM=0")
+else()
+  set(_soak_env "G5C_SOAK_SECONDS=12")
+endif()
+add_test(NAME soak_core COMMAND soak_core)
+set_tests_properties(soak_core PROPERTIES ENVIRONMENT "${_soak_env}" LABELS "soak" TIMEOUT 120)

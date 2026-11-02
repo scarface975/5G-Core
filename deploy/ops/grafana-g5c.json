@@ -1,0 +1,444 @@
+{
+ "title": "g5c 5G core",
+ "uid": "g5c-core",
+ "schemaVersion": 39,
+ "version": 1,
+ "refresh": "15s",
+ "time": {
+  "from": "now-1h",
+  "to": "now"
+ },
+ "tags": [
+  "g5c",
+  "5gc"
+ ],
+ "templating": {
+  "list": [
+   {
+    "name": "DS",
+    "type": "datasource",
+    "query": "prometheus",
+    "label": "Data source"
+   }
+  ]
+ },
+ "panels": [
+  {
+   "id": 1,
+   "type": "stat",
+   "title": "Functions up",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS}"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 0,
+    "w": 8,
+    "h": 6
+   },
+   "targets": [
+    {
+     "expr": "up{job=~\"g5c-.*\"}",
+     "legendFormat": "{{job}}",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short"
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 2,
+   "type": "timeseries",
+   "title": "Registered UEs / connected UEs / gNBs",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS}"
+   },
+   "gridPos": {
+    "x": 8,
+    "y": 0,
+    "w": 8,
+    "h": 6
+   },
+   "targets": [
+    {
+     "expr": "sum(g5c_amf_registered_ues)",
+     "legendFormat": "registered",
+     "refId": "A"
+    },
+    {
+     "expr": "sum(g5c_amf_connected_ues)",
+     "legendFormat": "connected",
+     "refId": "B"
+    },
+    {
+     "expr": "sum(g5c_amf_gnbs)",
+     "legendFormat": "gNBs",
+     "refId": "C"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short"
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 3,
+   "type": "timeseries",
+   "title": "PDU sessions (SMF) / sessions (UPF)",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS}"
+   },
+   "gridPos": {
+    "x": 16,
+    "y": 0,
+    "w": 8,
+    "h": 6
+   },
+   "targets": [
+    {
+     "expr": "sum(g5c_smf_pdu_sessions_active)",
+     "legendFormat": "SMF",
+     "refId": "A"
+    },
+    {
+     "expr": "sum(g5c_upf_sessions)",
+     "legendFormat": "UPF",
+     "refId": "B"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short"
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 4,
+   "type": "timeseries",
+   "title": "Registration success ratio",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS}"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 6,
+    "w": 8,
+    "h": 7
+   },
+   "targets": [
+    {
+     "expr": "g5c:registration_success_ratio:rate5m",
+     "legendFormat": "ratio",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit"
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 5,
+   "type": "timeseries",
+   "title": "Registrations by result (/s)",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS}"
+   },
+   "gridPos": {
+    "x": 8,
+    "y": 6,
+    "w": 8,
+    "h": 7
+   },
+   "targets": [
+    {
+     "expr": "sum by (result) (rate(g5c_amf_registrations_total[5m]))",
+     "legendFormat": "{{result}}",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ops"
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 6,
+   "type": "timeseries",
+   "title": "5G-AKA by result (/s)",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS}"
+   },
+   "gridPos": {
+    "x": 16,
+    "y": 6,
+    "w": 8,
+    "h": 7
+   },
+   "targets": [
+    {
+     "expr": "sum by (result) (rate(g5c_amf_authentications_total[5m]))",
+     "legendFormat": "{{result}}",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ops"
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 7,
+   "type": "timeseries",
+   "title": "SBI request rate by function",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS}"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 13,
+    "w": 8,
+    "h": 7
+   },
+   "targets": [
+    {
+     "expr": "g5c:sbi_request_rate:rate5m",
+     "legendFormat": "{{job}}",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "reqps"
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 8,
+   "type": "timeseries",
+   "title": "SBI p99 latency by function",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS}"
+   },
+   "gridPos": {
+    "x": 8,
+    "y": 13,
+    "w": 8,
+    "h": 7
+   },
+   "targets": [
+    {
+     "expr": "g5c:sbi_latency_p99:5m",
+     "legendFormat": "{{job}}",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s"
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 9,
+   "type": "timeseries",
+   "title": "SBI 5xx by function (/s)",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS}"
+   },
+   "gridPos": {
+    "x": 16,
+    "y": 13,
+    "w": 8,
+    "h": 7
+   },
+   "targets": [
+    {
+     "expr": "sum by (job) (rate(g5c_sbi_requests_total{status=~\"5..\"}[5m]))",
+     "legendFormat": "{{job}}",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "reqps"
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 10,
+   "type": "timeseries",
+   "title": "Access token checks by result (/s)",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS}"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 20,
+    "w": 8,
+    "h": 7
+   },
+   "targets": [
+    {
+     "expr": "sum by (job, result) (rate(g5c_oauth_checks_total[5m]))",
+     "legendFormat": "{{job}} {{result}}",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ops"
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 11,
+   "type": "timeseries",
+   "title": "NSSF slice selections (AMF) by result (/s)",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS}"
+   },
+   "gridPos": {
+    "x": 8,
+    "y": 20,
+    "w": 8,
+    "h": 7
+   },
+   "targets": [
+    {
+     "expr": "sum by (result) (rate(g5c_amf_nssf_selections_total[5m]))",
+     "legendFormat": "{{result}}",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ops"
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 12,
+   "type": "timeseries",
+   "title": "UPF throughput (bytes/s)",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS}"
+   },
+   "gridPos": {
+    "x": 16,
+    "y": 20,
+    "w": 8,
+    "h": 7
+   },
+   "targets": [
+    {
+     "expr": "sum by (direction) (rate(g5c_upf_bytes_total[5m]))",
+     "legendFormat": "{{direction}}",
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "Bps"
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 13,
+   "type": "timeseries",
+   "title": "UPF packets dropped / N4 timeouts (SMF)",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS}"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 27,
+    "w": 12,
+    "h": 7
+   },
+   "targets": [
+    {
+     "expr": "sum(rate(g5c_upf_dropped_packets_total[5m]))",
+     "legendFormat": "UPF dropped",
+     "refId": "A"
+    },
+    {
+     "expr": "sum(rate(g5c_smf_n4_timeouts_total[5m]))",
+     "legendFormat": "N4 timeouts",
+     "refId": "B"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ops"
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 14,
+   "type": "timeseries",
+   "title": "Functions registered at the NRF / suspended",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS}"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 27,
+    "w": 12,
+    "h": 7
+   },
+   "targets": [
+    {
+     "expr": "sum(g5c_nrf_profiles)",
+     "legendFormat": "registered",
+     "refId": "A"
+    },
+    {
+     "expr": "increase(g5c_nrf_suspended_total[1h])",
+     "legendFormat": "suspended (1 h)",
+     "refId": "B"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short"
+    },
+    "overrides": []
+   }
+  }
+ ]
+}

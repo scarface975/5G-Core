@@ -1,0 +1,10 @@
+name: udm-1   # comment
+plmn: { mcc: '001', mnc: '01' }
+sbi: { address: 127.0.0.12, port: 7777 }
+list:
+  - a: 1
+    b: two
+  - [1, 2, 3]
+nested:
+  x:
+    y: true

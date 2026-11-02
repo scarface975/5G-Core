@@ -1,0 +1,19 @@
+# Sample PCF configuration.
+name: pcf-1
+plmn: { mcc: '001', mnc: '01' }
+sbi: { address: 0.0.0.0, port: 7777 }
+log: { level: info, json: true }
+nrf: { uri: 'http://nrf:7777' }
+udr: { uri: 'http://udr:7790' }
+admin_token_file: /etc/g5c/keys/pcf-admin.token
+policy:
+  rfsp: 1
+  default:
+    session_ambr: { uplink: 1 Gbps, downlink: 2 Gbps }
+# Npcf_PolicyAuthorization (N5): what the QoS references of an AF (or the NEF) stand for. A media component that names one of them gets a PCC rule with that 5QI
+# (a GBR 5QI needs its bit rates); the rule is installed at the SMF of the PDU session that has the UE address.
+policy_authorization:
+  qos_references:
+    voice: { qi5: 1, gbr_ul: 128 Kbps, gbr_dl: 128 Kbps, mbr_ul: 256 Kbps, mbr_dl: 256 Kbps }
+    streaming: { qi5: 7 }
+  max_app_sessions: 10000
