@@ -95,7 +95,6 @@ Every function is a single binary configured by one YAML file, started as `<name
 | `gen/` | Reproducible generators for test vectors, fuzz seeds, conformance matrices, the web console and the Grafana dashboard. |
 | `check/` | Consistency gates for matrices, operations files and service-level objectives. |
 | `diff/` | Python differential harnesses for each function against Open5GS. |
-| `docs/` | Generators for the API reference, the project dashboard and PDF output. |
 | `release/` | Release assembly: archives, checksums, signatures, SBOM, licence audit, performance history, compliance dossier. |
 | `inspect/` | `g5c-inspect`, a C decoder for NGAP and NAS hex dumps. |
 
@@ -117,7 +116,7 @@ Every function is a single binary configured by one YAML file, started as `<name
 | `scenarios/` | Declarative YAML scenarios for the cluster runner. |
 | `configs/` | One sample configuration per function. |
 | `deploy/` | Section 7. |
-| `docs/` | `guides`, `adr`, `api`, `conformance`, `specs`, `ops`, `security`, `legal`, `sbom`, `perf`, `strategy`, `demo`, `history`; index in `docs/README.md`. |
+
 
 ## 9. Building
 
