@@ -22,7 +22,7 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y clang cmake pkg-config libssl-dev libnghttp2-dev libuv1-dev
       - name: Coverage-guided fuzzing, 30 s per target
         run: |
-          CC=clang cmake -S . -B build-fuzz -DG5C_FUZZ=ON -DG5C_SANITIZE=OFF
+          CC=clang cmake -S . -B build-fuzz -DG5C_FUZZ=ON -DG5C_SANITIZE=OFF -DG5C_WERROR=OFF
           cmake --build build-fuzz -j"$(nproc)"
           for t in nas ngap pfcp_gtpu json_yaml; do
             mkdir -p corpus/$t

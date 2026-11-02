@@ -14,13 +14,18 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 option(G5C_SANITIZE "Build with ASan+UBSan" OFF)
 option(G5C_TSAN "Build with ThreadSanitizer" OFF)
 option(G5C_COVERAGE "Build with gcov instrumentation" OFF)
+# Warnings are errors with the reference compiler (gcc). Another compiler (the clang of the fuzzing job) has its own warnings: they are shown, not fatal.
+option(G5C_WERROR "Treat compiler warnings as errors" ON)
 
 find_package(OpenSSL 3 REQUIRED)
 
 add_compile_options(
   -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wformat=2 -Wcast-qual
-  -Wstrict-prototypes -Wmissing-prototypes -Werror
+  -Wstrict-prototypes -Wmissing-prototypes
   -fstack-protector-strong -fno-strict-overflow)
+if(G5C_WERROR)
+  add_compile_options(-Werror)
+endif()
 add_compile_definitions(_FORTIFY_SOURCE=3 G5C_VERSION="${G5C_VERSION}")
 add_link_options(-Wl,-z,relro,-z,now)
 if(G5C_SANITIZE)
