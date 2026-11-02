@@ -20,7 +20,7 @@
 #define N1_ID "n1SmMsg"
 #define N2_ID "n2SmInfo"
 
-/* ---- metrics --------------------------------------------------------------------------------------------------------------------------- */
+/* ---- metrics ---- */
 
 static void count_op(smf *s, const char *op, const char *result)
 {
@@ -39,7 +39,7 @@ static void update_gauge(smf *s)
         }
 }
 
-/* ---- deferred work ----------------------------------------------------------------------------------------------------------------------- */
+/* ---- deferred work ---- */
 
 struct smf_job {
     smf_job_fn fn;
@@ -172,7 +172,7 @@ void smf_drain(smf *s)
     pthread_mutex_unlock(&s->qmu);
 }
 
-/* ---- session table ----------------------------------------------------------------------------------------------------------------------- */
+/* ---- session table ---- */
 
 size_t smf_session_count(smf *s)
 {
@@ -215,8 +215,7 @@ void smf_sess_unlock(smf_sess *ss)
 }
 
 /* Returns the session locked and referenced, or NULL. ref == NULL: look up by (supi, psi). */
-/* the session table is a list (scans, persistence) with two hash indexes on top: every procedure looks its session up, so a scan per lookup made the
- * SMF quadratic in the number of sessions */
+/* the session table is a list (scans, persistence) with two hash indexes on top */
 static uint32_t ix_hash(const char *a, uint8_t psi)
 {
     uint32_t h = 2166136261u;
@@ -359,7 +358,7 @@ static void sess_teardown(smf *s, smf_sess *ss, const char *why)
     update_gauge(s);
 }
 
-/* ---- request parsing ---------------------------------------------------------------------------------------------------------------------- */
+/* ---- request parsing ---- */
 
 typedef struct {
     g5c_mp mp;
@@ -490,7 +489,7 @@ static void create_error(smf *s, g5c_resp *resp, int status, const char *cause, 
     atomic_fetch_add(&s->rejected, 1);
 }
 
-/* ---- Create SM Context ---------------------------------------------------------------------------------------------------------------------------- */
+/* ---- Create SM Context ---- */
 
 static bool parse_snssai(const g5c_json *j, uint8_t *sst, bool *has_sd, uint32_t *sd)
 {
@@ -537,8 +536,7 @@ static uint8_t type_from_name(const char *n)
     return 0;
 }
 
-/* PDU session type selection (TS 23.501 5.8.1.2, TS 24.501 6.4.1.2): the requested type if it is allowed and the DNN has the matching pools, else the
- * single-stack subset when that is allowed; 0 when nothing fits. *cause is the 5GSM cause to put in the accept when the type was narrowed. */
+/* PDU session type selection (TS 23.501 5.8.1.2, TS 24.501 6.4.1.2) */
 static uint8_t select_type(const g5c_json *cfg, uint8_t requested, const smf_dnn_cfg *d, uint8_t *cause)
 {
     const g5c_json *pst = g5c_json_get(cfg, "pduSessionTypes"), *allowed = g5c_json_get(pst, "allowedSessionTypes");
@@ -796,7 +794,7 @@ static void create_ctx(void *ctx, const g5c_req *req, g5c_resp *resp)
     }
 
     ss->cp_seid = smf_n4_new_seid(s->n4);
-    if (ss->has6) { /* the TEID the UPF puts on router solicitations it sends to us: random, not in use by another session */
+    if (ss->has6) { /* the TEID the UPF puts on router solicitations it sends to us */
         for (int attempt = 0; attempt < 8 && ss->rs_teid == 0; attempt++) {
             uint32_t t = 0;
             bool taken = false;
@@ -886,7 +884,7 @@ done:
     parsed_free(&pr);
 }
 
-/* ---- the N1N2 transfer that follows the 201 ---------------------------------------------------------------------------------------------------------------- */
+/* ---- the N1N2 transfer that follows the 201 ---- */
 
 static void notify_released(smf *s, const char *uri, const char *cause)
 {
@@ -963,7 +961,7 @@ static void job_n1n2(smf *s, void *arg)
     smf_sess_unlock(ss);
 }
 
-/* ---- Update SM Context ------------------------------------------------------------------------------------------------------------------------------ */
+/* ---- Update SM Context ---- */
 
 static int n4_modify(smf *s, smf_sess *ss, const uint8_t *body, size_t blen)
 {
@@ -1118,7 +1116,7 @@ static void modify_ctx(void *ctx, const g5c_req *req, g5c_resp *resp)
         if (smf_gsm_peek(pr.n1->data, pr.n1->len, &mt, &psi, &pti) != 0 || psi != ss->psi) {
             g5c_resp_problem_simple(resp, 400, "INVALID_MSG_FORMAT", "malformed or foreign 5GSM message");
             count_op(s, "update", "bad_request");
-        } else if (mt == 0xd1) { /* PDU SESSION RELEASE REQUEST: answer with the command for the UE and the resource release for the gNB */
+        } else if (mt == 0xd1) { /* PDU SESSION RELEASE REQUEST */
             g5c_bytes n1, n2;
             g5c_bytes_init(&n1);
             g5c_bytes_init(&n2);
@@ -1272,7 +1270,7 @@ static void modify_ctx(void *ctx, const g5c_req *req, g5c_resp *resp)
     parsed_free(&pr);
 }
 
-/* ---- Release SM Context ------------------------------------------------------------------------------------------------------------------------------ */
+/* ---- Release SM Context ---- */
 
 static void release_ctx(void *ctx, const g5c_req *req, g5c_resp *resp)
 {
@@ -1295,7 +1293,7 @@ static void release_ctx(void *ctx, const g5c_req *req, g5c_resp *resp)
     parsed_free(&pr);
 }
 
-/* ---- network-initiated procedures ------------------------------------------------------------------------------------------------------------------ */
+/* ---- network-initiated procedures ---- */
 
 static void est_ctx(const smf_sess *ss, smf_n4_est *e)
 {
@@ -1323,9 +1321,8 @@ static int tell_amf(smf *s, smf_sess *ss, const uint8_t *n1, size_t n1l, const c
     return rc;
 }
 
-/* PCF-initiated SM policy update (TS 29.512 4.2.4): the new decision is diffed against the one in force, the UPF is modified, then the UE and the gNB
- * are told with a PDU SESSION MODIFICATION COMMAND and a PDU session resource modify request. */
-/* Applies a policy decision to a session (the caller holds the session): UPF first (Update QER, Create / Remove PDR), then the UE and the gNB. 0, or the HTTP status to answer. */
+/* PCF-initiated SM policy update (TS 29.512 4.2.4) */
+/* Applies a policy decision to a session (the caller holds the session): UPF first (Update QER, Create / Remove PDR), then the UE and the gNB */
 static int apply_decision(smf *s, smf_sess *ss, const g5c_json *dec, const char *op, char *perr, size_t pcap, const char **cause)
 {
     smf_policy np;
@@ -1404,7 +1401,7 @@ static void policy_update(void *ctx, const g5c_req *req, g5c_resp *resp)
     g5c_json_free(body);
 }
 
-/* ---- usage monitoring (backlog A-03) ------------------------------------------------------------------------------------------------------------------ */
+/* ---- usage monitoring (backlog A-03) ---- */
 
 typedef struct {
     char ref[37];
@@ -1417,8 +1414,7 @@ static void count_usage(smf *s, const char *result)
     g5c_counter_inc(g5c_counter_get(s->metrics, "g5c_smf_usage_reports_total", "Usage monitoring reports from the UPF, by what became of them.", &l, 1));
 }
 
-/* The UPF reported that the volume threshold of the PCF has passed: tell the PCF how much was used (Npcf_SMPolicyControl_Update, accuUsageReports, trigger US_RE) and apply the decision it
- * answers with (typically: a lower session AMBR, and no threshold any more). */
+/* The UPF reported that the volume threshold of the PCF has passed */
 static void job_usage(smf *s, void *arg)
 {
     usage_arg *a = arg;
@@ -1524,8 +1520,7 @@ static void job_guard(smf *s, void *arg)
         smf_sess_unlock(ss);
 }
 
-/* Ask the UE and the gNB to release the session (PDU SESSION RELEASE COMMAND + resource release command). With `final` the session is torn down at once
- * (its user plane is gone); otherwise it waits for the UE's complete, guarded by a timer. Called with the session locked; consumes lock and reference. */
+/* Ask the UE and the gNB to release the session (PDU SESSION RELEASE COMMAND + resource release command) */
 static void net_release(smf *s, smf_sess *ss, uint8_t cause5gsm, bool final, const char *status_cause)
 {
     g5c_bytes n1, n2;
@@ -1573,7 +1568,7 @@ static void policy_terminate(void *ctx, const g5c_req *req, g5c_resp *resp)
     count_op(s, "policy_terminate", "ok");
 }
 
-/* ---- IPv6 router advertisement ----------------------------------------------------------------------------------------------------------------------- */
+/* ---- IPv6 router advertisement ---- */
 
 /* A router solicitation the UPF forwarded to us (TS 23.501 5.8.2.2.3): answer with the session's /64 so the UE can configure its address. */
 void smf_cp_packet(smf *s, uint32_t teid, const uint8_t *pl, size_t len, const smf_peer *from)
@@ -1610,7 +1605,7 @@ void smf_cp_packet(smf *s, uint32_t teid, const uint8_t *pl, size_t len, const s
         count_op(s, "router_solicitation", "failed");
 }
 
-/* ---- UPF loss / restart ---------------------------------------------------------------------------------------------------------------------------- */
+/* ---- UPF loss / restart ---- */
 
 typedef struct {
     char ref[37];
@@ -1647,7 +1642,7 @@ void smf_upf_event(smf *s, smf_upf *u, int kind)
     g5c_counter_add(g5c_counter_get(s->metrics, "g5c_smf_sessions_released_upf_loss_total", "PDU sessions released because their UPF restarted or was lost.", NULL, 0), n);
 }
 
-/* ---- downlink data notification: page the UE ------------------------------------------------------------------------------------------------------------ */
+/* ---- downlink data notification: page the UE ---- */
 
 static void job_page(smf *s, void *arg)
 {

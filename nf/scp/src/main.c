@@ -39,7 +39,7 @@ int main(int argc, char **argv)
         g5c_json_free(extra);
         return 1;
     }
-    g5c_client_set_scp(nf->client, NULL, NULL); /* the SCP forwards for the others: it does not go through an SCP of its own (a next hop is configured under scp.next) */
+    g5c_client_set_scp(nf->client, NULL, NULL); /* the SCP forwards for the others */
     s = scp_from_config(cfg, nf, err, sizeof err);
     g5c_json_free(cfg);
     if (s == NULL) {

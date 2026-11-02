@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* Nudm_SubscriberDataManagement (TS 29.503 clause 5.2): subscription data retrieval and change subscriptions.
- * Served under both /nudm-sdm/v1 and /nudm-sdm/v2 (Release 16 consumers use v2). */
+/* Nudm_SubscriberDataManagement (TS 29.503 clause 5.2): subscription data retrieval and change subscriptions */
 #define _DEFAULT_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
@@ -45,8 +44,7 @@ static void reply_json(g5c_resp *resp, int code, g5c_json *j)
     g5c_json_free(j);
 }
 
-/* UeContextInSmfData built from the SMF registrations held in the UDR. kind is UDR_OK, or UDR_NOT_FOUND with an empty
- * (valid) document in *out; for any other failure *out is NULL. */
+/* UeContextInSmfData built from the SMF registrations held in the UDR */
 static udr_result ue_context_in_smf(udm *u, const char *supi, g5c_json **out)
 {
     g5c_json *o = g5c_json_new_obj(), *sessions = g5c_json_set(o, "pduSessions", g5c_json_new_obj()), *v = NULL;
@@ -85,9 +83,7 @@ static udr_result ue_context_in_smf(udm *u, const char *supi, g5c_json **out)
     return r;
 }
 
-/* Retrieval of multiple data sets (TS 29.503 5.2.2.2.9): GET /{supi}?dataset-names=AM,SM,... returns SubscriptionDataSets.
- * Supported names: AM, SMF_SEL, SM, UEC_SMF. Names of data this UDM does not hold (TRACE, SMS_*, LCS_*, V2X, UEC_AMF,
- * UEC_SMSF) are accepted and simply produce no member; unknown names are ignored, as the schema allows any string. */
+/* Retrieval of multiple data sets (TS 29.503 5.2.2.2.9): GET /{supi}?dataset-names=AM,SM,. returns SubscriptionDataSets */
 static void multi_data_sets(udm *u, const g5c_req *req, const char *supi, const char *plmn, g5c_resp *resp)
 {
     char *names = g5c_req_query_decoded(req, "dataset-names");
@@ -347,9 +343,7 @@ void udm_sdm_routes(g5c_router *r, udm *u)
     }
 }
 
-/* Nudm_SDM_Notification (TS 29.503 5.2.2.4): tell every subscriber of `supi`'s data (the AMF/SMF that created an
- * sdm-subscription) that the data changed, with a ModificationNotification (TS 29.503 Nudm_SDM, NotifyItem per TS 29.571).
- * Best effort: an unreachable consumer is logged and counted, never an error for the provisioning call. */
+/* Nudm_SDM_Notification (TS 29.503 5.2.2.4) */
 void udm_sdm_notify_change(udm *u, const char *supi)
 {
     char prefix[64];

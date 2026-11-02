@@ -10,13 +10,13 @@
 #include "g5c/bsf.h"
 #include "g5c/oaschema.h"
 
-/* ---- generated schema pool ---------------------------------------------------------------------------------------- */
+/* ---- generated schema pool ---- */
 extern const char *const bsf_schema_chunks[];
 extern const size_t bsf_schema_nchunks;
 extern const size_t bsf_schema_count;
 #include "api_ids.gen.h"
 
-/* ---- supported features (TS 29.521 5.8), bit n-1 for feature number n ------------------------------------------------ */
+/* ---- supported features (TS 29.521 5.8), bit n-1 for feature number n ---- */
 #define BSF_F_MULTI_UE_ADDR 0x01u
 #define BSF_F_BINDING_UPDATE 0x02u
 #define BSF_F_SAME_PCF 0x04u
@@ -26,7 +26,7 @@ extern const size_t bsf_schema_count;
 /* more addresses than this in one binding (additional prefixes, additional MAC addresses, framed routes) are refused */
 #define BSF_MAX_ADDRS 64
 
-/* ---- addresses ---------------------------------------------------------------------------------------------------- */
+/* ---- addresses ---- */
 
 typedef struct {
     uint8_t a[16]; /* masked to len */
@@ -53,19 +53,19 @@ char *bsf_features_str(unsigned f);
 void bsf_merge_patch(g5c_json **doc, const g5c_json *patch); /* RFC 7396 */
 int64_t bsf_parse_rfc3339(const char *s);
 
-/* ---- configuration ------------------------------------------------------------------------------------------------ */
+/* ---- configuration ---- */
 
 struct bsf_cfg {
     unsigned max_bindings;
     unsigned features;       /* offered to the consumers: what is negotiated is the intersection */
-    bool purge_on_recovery;  /* a binding of a PCF with a newer recoveryTime removes the older bindings of that PCF (TS 29.521 4.2.2.2, TS 23.527 6.4) */
+    bool purge_on_recovery;  /* a binding of a PCF with a newer recoveryTime removes the older bindings of that PCF */
     bool replace_stale;      /* a binding for the same UE address, DNN, S-NSSAI and IP domain replaces the earlier one */
     bool validate;
     char *state_file;
     g5c_json *info; /* the bsfInfo of the NF profile, or NULL */
 };
 
-/* ---- bindings ----------------------------------------------------------------------------------------------------- */
+/* ---- bindings ---- */
 
 typedef struct bind {
     char *id;

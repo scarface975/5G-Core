@@ -242,7 +242,7 @@ static void test_base(void)
     TK_ASSERT(g5c_is_digits("0123") && !g5c_is_digits("") && !g5c_is_digits("12a"));
 }
 
-/* ---- property-based tests for the JSON layer (strategy 4.1: unit layer, property-based) --------------------------- */
+/* ---- property-based tests for the JSON layer (strategy 4.1: unit layer, property-based) ---- */
 
 static void rand_string(tk_rng *r, char *out, size_t cap)
 {
@@ -393,7 +393,7 @@ static void test_json_conformance(void)
         memset(deep + 70, ']', 70);
         TK_ASSERT(g5c_json_parse(deep, 140, NULL, 0) == NULL);
     }
-    {   /* duplicate keys: lookups see the last one (documented; the parser does not de-duplicate, that would be quadratic) */
+    {   /* duplicate keys: lookups see the last one */
         g5c_json *j = g5c_json_parse("{\"a\":1,\"a\":2}", 13, NULL, 0);
         int64_t v = 0;
         TK_ASSERT(j != NULL && g5c_json_get_int(j, "a", &v) && v == 2);

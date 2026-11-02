@@ -31,8 +31,7 @@ static void set_opt_int(int fd, int level, int name, int v)
     (void)setsockopt(fd, level, name, &v, sizeof v);
 }
 
-/* N2 is a low-rate signalling association: acknowledge every packet at once. With the kernel's default (a SACK for every second packet or after 200 ms) a gNB whose retransmission
- * timer is shorter than that (OCUDU: about 120 ms) retransmits a message that has arrived (seen in a capture of the demo). Inherited by the associations of a listening socket. */
+/* N2 is a low-rate signalling association: acknowledge every packet at once */
 static void set_sack(int fd)
 {
     struct sctp_sack_info si = {0, 1, 1};
@@ -263,7 +262,7 @@ static void read_gnb(amf *a, uint32_t idx, uint32_t gen)
                 memcpy(&ri, CMSG_DATA(cm), sizeof ri);
                 stream = ri.rcv_sid;
             }
-        if (!(mh.msg_flags & MSG_EOR)) { /* a message larger than our buffer: refuse the association (protocol violation for any sane gNB) */
+        if (!(mh.msg_flags & MSG_EOR)) { /* a message larger than our buffer */
             G5C_LOGW(AMF_LOG, "N2 association %s sent an oversized message: closing", g->peer);
             gnb_close(a, idx);
             ngap_gnb_lost(a, idx);

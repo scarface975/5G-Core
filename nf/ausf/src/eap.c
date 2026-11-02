@@ -1,8 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* EAP-AKA' on the Nausf_UEAuthentication interface (TS 29.509 5.2.2.2.3, TS 33.501 6.1.3.1 and Annex F, RFC 4187, RFC 5448, RFC 9048). The AUSF is the EAP server: the
- * AMF carries the EAP packets as base64 in JSON. The UDM supplies the vector with CK' and IK' (TS 33.501 Annex A.3), the AUSF derives the keys, builds the
- * EAP-Request/AKA'-Challenge, verifies RES and AT_MAC of the response, and returns EAP-Success with KSEAF.
- * Packet identifiers of EAP-Success and EAP-Failure repeat the identifier of the Response they answer (RFC 3748 4.2). */
+/* EAP-AKA' on the Nausf_UEAuthentication interface (TS 29.509 5.2.2.2.3, TS 33.501 6.1.3.1 and Annex F, RFC 4187, RFC 5448, RFC 9048) */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -125,7 +122,7 @@ bool eap_start(ausf *a, ausf_ctx *c, const g5c_json *vec, g5c_resp *resp, g5c_js
     return true;
 }
 
-/* ---- the session ------------------------------------------------------------------------------------------------------------------------------------ */
+/* ---- the session ---- */
 
 static g5c_json *eap_reply(const uint8_t *pkt, size_t len, const char *result)
 {
@@ -251,7 +248,7 @@ static bool res_ok(const ausf_ctx *c, const g5c_eap_attr *at)
     return CRYPTO_memcmp(at->val + 2, c->xres, c->xres_len) == 0;
 }
 
-/* AKA'-Synchronization-Failure: ask the UDM for a new vector with the AUTS (TS 33.501 6.1.3.3.2) and send a new challenge. true when the new challenge is out. */
+/* AKA'-Synchronization-Failure: ask the UDM for a new vector with the AUTS (TS 33.501 6.1.3.3.2) and send a new challenge */
 static bool resync(ausf *a, const g5c_req *req, ausf_ctx *c, const g5c_eap_pkt *p, uint8_t resp_id, g5c_resp *resp)
 {
     const g5c_eap_attr *auts = g5c_eap_find(p, G5C_AT_AUTS), *kdf = g5c_eap_find(p, G5C_AT_KDF);
@@ -384,8 +381,7 @@ void eap_session_post(ausf *a, const g5c_req *req, g5c_resp *resp)
         /* RFC 4187 10.15: AT_MAC is checked before anything else in the message */
         const g5c_eap_attr *res = g5c_eap_find(&p, G5C_AT_RES), *kdf = g5c_eap_find(&p, G5C_AT_KDF), *ind = g5c_eap_find(&p, G5C_AT_RESULT_IND);
         bool mac = g5c_eap_mac_ok(buf, (size_t)n, c->keys.k_aut, NULL, 0);
-        /* RFC 5448 3.2: the only key derivation function offered is 1, so a request for another one is as invalid as a bad MAC. An AT_KDF that repeats the value 1 in use
-         * asks for nothing (RFC 5448 does not allow the peer to send it, UERANSIM does); it is covered by AT_MAC, so it is tolerated. */
+        /* RFC 5448 3.2: the only key derivation function offered is 1, so a request for another one is as invalid as a bad MAC */
         bool kdf_bad = kdf != NULL && !(kdf->vlen == 2 && kdf->val[0] == 0 && kdf->val[1] == 1);
         if (!mac || kdf_bad || !res_ok(c, res)) {
             ausf_count2(a, "g5c_ausf_eap_failures_total", "EAP-AKA' responses that failed verification.", "reason", kdf_bad ? "kdf" : !mac ? "mac" : "res", "method", "eap-aka-prime");

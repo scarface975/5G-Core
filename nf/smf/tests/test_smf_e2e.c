@@ -1,9 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* The SMF against the rest of the core in one process: udr + UDM + PCF + the UPF runtime (real PFCP and GTP-U sockets, a datagram
- * socketpair as the N6 interface) + this SMF, with a scripted AMF on the N11 side and a scripted gNB on N3.
- *
- * The AMF side follows TS 23.502 4.3.2.2.1 (establishment), 4.2.6 (AN release / service request), 4.3.4 (release) with the Nsmf_PDUSession
- * bodies of TS 29.502 (multipart/related with the N1 SM and N2 SM parts). */
+/* The SMF against the rest of the core in one process */
 #define _DEFAULT_SOURCE
 #include <arpa/inet.h>
 #include <pthread.h>
@@ -27,7 +23,7 @@
 #define K_HEX "465b5ce8b199b49faa5f0a2ee238a6bc"
 #define OP_HEX "cdc202d5123e20f62b6d676ac72cb318"
 
-/* ---- the scripted AMF ----------------------------------------------------------------------------------------------------------- */
+/* ---- the scripted AMF ---- */
 
 typedef struct {
     char path[400];
@@ -158,7 +154,7 @@ static bool wait_status(size_t n)
     return false;
 }
 
-/* ---- the environment ----------------------------------------------------------------------------------------------------------------- */
+/* ---- the environment ---- */
 
 static struct {
     g5c_registry *m;
@@ -388,7 +384,7 @@ static void teardown(void)
     amf_reset();
 }
 
-/* ---- AMF-side request builders ------------------------------------------------------------------------------------------------------- */
+/* ---- AMF-side request builders ---- */
 
 static void build_est_req(g5c_bytes *out, uint8_t psi, uint8_t pti, int pdu_type)
 {
@@ -599,7 +595,7 @@ static int release(const char *ref)
     return st;
 }
 
-/* ---- gNB / data network ------------------------------------------------------------------------------------------------------------------ */
+/* ---- gNB / data network ---- */
 
 static void ip4pkt(uint8_t *p, const uint8_t src[4], const uint8_t dst[4], uint8_t proto, uint16_t sport, uint16_t dport, size_t total)
 {
@@ -714,7 +710,7 @@ static bool all_clear(void)
     return smf_session_count(E.s) == 0 && upf_sessions() == 0 && pcf_session_count(&E.p) == 0;
 }
 
-/* ---- scenarios ---------------------------------------------------------------------------------------------------------------------------- */
+/* ---- scenarios ---- */
 
 static void check_accept_basics(setup_t *s, bool expect_voice)
 {
@@ -924,7 +920,7 @@ static void test_happy_path(void)
         ssize_t k = recv(E.gnb, eb, sizeof eb, 0);
         TK_ASSERT(k >= 8 && eb[1] == GTPU_ERROR_INDICATION);
     }
-    {   /* the charging record of the session: who, how long, how much (the 60 octets of the uplink packet), why it ended */
+    {   /* the charging record of the session */
         char *txt = g5c_read_file(E.cdr_path, 1U << 16, NULL), *line = NULL, *p;
         g5c_json *rec;
         char err[200];
@@ -1130,7 +1126,7 @@ static void test_rejections(void)
         free(js);
         g5c_bytes_free(&n1b);
     }
-    /* transport level: JSON without the multipart framing, a body that is not multipart although it says so, a wrong media type, a request type we do not serve */
+    /* transport level: JSON without the multipart framing, a body that is not multipart although it says so, a wrong media type */
     {
         char url[200];
         char *p;
@@ -1562,7 +1558,7 @@ static void test_policy_update(void)
     amf_reset();
 }
 
-/* A-03: the PCF sets a volume threshold, the UPF reports when it is passed, the SMF tells the PCF, the PCF throttles the session and the SMF applies it (UPF, UE and gNB are told) */
+/* A-03: the PCF sets a volume threshold, the UPF reports when it is passed, the SMF tells the PCF, the PCF throttles the session */
 static void test_usage_monitoring(void)
 {
     g5c_resp r;
@@ -1755,7 +1751,7 @@ static void test_router_solicitation(void)
     pkt[43] = (uint8_t)~sum;
     TK_ASSERT(activate(ref, 0x7301) == 200);
     gnb_send_ul(st.ul_teid, 1, pkt, sizeof pkt);
-    {   /* the advertisement reaches the gNB tunnel: IPv6, ICMPv6 type 134, the session's prefix (the pool's first /64) */
+    {   /* the advertisement reaches the gNB tunnel */
         uint8_t buf[300];
         ssize_t k = recv(E.gnb, buf, sizeof buf, 0);
         gtpu_header gh;

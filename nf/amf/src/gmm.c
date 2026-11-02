@@ -1,10 +1,6 @@
 #define _DEFAULT_SOURCE
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* 5GMM procedures of the AMF (TS 24.501 clause 5, TS 23.502 clause 4.2): registration, identification, authentication, NAS security mode control,
- * service request, paging, de-registration, configuration update and UE context release.
- *
- * Locking: handlers run with the mutex of the UE the connection is bound to held (c->held); a connection that is not bound yet touches no shared
- * state. Blocking SBI calls therefore delay only the UE they work for. */
+/* 5GMM procedures of the AMF (TS 24.501 clause 5, TS 23.502 clause 4.2) */
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -58,7 +54,7 @@ typedef struct {
     bool has_container;
 } reg_info;
 
-/* ---- bookkeeping --------------------------------------------------------------------------------------------------------------------------- */
+/* ---- bookkeeping ---- */
 
 amf_ue *conn_ue_ref(amf_conn *c)
 {
@@ -155,7 +151,7 @@ void ue_detach_conn(amf_ue *u)
     amf_ue_unref(u); /* the connection's reference */
 }
 
-/* ---- timers --------------------------------------------------------------------------------------------------------------------------------- */
+/* ---- timers ---- */
 
 void conn_timer_start(amf_conn *c, int kind, unsigned secs)
 {
@@ -204,7 +200,7 @@ static void remember(amf_conn *c, const uint8_t *nas, size_t len, uint8_t sht)
     c->last_sht = sht;
 }
 
-/* ---- sending -------------------------------------------------------------------------------------------------------------------------------- */
+/* ---- sending ---- */
 
 /* protection: 0 plain; 2 current context (integrity + ciphering); 3 the provisional context (integrity only, new context) */
 static int protect(amf_ue *u, uint8_t sht, const uint8_t *plain, size_t len, g5c_bytes *out)
@@ -253,7 +249,7 @@ static void send_procedure_msg(amf_conn *c, amf_ue *u, const uint8_t *plain, siz
     conn_timer_start(c, timer, secs);
 }
 
-/* ---- identities ------------------------------------------------------------------------------------------------------------------------------- */
+/* ---- identities ---- */
 
 static bool guti_is_ours(const amf *a, const nas_mobile_identity *id)
 {
@@ -344,7 +340,7 @@ static bool auth_check(amf_ue *u, nas_auth *au)
     return au->verified;
 }
 
-/* ---- release helpers ---------------------------------------------------------------------------------------------------------------------------- */
+/* ---- release helpers ---- */
 
 static void release_conn(amf_conn *c, const char *group, const char *cause, uint8_t then)
 {
@@ -392,7 +388,7 @@ static void reg_reject(amf_conn *c, amf_ue *u, uint8_t cause, const char *why)
     release_conn(c, "nas", "unspecified", REL_DELETE_UE);
 }
 
-/* ---- registration: identification and authentication ------------------------------------------------------------------------------------------ */
+/* ---- registration: identification and authentication ---- */
 
 static void start_auth(amf_conn *c, amf_ue *u, const char *id);
 static void reg_proceed(amf_conn *c, amf_ue *u);
@@ -563,7 +559,7 @@ static void auth_done(amf_conn *c, const char *supi, const uint8_t kseaf_in[32])
     start_smc(c, u);
 }
 
-/* EAP-AKA': the AUTHENTICATION RESPONSE carries the EAP response of the UE; the AUSF (the EAP server) answers with the next request, the failure, or the success */
+/* EAP-AKA': the AUTHENTICATION RESPONSE carries the EAP response of the UE; the AUSF (the EAP server) answers with the next request, the failure */
 static void on_eap_response(amf_conn *c, const nas_msg *m)
 {
     amf *a = c->a;
@@ -681,7 +677,7 @@ static void on_auth_failure(amf_conn *c, const nas_msg *m)
     auth_reject(c, c->ue, cause != NULL && cause[0] == MM_CAUSE_MAC_FAILURE ? "MAC failure reported by the UE" : "failure reported by the UE");
 }
 
-/* ---- registration: security mode control ------------------------------------------------------------------------------------------------------- */
+/* ---- registration: security mode control ---- */
 
 static void on_smc_complete(amf_conn *c, amf_ue *u, const nas_msg *m, uint32_t count)
 {
@@ -714,7 +710,7 @@ static void on_smc_complete(amf_conn *c, amf_ue *u, const nas_msg *m, uint32_t c
     reg_proceed(c, u);
 }
 
-/* ---- registration: subscription, policy, slices, accept ------------------------------------------------------------------------------------------ */
+/* ---- registration: subscription, policy, slices, accept ---- */
 
 static void select_slices(amf *a, amf_ue *u, const reg_info *ri, nas_snssai *allowed, size_t *nallowed, nas_snssai *rejected, size_t *nrej)
 {
@@ -931,7 +927,7 @@ static void on_reg_complete(amf_conn *c, amf_ue *u)
         (void)gmm_start_config_update(u, u->cfg_new_guti);
 }
 
-/* ---- registration request entry ------------------------------------------------------------------------------------------------------------------ */
+/* ---- registration request entry ---- */
 
 static void reg_request(amf_conn *c, const nas_msg *m, nas_auth *au)
 {
@@ -1022,7 +1018,7 @@ static void reg_request(amf_conn *c, const nas_msg *m, nas_auth *au)
     reg_reject(c, c->ue, MM_CAUSE_UE_ID_CANNOT_BE_DERIVED, "the identity cannot be resolved");
 }
 
-/* ---- service request (TS 24.501 5.6.1, TS 23.502 4.2.3) ------------------------------------------------------------------------------------------------ */
+/* ---- service request (TS 24.501 5.6.1, TS 23.502 4.2.3) ---- */
 
 static void service_reject(amf_conn *c, uint8_t cause, bool release_ue)
 {
@@ -1159,7 +1155,7 @@ static void service_request(amf_conn *c, const nas_msg *m, nas_auth *au, uint32_
         (void)gmm_start_config_update(u, u->cfg_new_guti);
 }
 
-/* ---- paging (TS 23.502 4.2.3.3) -------------------------------------------------------------------------------------------------------------------- */
+/* ---- paging (TS 23.502 4.2.3.3) ---- */
 
 void gmm_page_start(amf_ue *u)
 {
@@ -1235,7 +1231,7 @@ static void ue_timer_fire(amf *a, amf_ue *u, int kind, uint32_t gen)
     }
 }
 
-/* ---- de-registration ------------------------------------------------------------------------------------------------------------------------------- */
+/* ---- de-registration ---- */
 
 static void finish_dereg(amf_conn *c, amf_ue *u, const char *kind)
 {
@@ -1297,8 +1293,7 @@ static void ue_dereg_request(amf_conn *c, const nas_msg *m, nas_auth *au)
         (void)gmm_send_dl(c, u, acc.data, acc.len);
     g5c_bytes_free(&acc);
     release_conn(c, "nas", "deregister", REL_DELETE_UE);
-    /* the association may be gone already (a gNB that sends the request and closes at once): release_conn then sends nothing and nobody would delete the context that
-     * is de-registered now; without this the context stays for ever (found by the load runs: one UE context left in about one run in eight) */
+    /* the association may be gone already (a gNB that sends the request and closes at once) */
     if (!u->removed && u->mm == MM_DEREGISTERED && (c->closed || c->rel_sent))
         amf_ue_remove(u);
 }
@@ -1327,7 +1322,7 @@ int gmm_start_dereg(amf_ue *u, bool reregister)
     return 0;
 }
 
-/* ---- configuration update (TS 24.501 5.4.4) ----------------------------------------------------------------------------------------------------------- */
+/* ---- configuration update (TS 24.501 5.4.4) ---- */
 
 int gmm_start_config_update(amf_ue *u, bool new_guti)
 {
@@ -1374,7 +1369,7 @@ int gmm_start_config_update(amf_ue *u, bool new_guti)
     return 0;
 }
 
-/* ---- release and idle transition ---------------------------------------------------------------------------------------------------------------------- */
+/* ---- release and idle transition ---- */
 
 /* The UE leaves CM-CONNECTED: its user plane is deactivated at the SMF, the reachability timer starts. */
 void gmm_ue_idle(amf *a, amf_ue *u)
@@ -1450,7 +1445,7 @@ void gmm_conn_gone(amf_conn *c)
     amf_conn_unlink(c);
 }
 
-/* ---- timers of a connection ---------------------------------------------------------------------------------------------------------------------------- */
+/* ---- timers of a connection ---- */
 
 void gmm_conn_timer(amf_conn *c, int kind, uint32_t gen)
 {
@@ -1557,7 +1552,7 @@ void gmm_timer(amf *a, int target, int kind, uint64_t id, uint32_t gen)
     }
 }
 
-/* ---- uplink NAS demultiplexing ---------------------------------------------------------------------------------------------------------------------- */
+/* ---- uplink NAS demultiplexing ---- */
 
 void gmm_initial_ue(amf_conn *c, const uint8_t *nas, size_t len, const g5c_json *msg)
 {

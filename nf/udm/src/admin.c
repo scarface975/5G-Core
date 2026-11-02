@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* Subscriber provisioning (/admin/v1, not part of the 3GPP API). Disabled unless an admin token is set.
- * This is the only place plaintext K/OP/OPc is accepted; it is protected before it reaches the UDR. */
+/* Subscriber provisioning (/admin/v1, not part of the 3GPP API). Disabled unless an admin token is set */
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -50,7 +49,7 @@ static char *lower(const char *s)
     return d;
 }
 
-/* ---- request validation (the AdminSubscriber document) ----------------------------------------------------------- */
+/* ---- request validation (the AdminSubscriber document) ---- */
 
 static int check_obj_keys(const g5c_json *o, const char *const *allowed, const char *where, g5c_resp *resp)
 {
@@ -427,7 +426,7 @@ out:
     return ok;
 }
 
-/* ---- routes ------------------------------------------------------------------------------------------------------- */
+/* ---- routes ---- */
 
 static void post_subscriber(void *ctx, const g5c_req *req, g5c_resp *resp)
 {
@@ -452,8 +451,7 @@ static void post_subscriber(void *ctx, const g5c_req *req, g5c_resp *resp)
     g5c_json_free(s);
 }
 
-/* POST /admin/v1/subscribers-bulk: an array of up to 1000 subscribers (the /admin/v1/subscribers body each), or {"subscribers": [...]}. Each is checked and stored on its own: one bad record does not stop the
- * others. The answer is 200 with the totals and, in order, {supi, status} per record (201 stored, else the status and detail the single-record call would have given). */
+/* POST /admin/v1/subscribers-bulk: an array of up to 1000 subscribers (the /admin/v1/subscribers body each), or {"subscribers": [...]} */
 #define UDM_BULK_MAX 1000
 
 static void post_bulk(void *ctx, const g5c_req *req, g5c_resp *resp)
@@ -570,8 +568,7 @@ static void delete_subscriber(void *ctx, const g5c_req *req, g5c_resp *resp)
     }
 }
 
-/* POST /admin/v1/keys/rewrap: every stored K and OPc that only the previous master key opens is protected again with the current one (rotation of the master key).
- * The SQN and everything else of the record stay as they are: only the three protection fields are replaced, through a patch. */
+/* POST /admin/v1/keys/rewrap */
 static void rewrap(void *ctx, const g5c_req *req, g5c_resp *resp)
 {
     udm *u = ctx;
@@ -661,8 +658,7 @@ static void rewrap(void *ctx, const g5c_req *req, g5c_resp *resp)
     g5c_json_free(out);
 }
 
-/* GET /console: the operator console (deploy/console/index.html), a single page that uses the admin API of this function. It is served only when the admin API is enabled; the page itself holds nothing
- * secret, and its content security policy lets it run only its own script and talk only to this server. A browser needs TLS to speak to the function: import the operator certificate. */
+/* GET /console: the operator console (deploy/console/index.html), a single page that uses the admin API of this function */
 static void console_page(void *ctx, const g5c_req *req, g5c_resp *resp)
 {
     const udm *u = ctx;

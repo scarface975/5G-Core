@@ -1,7 +1,6 @@
 #define _DEFAULT_SOURCE
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* Namf_EventExposure (TS 29.518 clause 5.3), basic: subscriptions for registration state, connectivity state, reachability and location reports
- * of one UE or of any UE, and the notifications that follow state changes. */
+/* Namf_EventExposure (TS 29.518 clause 5.3), basic */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,7 +28,7 @@ static void iso_now(char out[24])
     strftime(out, 24, "%Y-%m-%dT%H:%M:%SZ", &tmv);
 }
 
-/* ---- notifications --------------------------------------------------------------------------------------------------------------------- */
+/* ---- notifications ---- */
 
 typedef struct {
     char *uri;
@@ -117,8 +116,7 @@ static void dispatch_event(amf *a, amf_ue *u, int type, const char *state)
     }
 }
 
-/* One state change can be several events: a UE that is de-registered has lost its connectivity (the reason says how: TS 29.518 6.2.6.3.12; the
- * implicit de-registration is the expiry of the detection time), a UE that is connected can be reached. */
+/* One state change can be several events */
 void gmm_event(amf *a, amf_ue *u, int type, const char *state)
 {
     const char *loss = NULL;
@@ -135,7 +133,7 @@ void gmm_event(amf *a, amf_ue *u, int type, const char *state)
         dispatch_event(a, u, EVT_REACHABILITY, NULL);
 }
 
-/* ---- the service -------------------------------------------------------------------------------------------------------------------------- */
+/* ---- the service ---- */
 
 static void create_sub(void *ctx, const g5c_req *req, g5c_resp *resp)
 {

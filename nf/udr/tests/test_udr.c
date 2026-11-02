@@ -79,8 +79,7 @@ static void wait_journal_grows(const char *jp, size_t above)
     TK_ASSERT(fsize(jp) > above);
 }
 
-/* A crash leaves the snapshot and the journal as they were on disk: the store that opens them has every change that had been flushed, removals
- * included, and a journal that is older than the snapshot (folded in, crash before the truncation) is not replayed over it. */
+/* A crash leaves the snapshot and the journal as they were on disk */
 static void test_journal_recovery(void)
 {
     char dir[] = "/tmp/g5c-udrj-XXXXXX", a[64], aj[80], b[64], bj[80], cmd[600], err[160];
@@ -231,8 +230,7 @@ static void test_routes(void)
     g5c_udr_store_free(st);
 }
 
-/* JSON Patch (RFC 6902) cases: the add/replace/remove examples of the RFC's appendix A, then the error classes. Expected
- * documents are compared structurally; expected_rc != 0 means the patch must be refused and the document left usable. */
+/* JSON Patch (RFC 6902) cases: the add/replace/remove examples of the RFC's appendix A, then the error classes */
 static void test_patch_rfc6902(void)
 {
     static const struct {

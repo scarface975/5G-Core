@@ -1,9 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* The AMF against the rest of the core in one process: udr + UDM + AUSF (lite) + PCF + the UPF runtime (real PFCP and GTP-U sockets, a datagram
- * socketpair as N6) + SMF + this AMF, with scripted gNBs on N2 (real SCTP) and N3 (UDP) and scripted UEs on N1 (Milenage, 5G-AKA, NAS security).
- *
- * The UE side follows TS 24.501 clause 5 and TS 33.501 clause 6; the gNB side TS 38.413 clause 8. Everything the AMF builds is decoded by the same
- * codecs the other network functions use, and keys are derived independently on the UE side. */
+/* The AMF against the rest of the core in one process */
 #ifndef G5C_AMF_E2E_ENV_H
 #define G5C_AMF_E2E_ENV_H
 #define _GNU_SOURCE
@@ -43,7 +39,7 @@ static double now_s(void)
     return (double)ts.tv_sec + (double)ts.tv_nsec / 1e9;
 }
 
-/* ---- environment ---------------------------------------------------------------------------------------------------------------------------- */
+/* ---- environment ---- */
 
 static struct {
     g5c_registry *m;
@@ -353,7 +349,7 @@ static void teardown(void)
     close(E.dn);
 }
 
-/* ---- the scripted gNB (N2 over SCTP) ------------------------------------------------------------------------------------------------------ */
+/* ---- the scripted gNB (N2 over SCTP) ---- */
 
 typedef struct {
     int fd;
@@ -544,7 +540,7 @@ static void gnb_setup_ok(gnb_t *g, int idx, uint32_t gnb_id, uint32_t tac)
     g5c_json_free(r);
 }
 
-/* ---- the scripted UE ------------------------------------------------------------------------------------------------------------------------ */
+/* ---- the scripted UE ---- */
 
 typedef struct {
     char supi[24];  /* "imsi-..." */
@@ -685,7 +681,7 @@ static void build_reg_request(ue_t *u, uint8_t type, bool with_guti, g5c_bytes *
     nas_msg_free(&m);
 }
 
-/* ---- gNB-side message helpers --------------------------------------------------------------------------------------------------------- */
+/* ---- gNB-side message helpers ---- */
 
 static g5c_json *tai_json(uint32_t tac)
 {
@@ -792,6 +788,5 @@ static g5c_bytes dl_nas(gnb_t *g, ue_t *u)
     g5c_json_free(p);
     return plain;
 }
-
 
 #endif

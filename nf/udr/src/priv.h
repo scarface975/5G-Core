@@ -20,8 +20,7 @@ typedef struct udr_notifier udr_notifier;
 udr_notifier *udr_notifier_new(g5c_udr *u);
 void udr_notifier_free(udr_notifier *n);
 udr_notifier *udr_notifier_of(g5c_udr *u);
-/* A document changed (before / after NULL when it did not exist / no longer exists; key NULL: the whole partition).
- * `suppress`: the 3gpp-Sbi-Notification-Correlation header of the request (subscriptions that are not to be notified). */
+/* A document changed (before / after NULL when it did not exist / no longer exists; key NULL: the whole partition) */
 void udr_notify(g5c_udr *u, const char *part, const char *key, const g5c_json *before, const g5c_json *after,
                 const char *suppress);
 bool udr_is_subscription_key(const char *key);

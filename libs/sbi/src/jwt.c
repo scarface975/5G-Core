@@ -27,7 +27,7 @@ static void seterr(char *err, size_t cap, const char *msg)
         snprintf(err, cap, "%s", msg);
 }
 
-/* ---- base64url without padding (RFC 7515 appendix C) ------------------------------------------------------------------------------------------ */
+/* ---- base64url without padding (RFC 7515 appendix C) ---- */
 
 static const char B64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
@@ -99,7 +99,7 @@ static bool b64u_decode(const char *s, size_t n, uint8_t **out, size_t *outlen)
     return true;
 }
 
-/* ---- keys ---------------------------------------------------------------------------------------------------------------------------------- */
+/* ---- keys ---- */
 
 static g5c_jwt_key *wrap(EVP_PKEY *p, bool priv)
 {
@@ -262,7 +262,7 @@ g5c_jwt_key *g5c_jwt_key_from_jwk(const g5c_json *jwk, char *err, size_t errcap)
     return wrap(p, false);
 }
 
-/* ---- sign / verify ---------------------------------------------------------------------------------------------------------------------------- */
+/* ---- sign / verify ---- */
 
 char *g5c_jwt_sign(const g5c_jwt_key *k, const char *kid, const g5c_json *claims)
 {

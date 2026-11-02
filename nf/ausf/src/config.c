@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* AUSF configuration: the common sections, `udm: { uri }` (omitted: the UDM is found through the NRF) and an `ausf:` block. The KAUSF values in the state file are wrapped with a
- * master key that comes from G5C_AUSF_MASTER_KEY or from `ausf.master_key_file` (64 hexadecimal characters); it is never in the configuration itself. */
+/* AUSF configuration: the common sections, `udm: { uri }` (omitted: the UDM is found through the NRF) and an `ausf:` block */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

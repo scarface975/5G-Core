@@ -1,7 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* Generic ASN.1 APER (X.691 aligned variant) codec driven by the generated NGAP schema. See ngap.h for the JSON
- * representation. Unsupported on purpose: length fragmentation (values of 16 KiB or more in one length-prefixed field),
- * REAL, and the IE-pair containers (not used by any NGAP message). */
+/* Generic ASN.1 APER (X.691 aligned variant) codec driven by the generated NGAP schema. See ngap.h for the JSON representation */
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,7 +9,7 @@
 
 #define MAX_IES_COUNT 65535U
 
-/* ---- bit reader ---------------------------------------------------------------------------------------------------- */
+/* ---- bit reader ---- */
 
 typedef struct {
     const uint8_t *buf;
@@ -52,7 +50,7 @@ static const uint8_t *br_octets(br_t *r, size_t n)
     return p;
 }
 
-/* ---- bit writer ---------------------------------------------------------------------------------------------------- */
+/* ---- bit writer ---- */
 
 typedef struct {
     uint8_t *buf;
@@ -117,7 +115,7 @@ static void bw_free(bw_t *w)
     memset(w, 0, sizeof *w);
 }
 
-/* ---- contexts ------------------------------------------------------------------------------------------------------ */
+/* ---- contexts ---- */
 
 typedef struct {
     char *err;
@@ -168,7 +166,7 @@ static unsigned span_octets(uint64_t span)
 
 static const char *const CRIT[] = {"reject", "ignore", "notify"};
 
-/* ---- constrained numbers and length determinants ------------------------------------------------------------------ */
+/* ---- constrained numbers and length determinants ---- */
 
 /* Constrained whole number with the given span (ub - lb): encoded offset in *off. */
 static int dec_constrained(br_t *r, uint64_t span, uint64_t *off)
@@ -359,7 +357,7 @@ static int enc_small_len(bw_t *w, size_t n)
     return enc_len_unc(w, n);
 }
 
-/* ---- decoding ------------------------------------------------------------------------------------------------------- */
+/* ---- decoding ---- */
 
 static g5c_json *dec(ctx_t *c, br_t *r, const ngap_type *t, int depth);
 
@@ -666,8 +664,7 @@ trunc:
     return NULL;
 }
 
-/* size determination shared by OCTET STRING / BIT STRING / character strings: returns false on error. `unit_bits` is
- * the width of one element (8 for octets/chars, 1 for bits). */
+/* size determination shared by OCTET STRING / BIT STRING / character strings: returns false on error */
 static bool dec_size(ctx_t *c, br_t *r, const ngap_type *t, unsigned unit_bits, size_t *n, bool *aligned, bool *has_len)
 {
     uint64_t ext = 0;
@@ -951,7 +948,7 @@ static g5c_json *dec(ctx_t *c, br_t *r, const ngap_type *t, int depth)
     }
 }
 
-/* ---- encoding -------------------------------------------------------------------------------------------------------- */
+/* ---- encoding ---- */
 
 static int enc(ctx_t *c, bw_t *w, const ngap_type *t, const g5c_json *v, int depth);
 
@@ -1478,7 +1475,7 @@ static int enc(ctx_t *c, bw_t *w, const ngap_type *t, const g5c_json *v, int dep
     }
 }
 
-/* ---- public API ------------------------------------------------------------------------------------------------------ */
+/* ---- public API ---- */
 
 static g5c_json *decode_type(const ngap_type *t, const uint8_t *buf, size_t len, char *err, size_t errcap)
 {

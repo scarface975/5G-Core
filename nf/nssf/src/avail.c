@@ -1,7 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* Nnssf_NSSAIAvailability (TS 29.531 5.3, 6.2): the S-NSSAIs each AMF supports per tracking area, the subscriptions to changes of what is
- * available, and the notifications. The NSSF authorizes what an AMF reports against the slices of the PLMN: an S-NSSAI that exists here and in
- * that tracking area is authorized (restricted for the roamers of some home PLMNs when the slice says so). */
+/* Nnssf_NSSAIAvailability (TS 29.531 5.3, 6.2) */
 #define _DEFAULT_SOURCE
 #define _POSIX_C_SOURCE 200809L
 #include <ctype.h>
@@ -20,7 +18,7 @@
 #define BASE "/nnssf-nssaiavailability/v1"
 #define MAXSL 64
 
-/* ---- parsing what the AMF sent ---------------------------------------------------------------------------------------------- */
+/* ---- parsing what the AMF sent ---- */
 
 static void group_free(avail_group_t *g)
 {
@@ -129,7 +127,7 @@ static bool group_has_tai(const avail_group_t *g, const tai_t *t)
     return false;
 }
 
-/* ---- authorization -------------------------------------------------------------------------------------------------------- */
+/* ---- authorization ---- */
 
 static bool sup_matches(const sn_ext_t *sup, size_t nsup, const sn_t *s)
 {
@@ -237,7 +235,7 @@ static void group_authorized(const nssf_cfg *c, const avail_group_t *g, g5c_json
     }
 }
 
-/* what the subscription is told: per tracking area of the subscription, the slices that the AMFs (of the set, when it names one) support there and the NSSF authorizes */
+/* what the subscription is told */
 static g5c_json *sub_authorized(nssf *n, const sub_t *s)
 {
     g5c_json *arr = g5c_json_new_arr();
@@ -276,7 +274,7 @@ static g5c_json *sub_authorized(nssf *n, const sub_t *s)
     return arr;
 }
 
-/* ---- the AMF queries of NSSelection -------------------------------------------------------------------------------------------- */
+/* ---- the AMF queries of NSSelection ---- */
 
 static nf_entry_t *find_nf(nssf *n, const char *id)
 {
@@ -359,7 +357,7 @@ bool nssf_find_set(nssf *n, const tai_t *t, const sn_t *need, size_t nneed, cons
     return found;
 }
 
-/* ---- the worker: notifications, the state file, expiry ---------------------------------------------------------------------- */
+/* ---- the worker: notifications, the state file, expiry ---- */
 
 static void enqueue(nssf *n, const char *url, char *body, const char *sub_id, unsigned attempts, double delay)
 {
@@ -526,7 +524,7 @@ void nssf_worker_stop(nssf *n)
     n->qlen = 0;
 }
 
-/* ---- notifying the subscriptions of a change -------------------------------------------------------------------------------------- */
+/* ---- notifying the subscriptions of a change ---- */
 
 /* After a change of the availability: the subscriptions whose authorized data differs are told (caller holds mu) */
 static void notify_changes(nssf *n)
@@ -555,7 +553,7 @@ static void notify_changes(nssf *n)
     }
 }
 
-/* ---- the resources ------------------------------------------------------------------------------------------------------------- */
+/* ---- the resources ---- */
 
 static bool nf_id_ok(const char *s)
 {
@@ -746,7 +744,7 @@ static void h_options(void *ctx, const g5c_req *req, g5c_resp *resp)
     g5c_resp_status(resp, 200);
 }
 
-/* ---- subscriptions ------------------------------------------------------------------------------------------------------------- */
+/* ---- subscriptions ---- */
 
 static int64_t parse_expiry_rfc3339(const char *s)
 {
@@ -977,7 +975,7 @@ done:
     g5c_json_free(patch);
 }
 
-/* ---- routes, introspection ------------------------------------------------------------------------------------------------------ */
+/* ---- routes, introspection ---- */
 
 void nssf_avail_routes(g5c_router *r, nssf *n)
 {
@@ -1021,7 +1019,7 @@ size_t nssf_subscription_count(nssf *n)
     return c;
 }
 
-/* ---- state file ----------------------------------------------------------------------------------------------------------------- */
+/* ---- state file ---- */
 
 void nssf_state_save(nssf *n)
 {
@@ -1076,7 +1074,7 @@ int nssf_state_load(nssf *n, char *err, size_t errcap)
     if (n->cfg->state_file == NULL)
         return 0;
     text = g5c_read_file(n->cfg->state_file, 256U << 20, &len);
-    if (text == NULL) { /* first start: the file is created when something changes, and the location must be writable now */
+    if (text == NULL) { /* first start: the file is created when something changes */
         FILE *f = fopen(n->cfg->state_file, "ab");
         if (f == NULL) {
             snprintf(err, errcap, "cannot create the state file %s", n->cfg->state_file);

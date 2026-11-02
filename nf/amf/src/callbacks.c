@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* The AMF's notification endpoints: SM context status (Nsmf, TS 29.502 5.2.2.5), UE de-registration (Nudm_UECM, TS 29.503 5.3.2.4), AM policy
- * update / termination (Npcf_AMPolicyControl, TS 29.507 5.3.2.2) and subscriber data change (Nudm_SDM, TS 29.503 5.2.2.4). */
+/* The AMF's notification endpoints */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

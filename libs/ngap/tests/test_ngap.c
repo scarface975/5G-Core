@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* NGAP APER codec against real captures: every PDU of the Open5GS/UERANSIM and ORAN-emulator golden traces must decode,
- * and re-encode to exactly the same bytes (APER is canonical, so any difference is a codec bug). */
+/* NGAP APER codec against real captures */
 #define _DEFAULT_SOURCE
 #include <stdio.h>
 

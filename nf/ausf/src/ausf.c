@@ -184,7 +184,7 @@ void ausf_count2(ausf *a, const char *name, const char *help, const char *k1, co
     g5c_counter_inc(g5c_counter_get(a->metrics, name, help, l, 2));
 }
 
-/* ---- identifiers --------------------------------------------------------------------------------------------------------------------------------- */
+/* ---- identifiers ---- */
 
 static bool id_chars(const char *s)
 {
@@ -227,7 +227,7 @@ const char *ausf_imsi_digits(const char *supi)
     return g5c_starts_with(supi, "imsi-") ? supi + 5 : NULL;
 }
 
-/* ---- routes ------------------------------------------------------------------------------------------------------------------------------------------- */
+/* ---- routes ---- */
 
 void ausf_routes(g5c_router *r, ausf *a)
 {

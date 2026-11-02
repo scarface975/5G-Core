@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* Policy model and decision engine (TS 23.503, TS 29.512 clause 5.6): turn a session context into an SmPolicyDecision.
- * No I/O. JSON field names of the stored/configured documents are snake_case (session_ambr, pcc_rules, ...). */
+/* Policy model and decision engine (TS 23.503, TS 29.512 clause 5.6): turn a session context into an SmPolicyDecision. No I/O */
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,7 +14,7 @@ static void E(char *err, size_t cap, const char *a, const char *b)
         snprintf(err, cap, "%s%s", a, b);
 }
 
-/* ---- free ------------------------------------------------------------------------------------------------------------ */
+/* ---- free ---- */
 
 static void rule_free(pcf_rule *r)
 {
@@ -53,7 +52,7 @@ void pcf_policy_free(pcf_policy *p)
     memset(p, 0, sizeof *p);
 }
 
-/* ---- parsing ------------------------------------------------------------------------------------------------------------ */
+/* ---- parsing ---- */
 
 static bool is_null(const g5c_json *j)
 {
@@ -314,7 +313,7 @@ int pcf_policy_parse(const g5c_json *j, bool is_config, pcf_policy *out, char *e
             out->has_rfsp = true;
             out->rfsp = (uint16_t)v;
         }
-        if (!is_null(g5c_json_get(j, "usage_monitoring"))) { /* usage monitoring (TS 29.512 UsageMonitoringData): `usage_monitoring: { volume_threshold: <bytes>, throttle: { uplink, downlink } }` */
+        if (!is_null(g5c_json_get(j, "usage_monitoring"))) { /* usage monitoring (TS 29.512 UsageMonitoringData) */
             static const char *const k_um[] = {"volume_threshold", "throttle", NULL};
             const g5c_json *um = g5c_json_get(j, "usage_monitoring");
             int64_t th = 0;
@@ -341,7 +340,7 @@ bad:
     return -1;
 }
 
-/* ---- serialisation ------------------------------------------------------------------------------------------------------------ */
+/* ---- serialisation ---- */
 
 static g5c_json *opt_str_json(const char *s)
 {
@@ -397,7 +396,7 @@ g5c_json *pcf_policy_to_json(const pcf_policy *p)
     return o;
 }
 
-/* ---- validation ------------------------------------------------------------------------------------------------------------------ */
+/* ---- validation ---- */
 
 bool pcf_valid_bitrate(const char *s)
 {
@@ -527,7 +526,7 @@ int pcf_policy_validate(const pcf_policy *p, bool is_config, char *field, size_t
     return 0;
 }
 
-/* ---- resolution ------------------------------------------------------------------------------------------------------------------ */
+/* ---- resolution ---- */
 
 static const pcf_profile *find_dnn(const pcf_policy *p, const char *dnn)
 {
@@ -681,8 +680,7 @@ g5c_json *pcf_decision(const pcf_resolved *r)
     g5c_json_set(dq, "arp", arp_json(r->qos.arp_priority, r->qos.preempt_cap, r->qos.preempt_vuln));
     if (r->qos.has_priority_level)
         g5c_json_set_int(dq, "priorityLevel", r->qos.priority_level);
-    /* NB: optional arrays with minItems 1 in the OpenAPI schemas (policyCtrlReqTriggers, ...) must be omitted rather
-     * than sent empty; Open5GS rejects `[]`. */
+    /* NB: optional arrays with minItems 1 in the OpenAPI schemas (policyCtrlReqTriggers, ...) must be omitted rather than sent empty; Open5GS rejects `[]`. */
     if (r->nrules > 0) {
         g5c_json *pcc = g5c_json_set(d, "pccRules", g5c_json_new_obj()), *qos = g5c_json_set(d, "qosDecs", g5c_json_new_obj());
         for (size_t i = 0; i < r->nrules; i++) {

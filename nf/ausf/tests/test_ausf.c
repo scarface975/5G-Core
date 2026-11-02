@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* AUSF end to end: udr + UDM + AUSF on real sockets, driven by a simulated UE that performs the real USIM-side checks (AUTN MAC, SQN freshness, AUTS
- * generation) with our own Milenage implementation, for 5G AKA and EAP-AKA'; plus SoR and UPU protection, the state file, the configuration and faults of the UDM. */
+/* AUSF end to end: udr + UDM + AUSF on real sockets, driven by a simulated UE that performs the real USIM-side checks */
 #define _DEFAULT_SOURCE
 #include <pthread.h>
 #include <stdatomic.h>
@@ -150,7 +149,7 @@ static int confirm(S *s, const char *href, const uint8_t *res_star, size_t n, g5
     return st;
 }
 
-/* ---- the UE side ---------------------------------------------------------------------------------------- */
+/* ---- the UE side ---- */
 
 typedef struct {
     uint8_t k[16], opc[16];
@@ -250,7 +249,7 @@ static void auth_status(S *s, g5c_json **out)
     free(u);
 }
 
-/* ---- tests ----------------------------------------------------------------------------------------------- */
+/* ---- tests ---- */
 
 static void test_full_aka(void)
 {
@@ -606,7 +605,7 @@ static void test_admin_api(void)
     unstack(&s);
 }
 
-/* ---- AUSF faults: every way the UDM can misbehave, and malformed requests from the AMF side ------------------------ */
+/* ---- AUSF faults: every way the UDM can misbehave, and malformed requests from the AMF side ---- */
 static atomic_int udm_mode;
 
 static void h_fake_udm(void *ctx, const g5c_req *req, g5c_resp *resp)
@@ -752,7 +751,7 @@ static void test_udm_damaged_credentials(void)
     TK_ASSERT(gen_vector(&s, body, &v) == 200);
     g5c_json_free(v);
 
-    d = g5c_json_dup(orig); /* an authentication method the UDM does not implement: the user cannot be authenticated with it */
+    d = g5c_json_dup(orig); /* an authentication method the UDM does not implement */
     g5c_json_set_str(d, "authenticationMethod", "EAP_TLS");
     put_udr(&s, SUPI, d);
     TK_ASSERT(gen_vector(&s, body, &v) == 403);

@@ -63,8 +63,7 @@ const char *nas_strerror(int err);
 const nas_msgdef *nas_lookup(nas_proto proto, uint8_t msg_type);
 const nas_msgdef *nas_lookup_name(const char *name);
 
-/* One IE value. `value` excludes the IEI and length octets; for half-octet IEs it is one octet holding the nibble in
- * its low 4 bits. */
+/* One IE value. `value` excludes the IEI and length octets; for half-octet IEs it is one octet holding the nibble in its low 4 bits. */
 typedef struct {
     const char *name; /* spec name, or "unknown" */
     int16_t iei;      /* -1 for untagged IEs */
@@ -93,7 +92,7 @@ int nas_msg_decode(const uint8_t *buf, size_t len, nas_msg *out);
 /* Append the plain wire encoding to out. */
 int nas_msg_encode(const nas_msg *m, g5c_bytes *out);
 
-/* ---- typed information elements (clause 9.11) ----------------------------------------------------------------------- */
+/* ---- typed information elements (clause 9.11) ---- */
 
 /* 3-octet PLMN (TS 24.008 10.5.1.13) <-> digit strings (mcc[4], mnc[4]). */
 int nas_plmn_decode(const uint8_t *b, size_t len, char mcc[4], char mnc[4]);
@@ -180,7 +179,7 @@ int nas_nssai_encode(const nas_snssai *list, size_t n, g5c_bytes *out);
 int nas_dnn_decode(const uint8_t *v, size_t len, char *out, size_t cap);
 int nas_dnn_encode(const char *dnn, g5c_bytes *out);
 
-/* ---- security (TS 24.501 4.4 and 9.3, TS 33.501 6.4 and Annex D) ------------------------------------------------------- */
+/* ---- security (TS 24.501 4.4 and 9.3, TS 33.501 6.4 and Annex D) ---- */
 
 #define NAS_BEARER_3GPP 1 /* bearer identity for NAS over 3GPP access (TS 33.501 D.1.1) */
 
@@ -219,8 +218,7 @@ void nas_any_free(nas_any *a);
 bool nas_protected_verify(const nas_protected *p, const nas_sec_ctx *ctx, g5c_dir dir, uint32_t count);
 /* Recover the inner plain message bytes (deciphering when the header type says so). */
 int nas_protected_open(const nas_protected *p, const nas_sec_ctx *ctx, g5c_dir dir, uint32_t count, g5c_bytes *out);
-/* Protect a plain NAS message: optional ciphering (SHT 2 and 4), then the MAC over seq || payload. The low octet of
- * the 32-bit NAS COUNT becomes the sequence number on the wire. */
+/* Protect a plain NAS message: optional ciphering (SHT 2 and 4), then the MAC over seq || payload */
 int nas_protect(const nas_sec_ctx *ctx, uint8_t sht, g5c_dir dir, uint32_t count, const uint8_t *plain, size_t plen,
                 g5c_bytes *out);
 

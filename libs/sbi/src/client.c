@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* Pooled blocking HTTP/2 client (cleartext prior knowledge, or TLS with ALPN h2) with a per-request deadline.
- * One request at a time per connection; idle connections are kept per authority and reused. */
+/* Pooled blocking HTTP/2 client (cleartext prior knowledge, or TLS with ALPN h2) with a per-request deadline */
 #define _POSIX_C_SOURCE 200809L
 #include <errno.h>
 #include <fcntl.h>
@@ -66,7 +65,7 @@ static void seterr(char *err, size_t cap, const char *fmt, ...)
     va_end(ap);
 }
 
-/* ---- URL ----------------------------------------------------------------------------------- */
+/* ---- URL ---- */
 
 typedef struct {
     bool https;
@@ -137,7 +136,7 @@ bad:
     return -1;
 }
 
-/* ---- socket I/O with a deadline ----------------------------------------------------------------- */
+/* ---- socket I/O with a deadline ---- */
 
 static int ms_left(double deadline)
 {
@@ -253,7 +252,7 @@ static long io_read(cconn_t *c, uint8_t *buf, size_t cap, double deadline)
     }
 }
 
-/* ---- connect ------------------------------------------------------------------------------------------ */
+/* ---- connect ---- */
 
 static int tcp_connect(const url_t *u, double deadline, int *fd_out, char *err, size_t errcap)
 {
@@ -302,7 +301,7 @@ static int tcp_connect(const url_t *u, double deadline, int *fd_out, char *err, 
     return last;
 }
 
-/* ---- nghttp2 client callbacks ------------------------------------------------------------------------ */
+/* ---- nghttp2 client callbacks ---- */
 
 static int cb_header(nghttp2_session *s, const nghttp2_frame *f, const uint8_t *name, size_t nl,
                      const uint8_t *value, size_t vl, uint8_t flags, void *ud)
@@ -458,7 +457,7 @@ static int open_conn(g5c_client *c, const url_t *u, const char *key, double dead
     return 0;
 }
 
-/* ---- pool --------------------------------------------------------------------------------------------------- */
+/* ---- pool ---- */
 
 static cconn_t *pool_take(g5c_client *c, const char *key)
 {
@@ -542,7 +541,7 @@ void g5c_client_free(g5c_client *c)
     free(c);
 }
 
-/* ---- request ------------------------------------------------------------------------------------------------- */
+/* ---- request ---- */
 
 static nghttp2_nv nv_of(const char *n, const char *v)
 {
@@ -715,7 +714,7 @@ static int client_request_direct(g5c_client *c, const char *method, const char *
     return rc;
 }
 
-/* ---- indirect communication --------------------------------------------------------------------------------------------- */
+/* ---- indirect communication ---- */
 
 /* "scheme://authority[/prefix]" into the pieces; false when it is not an http(s) URI */
 static bool split_root(const char *uri, char **root, char **prefix, char **authority)

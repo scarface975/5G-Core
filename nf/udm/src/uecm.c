@@ -21,8 +21,7 @@ static void missing(g5c_resp *resp, const char *field)
     g5c_resp_problem_invalid(resp, 400, "MANDATORY_IE_MISSING", field, "absent");
 }
 
-/* Tell the previously registered AMF that the UE registered elsewhere (TS 29.503 5.3.2.2.2). Best effort: a dead
- * old AMF must never block the new registration. */
+/* Tell the previously registered AMF that the UE registered elsewhere (TS 29.503 5.3.2.2.2) */
 static void notify_old_amf(udm *u, const g5c_json *old)
 {
     const char *uri = g5c_json_get_str(old, "deregCallbackUri");

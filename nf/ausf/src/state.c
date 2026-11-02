@@ -1,9 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* The state file of the AUSF: the latest KAUSF of every authenticated UE with its SoR and UPU counters (TS 33.501 6.1.1.2, 6.14.2.3, 6.15.2.2), so that the
- * protection services survive a restart. KAUSF is wrapped with AES-256-GCM under the master key, bound to the SUPI. The file is written behind the requests by a
- * thread (coalescing bursts), through a temporary file and a rename.
- * The counters in the file are ahead of the live ones by COUNTER_MARGIN: a crash can lose the increments of the last moments, and a counter value must never be used
- * twice for one KAUSF (replay protection of the UE). */
+/* The state file of the AUSF */
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>

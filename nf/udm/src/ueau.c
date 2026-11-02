@@ -59,7 +59,7 @@ static void vector_for(udm *u, const char *supi, const char *snn, const g5c_json
     if (g5c_streq(method, "EAP_AKA_PRIME")) {
         prime = true;
     } else if (!g5c_streq(method, "5G_AKA")) {
-        /* EAP-TLS and anything else: the home network cannot run it (TS 29.509 6.1.7.3: AUTHENTICATION_REJECTED, the user cannot be authenticated with this method) */
+        /* EAP-TLS and anything else */
         reject(resp, 403, "AUTHENTICATION_REJECTED", "the subscribed authentication method is not supported");
         goto done;
     }
@@ -302,9 +302,7 @@ done:
     g5c_json_free(ev);
 }
 
-/* Auth removal (Nudm_UEAuthentication_Delete): the AUSF tells us the authentication result is no longer needed, e.g.
- * after de-registration. Open5GS sends `PUT .../auth-events` without an id, the specification names
- * `PUT .../auth-events/{authEventId}`; accept both. */
+/* Auth removal (Nudm_UEAuthentication_Delete): the AUSF tells us the authentication result is no longer needed, e.g. after de-registration */
 static void auth_removal(void *ctx, const g5c_req *req, g5c_resp *resp)
 {
     udm *u = ctx;
@@ -336,8 +334,7 @@ static void auth_removal(void *ctx, const g5c_req *req, g5c_resp *resp)
     g5c_json_free(ev);
 }
 
-/* Nudm_UEAuthentication_Get for an FN-RG (TS 29.503 6.3.3.3, TS 29.509 5.2.2.2.4): the SUPI of the gateway and whether its authentication is still needed. The W-AGF has
- * authenticated the gateway when authenticated-ind is true; then no further authentication is required (authInd true). */
+/* Nudm_UEAuthentication_Get for an FN-RG (TS 29.503 6.3.3.3, TS 29.509 5.2.2.2.4) */
 static void security_information_rg(void *ctx, const g5c_req *req, g5c_resp *resp)
 {
     udm *u = ctx;

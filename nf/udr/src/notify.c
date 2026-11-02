@@ -65,7 +65,7 @@ struct udr_notifier {
     g5c_gauge *g_queue, *g_subs;
 };
 
-/* ---- subscriptions: the cache ----------------------------------------------------------------------------------- */
+/* ---- subscriptions: the cache ---- */
 
 static void sub_free(sub_t *s)
 {
@@ -194,7 +194,7 @@ size_t udr_subscription_count(g5c_udr *u, const char *collection_key)
     return n;
 }
 
-/* ---- delivery ----------------------------------------------------------------------------------------------------- */
+/* ---- delivery ---- */
 
 static void enqueue(udr_notifier *n, char *url, char *body, const char *sub_id, unsigned attempts, double delay)
 {
@@ -400,10 +400,9 @@ void udr_notifier_free(udr_notifier *n)
     free(n);
 }
 
-/* ---- matching and bodies ---------------------------------------------------------------------------------------- */
+/* ---- matching and bodies ---- */
 
-/* The changes of a document as ChangeItems (TS 29.571 NotifyItem): the whole document when it appears or goes, else one
- * item per member that was added, removed or replaced. */
+/* The changes of a document as ChangeItems (TS 29.571 NotifyItem) */
 static g5c_json *change_items(const g5c_json *before, const g5c_json *after)
 {
     g5c_json *arr = g5c_json_new_arr(), *c;
@@ -526,8 +525,7 @@ static bool snssai_in(const g5c_json *arr, const g5c_json *one)
     return false;
 }
 
-/* A filter of an application-data / influence-data subscription (dnns, snssais, internalGroupIds, supis, appIds) against
- * a stored document. A dimension the document does not carry does not exclude it. */
+/* A filter of an application-data / influence-data subscription (dnns, snssais, internalGroupIds, supis, appIds) against a stored document */
 static bool filter_match(const g5c_json *f, const g5c_json *doc)
 {
     const g5c_json *x;

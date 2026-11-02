@@ -48,7 +48,7 @@ static const char *ee_type_of(const char *amf)
     return NULL;
 }
 
-/* ---- persistence: the subscriptions survive a restart of the UDM (the AMF keeps its half) ---------------------------------------------------------------------- */
+/* ---- persistence: the subscriptions survive a restart of the UDM (the AMF keeps its half) ---- */
 
 static void ee_save(udm *u)
 {
@@ -126,7 +126,7 @@ static bool is_http(const char *s)
     return s != NULL && (strncmp(s, "http://", 7) == 0 || strncmp(s, "https://", 8) == 0);
 }
 
-/* The root of the AMF to subscribe at: the one that holds the UE's registration (its callback URI names it), else the configured one, else any AMF the NRF knows. */
+/* The root of the AMF to subscribe at */
 static char *amf_root_for(udm *u, const char *supi, udr_result *why)
 {
     char *root = NULL;
@@ -148,7 +148,7 @@ static char *amf_root_for(udm *u, const char *supi, udr_result *why)
     return root;
 }
 
-/* ---- translation of the AMF's reports (TS 29.518 ReportList) into MonitoringReports (TS 29.503 6.4.6.2.? MonitoringReport) -------------------------------------------------------- */
+/* ---- translation of the AMF's reports (TS 29.518 ReportList) into MonitoringReports (TS 29.503 6.4.6.2.? MonitoringReport) ---- */
 
 static void reports_from_amf(const g5c_json *mc, const g5c_json *rep, g5c_json *out)
 {
@@ -182,7 +182,7 @@ static void reports_from_amf(const g5c_json *mc, const g5c_json *rep, g5c_json *
     }
 }
 
-/* ---- the service ------------------------------------------------------------------------------------------------------------------------------------------------------------- */
+/* ---- the service ---- */
 
 static void forget_at_amf(udm *u, const g5c_json *rec)
 {

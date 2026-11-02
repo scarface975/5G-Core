@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* JSON Web Tokens signed with ES256 (ECDSA P-256 + SHA-256, RFC 7515 / 7518 clause 3.4) in the JWS Compact Serialization. This is what the NRF puts in
- * the OAuth2 access tokens of TS 29.510 clause 6.3.5.2.4 and TS 33.501 clause 13.4.1; a producer NF verifies them with the NRF's public key. */
+/* JSON Web Tokens signed with ES256 (ECDSA P-256 + SHA-256, RFC 7515 / 7518 clause 3.4) in the JWS Compact Serialization */
 #ifndef G5C_JWT_H
 #define G5C_JWT_H
 
@@ -19,7 +18,7 @@ int g5c_jwt_key_save_pem(const g5c_jwt_key *k, const char *path, char *err, size
 g5c_jwt_key *g5c_jwt_key_from_jwk(const g5c_json *jwk, char *err, size_t errcap);
 /* The public key as a JWK (with "kid" and "use":"sig" and "alg":"ES256"). Caller frees. */
 g5c_json *g5c_jwt_key_jwk(const g5c_jwt_key *k, const char *kid);
-/* The JWK thumbprint of the public key (RFC 7638: SHA-256 of {"crv","kty","x","y"}, base64url), malloc'd; a key id that depends on the key alone, so it is the same after a restart. */
+/* The JWK thumbprint of the public key (RFC 7638 */
 char *g5c_jwt_key_thumbprint(const g5c_jwt_key *k);
 void g5c_jwt_key_free(g5c_jwt_key *k);
 

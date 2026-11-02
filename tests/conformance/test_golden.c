@@ -1,9 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* Conformance against the golden traces (Open5GS v2.8.0 oracle driven by UERANSIM):
- *  - every NAS message carried in the traces decodes and re-encodes byte-exact;
- *  - the real NAS integrity MACs verify with keys re-derived by our own crypto (K, OPc, RAND from the trace);
- *  - the 5G-AKA vectors our UDM generates are bit-exact against Open5GS's AUTN and the UE's RES*;
- *  - 5GSM messages nested in UL/DL NAS transport round-trip. */
+/* Conformance against the golden traces (Open5GS v2.8.0 oracle driven by UERANSIM) */
 #define _DEFAULT_SOURCE
 #include <stdio.h>
 
@@ -160,8 +156,7 @@ static void test_integrity_macs(void)
         g5c_milenage m;
         nas_sec_ctx ctxs[8];
         size_t nctx = 0, checked = 0;
-        /* One security context per Authentication request seen (a trace may hold several procedures). The oracle
-         * selected NIA2 / NEA0 (see the UE log). */
+        /* One security context per Authentication request seen (a trace may hold several procedures). The oracle selected NIA2 / NEA0 (see the UE log). */
         g5c_milenage_init(&m, k, opc);
         load_nas(S[t], &l);
         for (size_t i = 0; i < l.n; i++) {
@@ -226,10 +221,7 @@ static void test_integrity_macs(void)
     }
 }
 
-/* Phase 1 exit criterion: our vector generation is bit-exact against Open5GS. In the traces Open5GS (UDM+AUSF)
- * produced RAND and AUTN for the subscriber's K/OPc and UERANSIM answered with RES*. For every authentication request
- * we recover the SQN and AMF from AUTN, regenerate the vector with the UDM's own code and require the same AUTN
- * (MAC-A included), and require our XRES* to equal the RES* the independent UE implementation computed. */
+/* Phase 1 exit criterion: our vector generation is bit-exact against Open5GS */
 static void test_udm_vs_open5gs(void)
 {
     uint8_t k[16], opc[16];

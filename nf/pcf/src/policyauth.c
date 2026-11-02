@@ -36,7 +36,7 @@ struct pcf_app {
     size_t nrules;
 };
 
-/* ---- configuration ------------------------------------------------------------------------------------------------------------ */
+/* ---- configuration ---- */
 
 static void qref_free(pcf_qos_ref *q)
 {
@@ -127,7 +127,7 @@ static void policyauth_free(pcf *p)
     p->nqos_refs = 0;
 }
 
-/* ---- helpers --------------------------------------------------------------------------------------------------------------- */
+/* ---- helpers ---- */
 
 static void problem(g5c_resp *resp, int status, const char *cause, const char *detail)
 {
@@ -223,7 +223,7 @@ static void merge_patch(g5c_json **doc, const g5c_json *patch)
     }
 }
 
-/* ---- notifications to the AF ---------------------------------------------------------------------------------------------------- */
+/* ---- notifications to the AF ---- */
 
 typedef struct {
     pcf *p;
@@ -278,7 +278,7 @@ static void notify_async(pcf *p, const char *base, const char *tail, const g5c_j
     pthread_attr_destroy(&at);
 }
 
-/* ---- PCC rules from the service information --------------------------------------------------------------------------------- */
+/* ---- PCC rules from the service information ---- */
 
 static const pcf_qos_ref *qref_find(const pcf *p, const char *name)
 {
@@ -293,7 +293,7 @@ static bool disabled(const char *fs)
     return fs != NULL && (strcmp(fs, "DISABLED") == 0 || strcmp(fs, "REMOVED") == 0);
 }
 
-/* The rules of the media components of `req` (ascReqData). 0 on success; else the reason for a 403 REQUESTED_SERVICE_NOT_AUTHORIZED or a 400 in `reason`. */
+/* The rules of the media components of `req` (ascReqData). 0 on success; else the reason for a 403 REQUESTED_SERVICE_NOT_AUTHORIZED or a 400 in `reason` */
 static int build_rules(const pcf *p, const char *app_id, const g5c_json *req, pcf_rule **out, size_t *nout, int *status, char *reason, size_t rcap)
 {
     const g5c_json *mc = g5c_json_get(req, "medComponents");
@@ -406,7 +406,7 @@ void pcf_app_rules(pcf *p, const char *sm_id, pcf_rule **out, size_t *n)
     pthread_mutex_unlock(&p->mu);
 }
 
-/* ---- binding ----------------------------------------------------------------------------------------------------------------- */
+/* ---- binding ---- */
 
 static bool snssai_equal(const g5c_json *a, const g5c_json *b)
 {
@@ -446,7 +446,7 @@ static bool bind_session(pcf *p, const g5c_json *req, char **sm_id, char **supi)
     return false;
 }
 
-/* ---- the push and its outcome ---------------------------------------------------------------------------------------------- */
+/* ---- the push and its outcome ---- */
 
 static g5c_json *flows_json(const g5c_json *req)
 {
@@ -485,7 +485,7 @@ static void notify_outcome(pcf *p, const pcf_app *a, bool ok)
     g5c_json_free(n);
 }
 
-/* ---- the AppSessionContext --------------------------------------------------------------------------------------------------- */
+/* ---- the AppSessionContext ---- */
 
 static g5c_json *context_of(const pcf_app *a, bool with_events)
 {

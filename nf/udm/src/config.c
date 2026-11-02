@@ -1,7 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* UDM configuration: common NF settings plus UDR location, home-network keys and secret sources.
- * Secrets are never inline: the master key and admin token come from environment variables (G5C_UDM_MASTER_KEY,
- * G5C_UDM_ADMIN_TOKEN) or files referenced here. */
+/* UDM configuration: common NF settings plus UDR location, home-network keys and secret sources */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

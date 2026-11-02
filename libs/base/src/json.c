@@ -23,9 +23,7 @@ struct g5c_json {
             char **k;
             g5c_json **v;
             size_t n, cap;
-            /* open-addressing index (key -> latest member + 1) for objects with many members, so lookups and inserts stay
-             * O(1) and a hostile body with tens of thousands of keys cannot make the NF quadratic. Maintained eagerly on
-             * every change, never built lazily: readers of a shared DOM must not mutate it. */
+            /* open-addressing index (key -> latest member + 1) for objects with many members, so lookups and inserts stay O(1) */
             uint32_t *ht;
             size_t htcap; /* power of two, 0: no index */
         } obj;
@@ -67,7 +65,7 @@ void g5c_json_free(g5c_json *j)
     free(j);
 }
 
-/* ---- accessors ------------------------------------------------------------ */
+/* ---- accessors ---- */
 
 g5c_jtype g5c_json_type(const g5c_json *j)
 {
@@ -223,7 +221,7 @@ bool g5c_json_get_bool(const g5c_json *obj, const char *key, bool *out)
     return g5c_json_bool(g5c_json_get(obj, key), out);
 }
 
-/* ---- construction ---------------------------------------------------------- */
+/* ---- construction ---- */
 
 g5c_json *g5c_json_new_null(void)
 {
@@ -481,7 +479,7 @@ bool g5c_json_equal(const g5c_json *a, const g5c_json *b)
     return false;
 }
 
-/* ---- serialisation --------------------------------------------------------- */
+/* ---- serialisation ---- */
 
 static int write_str(g5c_bytes *o, const char *s)
 {
@@ -566,7 +564,7 @@ char *g5c_json_to_string(const g5c_json *j, size_t *len)
     return g5c_bytes_take(&b, len);
 }
 
-/* ---- parser ---------------------------------------------------------------- */
+/* ---- parser ---- */
 
 typedef struct {
     const char *start, *p, *end;

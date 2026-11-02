@@ -581,7 +581,6 @@ do_secrets() {
   return "$f"
 }
 
-
 # operations: the log level at run time (SIGUSR1 debug, SIGUSR2 back), rotation of the UDM's master key (previous key, rewrap, previous removed), a secret read through a command
 # (the KMS / HSM hook: `exec:<command>`), and the charging record file. Needs G5C_OAUTH2=0 (the test calls the UDM directly).
 do_ops() {
@@ -676,7 +675,6 @@ assert st == 200 and body["status"] == "UP", (st, body)
   return "$f"
 }
 
-
 # slices: the NSSF decides what the AMF is told (G5C_OAUTH2=0: the test calls the NSSF directly). Slice 1 is served, slice 2 is not: a registration asking for both gets slice 1 allowed and slice 2
 # rejected; a PDU session on slice 2 is refused, on slice 1 accepted. The AMF's consumption of both procedures is checked through its counters after a load.
 do_slices() {
@@ -698,7 +696,6 @@ do_slices() {
   if [ "$f" = 0 ]; then echo "slices: PASS"; else echo "slices: FAIL"; fi
   return "$f"
 }
-
 
 # support tools: a diagnostics bundle after a load has the logs, metrics, versions and configurations and none of the subscribers, keys or tokens; the capture helper builds its filters
 do_support() {
@@ -783,7 +780,6 @@ do_chaos() {
   [ $rc -eq 0 ] && echo "chaos: RECOVERED" || echo "chaos: NOT RECOVERED"
   return $rc
 }
-
 
 # upgrade and rollback under load: every function is stopped gracefully (SIGTERM) and started again, one at a time, first with the same binaries (the upgrade) and then with a copy of the
 # binaries kept as the "previous version" (the rollback), while UEs register and de-register; the state files and the stores must be readable by the function that starts again. A clean

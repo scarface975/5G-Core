@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* UPF runtime: binds the engine (upf.h) to UDP sockets for N4 and N3, a TUN device (or a supplied descriptor) for N6, and a
- * timer, in one epoll loop (Stage A of the plan: a correct userspace datapath; AF_XDP/eBPF follows). Linux only. */
+/* UPF runtime: binds the engine (upf.h) to UDP sockets for N4 and N3, a TUN device (or a supplied descriptor) for N6, and a timer, in one epoll loop */
 #ifndef G5C_UPF_RT_H
 #define G5C_UPF_RT_H
 
@@ -22,8 +21,7 @@ int upf_rt_config_parse(const g5c_json *section, upf_rt_config *out, char *err, 
 upf_rt *upf_rt_new(const upf_rt_config *cfg, g5c_registry *metrics, char *err, size_t errcap);
 void upf_rt_free(upf_rt *rt);
 upf *upf_rt_engine(upf_rt *rt);
-/* Counters and the session count as of the last control-plane message or timer tick; safe to call from any thread while the loop runs (the
- * engine itself belongs to the loop thread). */
+/* Counters and the session count as of the last control-plane message or timer tick; safe to call from any thread while the loop runs */
 void upf_rt_snapshot(upf_rt *rt, upf_stats *st, size_t *sessions);
 uint16_t upf_rt_pfcp_port(const upf_rt *rt);
 uint16_t upf_rt_gtpu_port(const upf_rt *rt);

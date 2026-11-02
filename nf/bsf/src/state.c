@@ -52,7 +52,7 @@ int bsf_state_load(bsf *b, char *err, size_t errcap)
     if (b->cfg->state_file == NULL)
         return 0;
     text = g5c_read_file(b->cfg->state_file, 512U << 20, &len);
-    if (text == NULL) { /* first start: the file is created when something changes, and the location must be writable now */
+    if (text == NULL) { /* first start: the file is created when something changes */
         FILE *f = fopen(b->cfg->state_file, "ab");
         if (f == NULL) {
             snprintf(err, errcap, "cannot create the state file %s", b->cfg->state_file);

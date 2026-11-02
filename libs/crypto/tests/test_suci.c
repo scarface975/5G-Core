@@ -24,8 +24,7 @@ static void roundtrip(g5c_profile p)
     TK_ASSERT(g5c_suci_deconceal(p, hn_secret, out, 10, back, sizeof back, &bl) == G5C_SUCI_TOO_SHORT);
 }
 
-/* TS 33.501 Annex C.4 test data: conceal with the given ephemeral key must give exactly the scheme output, and the home network
- * must recover the plaintext from it. */
+/* TS 33.501 Annex C.4 test data */
 static void annex_c_vector(const char *name, g5c_profile p, const char *hn_priv_hex, const char *hn_pub_hex, const char *eph_hex,
                            const char *pt_hex, const char *out_hex)
 {

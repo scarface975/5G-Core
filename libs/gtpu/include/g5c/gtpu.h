@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* GTP-U v1 header codec (3GPP TS 29.281 clause 5), including extension headers and the 5G PDU Session Container
- * (TS 38.415). Decoding never copies: extension data and the payload point into the input datagram. */
+/* GTP-U v1 header codec (3GPP TS 29.281 clause 5), including extension headers and the 5G PDU Session Container (TS 38.415) */
 #ifndef G5C_GTPU_H
 #define G5C_GTPU_H
 
@@ -47,8 +46,7 @@ typedef struct {
 
 void gtpu_header_init(gtpu_header *h, uint8_t msg_type, uint32_t teid);
 
-/* PDU Session Container content for a downlink (pdu_type 0) or uplink (1) PDU; the caller keeps `out` alive while
- * the extension is in use. */
+/* PDU Session Container content for a downlink (pdu_type 0) or uplink (1) PDU; the caller keeps `out` alive while the extension is in use. */
 void gtpu_pdu_session_container(uint8_t out[2], uint8_t pdu_type, uint8_t qfi, bool rqi);
 /* Interpret an extension as a PDU Session Container. */
 bool gtpu_as_pdu_session_container(const gtpu_ext *e, uint8_t *pdu_type, uint8_t *qfi, bool *rqi);

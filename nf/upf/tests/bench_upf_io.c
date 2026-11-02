@@ -155,8 +155,7 @@ int main(void)
         teid = f.teid;
     }
 
-    /* uplink: gNB -> UPF -> N6. A shared host is noisy, so each direction gets up to three one-run attempts and the best counts;
-     * every attempt is printed. */
+    /* uplink: gNB -> UPF -> N6. A shared host is noisy, so each direction gets up to three one-run attempts and the best counts; every attempt is printed. */
     ipv4(ip, UE, DN, 17, 4000, 53, PKT);
     {
         struct timeval tv = {1, 0};

@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* SMF building blocks without any network: bit rates, address pools, IPFilterRules, the policy model, 5GSM NAS, N2 SM information, and the
- * PCC-to-PFCP rule mapping, which is checked by feeding the generated Session Establishment Request to the real UPF engine. */
+/* SMF building blocks without any network */
 #include <string.h>
 
 #include "g5c/gtpu.h"
@@ -10,7 +9,7 @@
 #include "g5c/testkit.h"
 #include "rig.h"
 
-/* ---- bit rates ------------------------------------------------------------------------------------------------------------------------ */
+/* ---- bit rates ---- */
 
 static void test_bitrates(void)
 {
@@ -41,7 +40,7 @@ static void test_bitrates(void)
     }
 }
 
-/* ---- pools ---------------------------------------------------------------------------------------------------------------------------- */
+/* ---- pools ---- */
 
 static void test_pools(void)
 {
@@ -108,7 +107,7 @@ static void test_pools(void)
     smf_pool_free(p);
 }
 
-/* ---- IPFilterRule --------------------------------------------------------------------------------------------------------------------- */
+/* ---- IPFilterRule ---- */
 
 static void test_ipfilter(void)
 {
@@ -132,7 +131,7 @@ static void test_ipfilter(void)
     }
 }
 
-/* ---- policy ---------------------------------------------------------------------------------------------------------------------------- */
+/* ---- policy ---- */
 
 static g5c_json *J(const char *s)
 {
@@ -233,7 +232,7 @@ static void test_policy(void)
     }
 }
 
-/* ---- 5GSM ------------------------------------------------------------------------------------------------------------------------------- */
+/* ---- 5GSM ---- */
 
 static void build_est_req(g5c_bytes *out, uint8_t psi, uint8_t pti, int pdu_type, bool epco)
 {
@@ -267,7 +266,7 @@ static void test_gsm(void)
     build_est_req(&b, 5, 3, 3, true);
     TK_ASSERT(smf_gsm_parse_est_req(b.data, b.len, &er) == 0);
     TK_ASSERT(er.psi == 5 && er.pti == 3 && er.pdu_type == 3 && er.ssc_mode == 1 && er.pco_dns4 && er.pco_dns6 && er.pco_mtu);
-    {   /* the same message cut short or corrupted never reads out of bounds and never claims success on garbage */
+    {   /* the same message cut short or corrupted never reads out of bounds */
         for (size_t i = 0; i < b.len; i++)
             (void)smf_gsm_parse_est_req(b.data, i, &er);
         TK_ASSERT(smf_gsm_parse_est_req(b.data, 3, &er) != 0);
@@ -477,7 +476,7 @@ static void test_gsm(void)
     }
 }
 
-/* ---- N2 ---------------------------------------------------------------------------------------------------------------------------------- */
+/* ---- N2 ---- */
 
 static void test_n2(void)
 {
@@ -645,7 +644,7 @@ static void test_n2(void)
     g5c_bytes_free(&out);
 }
 
-/* ---- PCC rules -> PFCP, checked against the UPF engine ------------------------------------------------------------------------------------------ */
+/* ---- PCC rules -> PFCP, checked against the UPF engine ---- */
 
 static const uint8_t UEIP[4] = {10, 45, 0, 7};
 static const uint8_t GNB4[4] = {127, 1, 0, 100};
@@ -858,7 +857,7 @@ static void test_rule_mapping(void)
     }
 }
 
-/* ---- policy updates ----------------------------------------------------------------------------------------------------------------------- */
+/* ---- policy updates ---- */
 
 static smf_policy policy_from(const char *json)
 {
@@ -1032,7 +1031,7 @@ static void test_policy_update(void)
     smf_policy_free(&b);
 }
 
-/* ---- IPv6 router advertisement --------------------------------------------------------------------------------------------------------------------- */
+/* ---- IPv6 router advertisement ---- */
 
 static uint16_t icmp6_sum(const uint8_t src[16], const uint8_t dst[16], const uint8_t *m, size_t len)
 {

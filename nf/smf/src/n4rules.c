@@ -95,8 +95,7 @@ static int create_pdr(uint8_t *out, size_t cap, size_t *pos, const smf_n4_est *i
     return create_pdr_far(out, cap, pos, in, id, prec, uplink, filters, nf, qers, nq, uplink ? SMF_FAR_UL : SMF_FAR_DL);
 }
 
-/* IPv6 sessions: the UE's router solicitations are forwarded to the SMF (PDR 4 -> FAR 3, GTP-U to our address with our TEID) and the advertisement comes
- * back through a PDR that matches packets from the control plane (PDR 3) and uses the downlink FAR (TS 29.244 5.8.2 / TS 23.501 5.8.2.2). */
+/* IPv6 sessions: the UE's router solicitations are forwarded to the SMF (PDR 4 -> FAR 3, GTP-U to our address with our TEID) */
 static int create_cp_rules(uint8_t *out, size_t cap, size_t *pos, const smf_n4_est *in)
 {
     size_t m, m2;
@@ -241,14 +240,14 @@ int smf_n4_build_est(const smf_n4_est *in, uint8_t *out, size_t cap, size_t *len
         PUT(create_qer(out, cap, &pos, f->qer_id, f->qfi, f->gbr ? f->mbr_ul : 0, f->gbr ? f->mbr_dl : 0, f->gbr, f->gbr_ul, f->gbr_dl));
     }
 
-    if (in->want_usage) { /* Create URR (7.5.2.4): volume and duration, no periodic or threshold trigger; the usage report comes with the session deletion (termination report) */
+    if (in->want_usage) { /* Create URR (7.5.2.4): volume and duration, no periodic or threshold trigger */
         PUT(pfcp_group_begin(out, cap, &pos, PFCP_IE_CREATE_URR, &m));
         PUT(pfcp_put_u32(out, cap, &pos, PFCP_IE_URR_ID, SMF_URR_SESSION));
         PUT(pfcp_put_u8(out, cap, &pos, PFCP_IE_MEASUREMENT_METHOD, 0x03)); /* DURAT, VOLUM */
         PUT(pfcp_trigger_put(out, cap, &pos, PFCP_IE_REPORTING_TRIGGERS, 0));
         pfcp_group_end(out, &pos, m);
     }
-    if (pol->um_volume != 0) { /* usage monitoring: a second URR that reports to the SMF whenever the threshold of volume has passed (Volume Threshold, trigger VOLTH; TS 29.244 8.2.13) */
+    if (pol->um_volume != 0) { /* usage monitoring: a second URR that reports to the SMF whenever the threshold of volume */
         uint8_t th[9];
         uint64_t v = pol->um_volume;
         PUT(pfcp_group_begin(out, cap, &pos, PFCP_IE_CREATE_URR, &m));
@@ -283,7 +282,7 @@ int smf_n4_build_est(const smf_n4_est *in, uint8_t *out, size_t cap, size_t *len
         }
         PUT(pfcp_put_ie(out, cap, &pos, PFCP_IE_APN_DNN, v, n));
     }
-    if (in->has_snssai) { /* S-NSSAI (8.2.176): Length = 4, SST and the 3 octet SD; without an SD the SD is FFFFFF (TS 23.003 28.4.2) */
+    if (in->has_snssai) { /* S-NSSAI (8.2.176): Length = 4, SST and the 3 octet SD; without an SD the SD is FFFFFF */
         uint32_t sd = in->has_sd ? (in->sd & 0xffffffu) : 0xffffffu;
         uint8_t v[4] = {in->sst, (uint8_t)(sd >> 16), (uint8_t)(sd >> 8), (uint8_t)sd};
         PUT(pfcp_put_ie(out, cap, &pos, PFCP_IE_SNSSAI, v, 4));
@@ -331,7 +330,7 @@ int smf_n4_build_mod_deactivate(uint8_t *out, size_t cap, size_t *len)
     return 0;
 }
 
-/* ---- policy update (PCF-initiated, TS 29.244 7.5.4) --------------------------------------------------------------------------------------------- */
+/* ---- policy update (PCF-initiated, TS 29.244 7.5.4) ---- */
 
 static const smf_flow *flow_by_qer(const smf_policy *p, uint32_t qer)
 {

@@ -1,7 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* Persistence of PDU sessions across an SMF restart: a JSON state file rewritten (atomically, coalesced) after every change, read back before the
- * first N4 association. A session is only kept alive if its UPF still has the Recovery Time Stamp it had when the file was written; otherwise the
- * association reveals a restart and the session is released towards the AMF like any session on a restarted UPF. */
+/* Persistence of PDU sessions across an SMF restart */
 #define _DEFAULT_SOURCE
 #include <errno.h>
 #include <stdio.h>
@@ -207,7 +205,7 @@ void smf_persist_request(smf *s)
         smf_defer_after(s, job_persist, NULL, gap);
 }
 
-/* ---- restore --------------------------------------------------------------------------------------------------------------------------------- */
+/* ---- restore ---- */
 
 g5c_json *smf_state_read(smf *s)
 {

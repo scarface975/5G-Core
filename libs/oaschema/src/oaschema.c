@@ -1,9 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* Validator for a schema pool generated from the pinned 3GPP OpenAPI files (tools/oa_pool.py).
- *
- * Supported: type, nullable, enum, minimum/maximum, minLength/maxLength, pattern, minItems/maxItems, items, required,
- * properties, additionalProperties, allOf / anyOf / oneOf (oneOf accepts when at least one alternative matches: the
- * schemas are open, so alternatives that differ only by `required` sets would otherwise both match a superset). */
+/* Validator for a schema pool generated from the pinned 3GPP OpenAPI files (tools/oa_pool.py) */
 #define _POSIX_C_SOURCE 200809L
 #include <pthread.h>
 #include <regex.h>

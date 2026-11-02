@@ -25,7 +25,7 @@ static char *self_url(const g5c_req *req, const char *af, const char *id)
     return u;
 }
 
-/* ---- the media component for the PCF ---------------------------------------------------------------------------------------- */
+/* ---- the media component for the PCF ---- */
 
 /* the one media component (medCompN 1) of a subscription: the flows and the QoS reference */
 static g5c_json *media_component(const g5c_json *sub)
@@ -59,7 +59,7 @@ static g5c_json *ev_subsc(const char *notif)
     return e;
 }
 
-/* ---- the PCF ------------------------------------------------------------------------------------------------------------------ */
+/* ---- the PCF ---- */
 
 /* one call to the PCF; `status` is what the AF is told when it fails (0 on success) */
 static int pcf_call(nef *n, const char *root, const char *method, const char *path, const g5c_json *body, g5c_resp *out, char *detail, size_t dcap)
@@ -97,7 +97,7 @@ static int map_pcf_status(const g5c_resp *r, char *cause, size_t ccap, char *det
     return r->status == 429 ? 429 : 500;
 }
 
-/* ---- the resource ------------------------------------------------------------------------------------------------------------ */
+/* ---- the resource ---- */
 
 static bool request_ok(const nef_af *af, g5c_json *sub, g5c_resp *resp)
 {
@@ -510,7 +510,7 @@ static void h_delete(void *ctx, const g5c_req *req, g5c_resp *resp)
     g5c_resp_status(resp, 204);
 }
 
-/* ---- from the PCF -------------------------------------------------------------------------------------------------------------- */
+/* ---- from the PCF ---- */
 
 static res_t *find_by_id(nef *n, const char *id)
 {

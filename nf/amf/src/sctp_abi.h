@@ -1,7 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* The few SCTP socket API items the N2 transport needs (RFC 6458 sections 5.3.4, 5.3.5 and 8.1.7), with the values of the Linux kernel UAPI. They are
- * written out here so that the build needs no lksctp-tools header (LGPL) and links no library: the kernel does the SCTP, the AMF uses plain sockets with
- * IPPROTO_SCTP. Names match <netinet/sctp.h> so the code reads as the RFC does. */
+/* The few SCTP socket API items the N2 transport needs (RFC 6458 sections 5.3.4, 5.3.5 and 8.1.7), with the values of the Linux kernel UAPI */
 #ifndef G5C_AMF_SCTP_ABI_H
 #define G5C_AMF_SCTP_ABI_H
 

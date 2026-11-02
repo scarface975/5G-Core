@@ -23,13 +23,11 @@ typedef struct nef_cfg nef_cfg;
 #define NEF_API_MONITORING_EVENT "3gpp-monitoring-event"
 #define NEF_API_AS_SESSION_WITH_QOS "3gpp-as-session-with-qos"
 
-/* The `nef:` block of the configuration. `callback_uri` (may be NULL) is the root at which the NEF's own callback endpoints are reachable by the AMF
- * (the default is the address of the SBI listener). NULL with err on an invalid configuration. */
+/* The `nef:` block of the configuration */
 nef_cfg *nef_cfg_parse(const g5c_json *root, const char *serving_mcc, const char *serving_mnc, const char *default_callback_uri, char *err, size_t errcap);
 void nef_cfg_free(nef_cfg *c);
 
-/* `cfg` is consumed. `client` calls the other functions and delivers the notifications; `disc` finds them (may be NULL: then only configured
- * addresses work); `metrics` may be NULL. */
+/* `cfg` is consumed */
 nef *nef_new(nef_cfg *cfg, g5c_client *client, g5c_disc *disc, g5c_registry *metrics);
 /* the whole configuration document and the NF context */
 nef *nef_from_config(const g5c_json *root, g5c_nf *nf, char *err, size_t errcap);
@@ -39,7 +37,7 @@ g5c_router *nef_router(nef *n);
 /* Stops the worker, writes the state file, frees. */
 void nef_destroy(nef *n);
 
-/* ---- introspection (tests, tools) ------------------------------------------------------------------------------------------------------ */
+/* ---- introspection (tests, tools) ---- */
 size_t nef_subscription_count(nef *n, const char *api);
 
 #endif

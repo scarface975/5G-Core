@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* PCF: policy engine unit tests, and the services over real sockets: SM policy lifecycle, validation, layered policy,
- * mid-session pushes to a mock SMF, termination, and AM policy associations. */
+/* PCF: policy engine unit tests, and the services over real sockets: SM policy lifecycle, validation, layered policy, mid-session pushes to a mock SMF */
 #define _DEFAULT_SOURCE
 #include <pthread.h>
 #include <stdatomic.h>
@@ -40,7 +39,7 @@ static void expect_json(const g5c_json *j, const char *want)
     g5c_json_free(w);
 }
 
-/* ---- policy engine ---------------------------------------------------------------------------------------------- */
+/* ---- policy engine ---- */
 
 static pcf_policy parse_policy(const char *yaml, bool cfg)
 {
@@ -210,7 +209,7 @@ static void test_policy_roundtrip(void)
     pcf_policy_free(&q);
 }
 
-/* ---- services over real sockets ------------------------------------------------------------------------------------ */
+/* ---- services over real sockets ---- */
 
 static _Atomic int g_note_status = 204; /* what the mock SMF and the mock AF answer */
 
@@ -681,7 +680,7 @@ static void test_config_loading(void)
     g5c_nf_free(nf);
 }
 
-/* ---- negative, abuse and failure-injection tests (Phase 2 test plan: component layer) ---------------------------------- */
+/* ---- negative, abuse and failure-injection tests (Phase 2 test plan: component layer) ---- */
 
 /* Every structurally wrong policy document is refused with an explanation, never accepted partially. */
 static void test_policy_parse_errors(void)
@@ -829,7 +828,7 @@ static void test_pcf_udr_outage(void)
     teardown(&t);
 }
 
-/* ---- Npcf_PolicyAuthorization (N5) ------------------------------------------------------------------------------------------------ */
+/* ---- Npcf_PolicyAuthorization (N5) ---- */
 
 static void af_notify(void *c, const g5c_req *req, g5c_resp *resp) { note(c, "notify", req, resp); }
 static void af_terminate(void *c, const g5c_req *req, g5c_resp *resp) { note(c, "af-terminate", req, resp); }
@@ -857,7 +856,7 @@ static const g5c_json *pcc_rule_of(const g5c_json *decision, const char *prefix)
     return NULL;
 }
 
-/* ---- the binding at the BSF (TS 29.521): registered when the SM policy association has a UE address, removed when it ends ------------------------------------ */
+/* ---- the binding at the BSF (TS 29.521): registered when the SM policy association has a UE address, removed when it ends ---- */
 
 static char *ctx_with_addr(const char *dnn, const char *notif, const char *v4, const char *v6, int pdu)
 {

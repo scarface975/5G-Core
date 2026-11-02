@@ -1,8 +1,7 @@
 #define _XOPEN_SOURCE 700
 #define _DEFAULT_SOURCE
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* The forwarding of the SCP (TS 29.500 6.10): classify the request (Model C, Model D, notification), choose the producers to try, forward with the headers the
- * specification says, retry and reselect, and shape the answer (Producer-Id, Target-apiRoot, Via, Server). */
+/* The forwarding of the SCP (TS 29.500 6.10) */
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,7 +18,7 @@
 #define H_PRODUCER "3gpp-sbi-producer-id"
 #define H_DISC "3gpp-sbi-discovery-"
 
-/* ---- errors made by the SCP -------------------------------------------------------------------------------------------------- */
+/* ---- errors made by the SCP ---- */
 
 void scp_problem(scp *s, g5c_resp *resp, int status, const char *cause, const char *detail, const char *invalid_param)
 {
@@ -33,7 +32,7 @@ void scp_problem(scp *s, g5c_resp *resp, int status, const char *cause, const ch
     g5c_counter_inc(s->c_result[R_SCP_ERR]);
 }
 
-/* ---- headers --------------------------------------------------------------------------------------------------------------------- */
+/* ---- headers ---- */
 
 static bool hop_by_hop(const char *n)
 {
@@ -98,7 +97,7 @@ static char *query_without_ck(const char *q)
     return g5c_bytes_take(&b, NULL);
 }
 
-/* ---- late requests (TS 29.500 6.11.2) ---------------------------------------------------------------------------------------- */
+/* ---- late requests (TS 29.500 6.11.2) ---- */
 
 static bool request_late(const g5c_req *req)
 {
@@ -119,7 +118,7 @@ static bool request_late(const g5c_req *req)
     return (double)g5c_unix_millis() > sent + (double)strtol(mx, NULL, 10);
 }
 
-/* ---- one forward ------------------------------------------------------------------------------------------------------------------ */
+/* ---- one forward ---- */
 
 typedef struct {
     int rc; /* 0, or a g5c_sbi_err */
@@ -184,7 +183,7 @@ static bool idempotent(const char *m)
     return strcmp(m, "GET") == 0 || strcmp(m, "PUT") == 0 || strcmp(m, "DELETE") == 0 || strcmp(m, "HEAD") == 0 || strcmp(m, "OPTIONS") == 0;
 }
 
-/* ---- the answer ---------------------------------------------------------------------------------------------------------------- */
+/* ---- the answer ---- */
 
 static void relay(scp *s, g5c_resp *resp, fwd_t *f, const cand_t *cand, bool by_scp, const char *requested_root)
 {
@@ -217,7 +216,7 @@ static void relay(scp *s, g5c_resp *resp, fwd_t *f, const cand_t *cand, bool by_
     g5c_counter_inc(s->c_result[f->r.status < 300 ? R_2XX : f->r.status < 400 ? R_3XX : f->r.status < 500 ? R_4XX : R_5XX]);
 }
 
-/* ---- the request ---------------------------------------------------------------------------------------------------------------- */
+/* ---- the request ---- */
 
 static bool has_discovery_headers(const g5c_req *req)
 {

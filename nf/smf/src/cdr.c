@@ -1,9 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* Charging data records of the SMF (the integration point of Phase 8 WP7: what a charging function, an Nchf client or a billing mediation reads).
- * With `smf.cdr.file` set, every PDU session leaves one record when it is released: who (SUPI, PDU session id, DNN, S-NSSAI, UE address), where (UPF), when (start and
- * end, duration) and how much (uplink and downlink octets and packets), measured by a usage reporting rule the SMF installs on the UPF (TS 29.244 5.2.2, Create URR with
- * volume and duration measurement) and returned in the usage report of the session deletion (TS 29.244 7.5.7.2). One JSON object per line; the file is opened for every record, so a
- * rotation by rename needs no signal. A session whose UPF could not report (lost, no answer) still gets a record, with `usageReported: false`. */
+/* Charging data records of the SMF (the integration point of Phase 8 WP7: what a charging function, an Nchf client or a billing mediation reads) */
 #define _DEFAULT_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,8 +15,7 @@ static void iso_time(time_t t, char *out, size_t cap)
     strftime(out, cap, "%Y-%m-%dT%H:%M:%SZ", &tmv);
 }
 
-/* The usage report of URR `urr_id` (0: the first one with a volume measurement) in the body of a session deletion response or a report request. A session can have two URRs: the charging
- * one (1, the CDR) and the usage monitoring one (2, A-03), so the caller names the one it wants. */
+/* The usage report of URR `urr_id` (0: the first one with a volume measurement) in the body of a session deletion response or a report request */
 int smf_n4_parse_usage_for(const uint8_t *mbody, size_t mblen, uint32_t urr_id, smf_usage *u)
 {
     size_t p = 0;

@@ -19,10 +19,7 @@
 #include "g5c/nfcore.h"
 #include "g5c/sbi.h"
 
-/* ---- policy model (TS 23.503, TS 29.512 5.6) ----------------------------------------------------------------------
- * Precedence, highest first: per-subscriber DNN profile, per-subscriber default profile, configured DNN profile,
- * configured default profile, values subscribed in the request (subsSessAmbr, subsDefQos), built-in defaults. Each
- * profile field is resolved independently, so an override can change only the session AMBR. */
+/* ---- policy model (TS 23.503, TS 29.512 5.6) ---------------------------------------------------------------------- Precedence, highest first */
 
 typedef struct {
     char *uplink, *downlink; /* "100 Mbps" style (TS 29.571 BitRate) */
@@ -65,7 +62,7 @@ typedef struct {
     size_t ndnns;
     bool has_rfsp; /* config only */
     uint16_t rfsp;
-    uint64_t um_volume; /* config only, `usage_monitoring.volume_threshold`: bytes after which a session is throttled (0: no usage monitoring) */
+    uint64_t um_volume; /* config only, `usage_monitoring.volume_threshold` */
     pcf_ambr um_throttle; /* `usage_monitoring.throttle`: the session AMBR once the threshold is reached */
 } pcf_policy;
 
@@ -105,7 +102,7 @@ void pcf_resolved_free(pcf_resolved *r);
 /* SmPolicyDecision (TS 29.512 5.6.2.4). Optional arrays with minItems 1 are omitted rather than sent empty. */
 g5c_json *pcf_decision(const pcf_resolved *r);
 
-/* ---- PCF state ----------------------------------------------------------------------------------------------------- */
+/* ---- PCF state ---- */
 
 typedef struct {
     char *id, *supi, *dnn;
@@ -155,7 +152,7 @@ typedef struct pcf {
     struct pcf_bsf *bsf;       /* NULL: no binding is registered */
 } pcf;
 
-/* ---- the binding at the BSF (TS 29.521): registered when an SM policy association has a UE address, removed when it ends ------------------------------ */
+/* ---- the binding at the BSF (TS 29.521): registered when an SM policy association has a UE address, removed when it ends ---- */
 /* bsf: { enabled, uri, fqdn, address } of the configuration; without `uri` the BSF is found through the NRF. 0 / -1 with err. */
 int pcf_bsf_config(pcf *p, const g5c_json *cfg, g5c_nf *nf, char *err, size_t errcap);
 void pcf_bsf_registered(pcf *p, const char *sm_id, const g5c_json *context); /* the SmPolicyContextData of the new association */
@@ -188,13 +185,12 @@ void pcf_rule_release(pcf_rule *r);
 size_t pcf_repush_stats(pcf *p, const char *supi, size_t *rejected);
 int pcf_admin_guard(void *ctx /* pcf* */, const g5c_req *req, g5c_resp *resp);
 
-/* Recompute the policy of every active session of `supi` and push changes to the SMF (UpdateNotify). Returns the
- * number of notifications that were accepted. */
+/* Recompute the policy of every active session of `supi` and push changes to the SMF (UpdateNotify) */
 size_t pcf_repush(pcf *p, const char *supi);
 /* Terminate an association from the PCF side. false when unknown. */
 bool pcf_terminate(pcf *p, const char *id);
 
-/* ---- policy store (UDR, TS 29.519) -------------------------------------------------------------------------------------- */
+/* ---- policy store (UDR, TS 29.519) ---- */
 
 typedef enum { PCF_STORE_OK = 0, PCF_STORE_NONE, PCF_STORE_ERROR } pcf_store_rc;
 /* OK + *out filled, NONE when there are no overrides, ERROR on transport/status/malformed. */
@@ -203,7 +199,7 @@ bool pcf_store_put(pcf *p, const char *supi, const pcf_policy *pol);
 /* 1 deleted, 0 none existed, -1 error */
 int pcf_store_delete(pcf *p, const char *supi);
 
-/* ---- configuration ------------------------------------------------------------------------------------------------------- */
+/* ---- configuration ---- */
 
 /* Sections: udr {uri}, policy {...}, admin_token_file. Returns NULL with err on failure; free with pcf_destroy+free. */
 pcf *pcf_from_config(const g5c_json *cfg, g5c_nf *nf, char *err, size_t errcap);

@@ -1,9 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* User Plane Function (3GPP TS 23.501 6.2.3, TS 29.244 N4, TS 29.281 N3, TS 38.415).
- *
- * The engine in this library does no I/O: packets and N4 messages come in through upf_ul_packet / upf_dl_packet /
- * upf_n4_message, and everything it wants sent goes out through the callbacks in upf_io. The runtime (src/io.c) binds those to
- * UDP sockets and a TUN device; tests and fuzzers bind them to buffers. All functions are called from one thread. */
+/* User Plane Function (3GPP TS 23.501 6.2.3, TS 29.244 N4, TS 29.281 N3, TS 38.415) */
 #ifndef G5C_UPF_H
 #define G5C_UPF_H
 
@@ -16,7 +12,7 @@
 #include "g5c/pfcp.h"
 #include "g5c/pfcp_ie.h"
 
-/* ---- addresses --------------------------------------------------------------------------------------------------------------- */
+/* ---- addresses ---- */
 typedef struct {
     bool v6;
     uint8_t b[16]; /* IPv4 in b[0..3] */
@@ -25,7 +21,7 @@ typedef struct {
 
 bool upf_addr_equal_ip(const upf_addr *a, const upf_addr *b);
 
-/* ---- SDF filters (IPFilterRule, TS 29.212 5.4.2): "permit out <proto> from <addr|any|assigned> [ports] to <...> [ports]" ---------- */
+/* ---- SDF filters (IPFilterRule, TS 29.212 5.4.2): "permit out <proto> from <addr|any|assigned> [ports] to <...> [ports]" ---- */
 #define UPF_MAX_PORTS 8
 typedef struct {
     bool any, assigned, v6;
@@ -42,8 +38,7 @@ typedef struct {
 
 /* 0, or -1 with the problem in err */
 int upf_sdf_parse(const char *rule, upf_sdf *out, char *err, size_t errcap);
-/* A packet's 5-tuple, from the point of view of the rule (the rule describes the downlink direction: for uplink packets the caller
- * swaps source and destination). ue = the session's UE address for "assigned". */
+/* A packet's 5-tuple, from the point of view of the rule (the rule describes the downlink direction */
 typedef struct {
     int proto;
     bool v6;
@@ -54,7 +49,7 @@ bool upf_sdf_match(const upf_sdf *r, const upf_flow *f, const upf_addr *ue4, con
 /* Parse the IP header of a user packet into a flow (ports only for TCP, UDP, SCTP). false if it is not IP or is truncated. */
 bool upf_flow_from_packet(const uint8_t *pkt, size_t len, upf_flow *f);
 
-/* ---- rules --------------------------------------------------------------------------------------------------------------------- */
+/* ---- rules ---- */
 enum { UPF_IF_ACCESS = 0, UPF_IF_CORE = 1, UPF_IF_SGILAN = 2, UPF_IF_CP = 3 };
 
 typedef struct {
@@ -159,7 +154,7 @@ struct upf_session {
     uint64_t created_ms;
 };
 
-/* ---- I/O the engine needs -------------------------------------------------------------------------------------------------------- */
+/* ---- I/O the engine needs ---- */
 typedef struct {
     void *ctx;
     void (*tx_gtpu)(void *ctx, const upf_addr *to, const uint8_t *pkt, size_t len);   /* N3/N9 (and CP-function) UDP datagram */

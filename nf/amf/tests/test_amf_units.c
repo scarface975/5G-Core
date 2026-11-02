@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* AMF unit tests: the 5GMM message builders against byte-exact expectations from TS 24.501 / TS 24.008, the NAS COUNT estimation and the
- * NH chain of TS 33.501, algorithm selection, the hash maps and the configuration loader. */
+/* AMF unit tests: the 5GMM message builders against byte-exact expectations from TS 24.501 / TS 24.008, the NAS COUNT estimation */
 #define _GNU_SOURCE
 #include <stdlib.h>
 #include <string.h>
@@ -9,7 +8,7 @@
 #include "nasmsg.h"
 #include "priv.h"
 
-/* ---- timers (TS 24.008 10.5.7.3 / 10.5.7.4a) --------------------------------------------------------------------------------------------------- */
+/* ---- timers (TS 24.008 10.5.7.3 / 10.5.7.4a) ---- */
 
 static void test_gprs_timers(void)
 {
@@ -29,7 +28,7 @@ static void test_gprs_timers(void)
     TK_ASSERT(nm_gprs_timer3(1) == (uint8_t)(3 << 5 | 1));
 }
 
-/* ---- builders --------------------------------------------------------------------------------------------------------------------------------- */
+/* ---- builders ---- */
 
 static void test_builders(void)
 {
@@ -152,7 +151,7 @@ static void test_registration_accept(void)
     g5c_bytes_free(&b);
 }
 
-/* ---- keys and counts -------------------------------------------------------------------------------------------------------------------------- */
+/* ---- keys and counts ---- */
 
 static void test_security(void)
 {
@@ -258,7 +257,7 @@ static void test_algorithm_selection(void)
     }
 }
 
-/* ---- maps and identifiers ------------------------------------------------------------------------------------------------------------------ */
+/* ---- maps and identifiers ---- */
 
 static void test_maps(void)
 {
@@ -325,7 +324,7 @@ static void test_snssai_helpers(void)
     g5c_json_free(j);
 }
 
-/* ---- NGAP builders ---------------------------------------------------------------------------------------------------------------------------- */
+/* ---- NGAP builders ---- */
 
 static void test_ngap_builders(void)
 {
@@ -380,7 +379,7 @@ static void test_ngap_builders(void)
     }
 }
 
-/* ---- configuration -------------------------------------------------------------------------------------------------------------------------- */
+/* ---- configuration ---- */
 
 static amf *load(const char *yaml, char *err, size_t cap, g5c_nf **nf_out)
 {

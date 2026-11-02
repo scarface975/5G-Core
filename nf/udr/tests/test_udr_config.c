@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* The UDR configuration: what a good file yields (store, options, udrInfo, group map) and the Nudr_GroupIDmap answers
- * built on it. The refusal of bad files is tested through the binary (check_bad_configs.sh). */
+/* The UDR configuration: what a good file yields (store, options, udrInfo, group map) and the Nudr_GroupIDmap answers built on it */
 #define _DEFAULT_SOURCE
 #include <stdlib.h>
 #include <string.h>

@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* UE address pools (TS 23.501 5.8.2.2): IPv4 addresses and IPv6 /64 prefixes per DNN, with a rotating cursor so a freed address is not
- * handed straight out again. Also the bit rate helpers. */
+/* UE address pools (TS 23.501 5.8.2.2) */
 #define _DEFAULT_SOURCE
 #include <arpa/inet.h>
 #include <ctype.h>
@@ -280,7 +279,7 @@ size_t smf_pool_used6(smf_pool *p)
     return n;
 }
 
-/* ---- bit rates ------------------------------------------------------------------------------------------------------------------------ */
+/* ---- bit rates ---- */
 
 bool smf_parse_bitrate(const char *s, uint64_t *kbps)
 {

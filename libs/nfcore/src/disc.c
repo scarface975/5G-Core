@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* NF discovery client (Nnrf_NFDiscovery, TS 29.510 clause 5.3): the endpoint of an instance of a given NF type and service, from the NRF, cached for
- * the validity period the NRF states. Every NF that does not have a peer's address in its configuration resolves it here. */
+/* NF discovery client (Nnrf_NFDiscovery, TS 29.510 clause 5.3) */
 #define _GNU_SOURCE
 #include <pthread.h>
 #include <stdio.h>

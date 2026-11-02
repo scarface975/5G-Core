@@ -15,7 +15,7 @@
 
 #define LOGT "g5c_oauth"
 
-/* ---- the services of the 5GC and the type of the NF that offers each ------------------------------------------------------------------------------------ */
+/* ---- the services of the 5GC and the type of the NF that offers each ---- */
 
 static const struct {
     const char *service, *nf_type;
@@ -67,7 +67,7 @@ static char *trim_slash(const char *uri)
     return g5c_xstrndup(uri, n);
 }
 
-/* ---- base64url of a token header (the key id) ----------------------------------------------------------------------------------------------------------- */
+/* ---- base64url of a token header (the key id) ---- */
 
 static int b64v(int c)
 {
@@ -113,7 +113,7 @@ static void token_kid(const char *tok, char *out, size_t cap)
 }
 
 /* ================================================================================================================================================================ */
-/* producer                                                                                                                                                          */
+/* producer */
 
 typedef struct {
     char kid[64];
@@ -254,7 +254,7 @@ static bool fetch_keys_locked(g5c_oauth_rs *rs)
     return true;
 }
 
-/* A referenced key set that holds the key of this key id, fetching when there is none, the set is old, or the key id is not in it (at most every two seconds). NULL when none. */
+/* A referenced key set that holds the key of this key id, fetching when there is none, the set is old, or the key id is not in it */
 static keyset_t *get_set(g5c_oauth_rs *rs, const char *kid, const jkey_t **which)
 {
     keyset_t *s = NULL;
@@ -418,7 +418,7 @@ void g5c_oauth_rs_attach(g5c_oauth_rs *rs, g5c_router *router)
 }
 
 /* ================================================================================================================================================================ */
-/* consumer                                                                                                                                                          */
+/* consumer */
 
 typedef struct {
     char key[96]; /* "<target type>|<service>" */
@@ -562,7 +562,7 @@ char *g5c_oauth_client_token(void *client, const char *method, const char *url)
     double now;
     if (!service_of(url, svc, sizeof svc) || (target = g5c_oauth_service_nf_type(svc)) == NULL)
         return NULL;
-    if (strcmp(target, "NRF") == 0) { /* the registration, heart-beat and deregistration of an NF instance are authenticated by the transport (the NRF lets them in without a token) */
+    if (strcmp(target, "NRF") == 0) { /* the registration, heart-beat and deregistration of an NF instance are authenticated by */
         const char *p = strstr(url, "/nnrf-nfm/v1/nf-instances/");
         if (p != NULL && (strcmp(method, "PUT") == 0 || strcmp(method, "PATCH") == 0 || strcmp(method, "DELETE") == 0))
             return NULL;

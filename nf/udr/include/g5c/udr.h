@@ -18,9 +18,7 @@
 #include "g5c/metrics.h"
 #include "g5c/sbi.h"
 
-/* ---- storage keys of the resources the other NFs use ---------------------------------------------------------------
- * A subscriber's data is a set of documents under the subscriber's partition; the key is the resource path without the
- * subscriber and the serving PLMN. */
+/* ---- storage keys of the resources the other NFs use --------------------------------------------------------------- A subscriber's data is a set of */
 #define UDR_AUTH "subscription-data/authentication-data/authentication-subscription"
 #define UDR_AUTH_STATUS "subscription-data/authentication-data/authentication-status"
 #define UDR_AM "subscription-data/provisioned-data/am-data"
@@ -31,7 +29,7 @@
 #define UDR_POLICY_SM "policy-data/ues/sm-data"
 #define UDR_POLICY_AM "policy-data/ues/am-data"
 
-/* ---- store ------------------------------------------------------------------------------------------------------- */
+/* ---- store ---- */
 
 typedef struct g5c_udr_store g5c_udr_store;
 
@@ -62,7 +60,7 @@ bool g5c_udr_remove(g5c_udr_store *s, const char *ue);
 /* Hand a heap object to the store, to be freed with it. */
 void g5c_udr_store_track(g5c_udr_store *s, void *owned);
 
-/* ---- service ------------------------------------------------------------------------------------------------------- */
+/* ---- service ---- */
 
 typedef struct g5c_udr g5c_udr;
 
@@ -78,7 +76,7 @@ typedef struct {
     unsigned cache_max_age_s;         /* max-age of the Cache-Control of representations (TS 29.504 6.1.2.2.3) */
     const char *api_root;             /* scheme://authority this UDR is reached at (resource URIs in notifications) */
     const g5c_json *group_ids;        /* Nudr_GroupIDmap: [{nf_type, nf_group_id, supi_ranges}]; copied; NULL: none */
-    bool put_no_content;              /* compatibility: every successful PUT answers 204, also when it created the resource (see config.c) */
+    bool put_no_content;              /* compatibility: every successful PUT answers 204, also when it created the resource */
 } udr_opts;
 
 /* The service over `store` (which must outlive it). */
@@ -92,7 +90,7 @@ g5c_router *g5c_udr_router(g5c_udr_store *store);
 /* The same with explicit options; the service is owned by the store. */
 g5c_router *g5c_udr_router_opts(g5c_udr_store *store, const udr_opts *o);
 
-/* ---- configuration (config.c) ------------------------------------------------------------------------------------- */
+/* ---- configuration (config.c) ---- */
 
 typedef struct {
     udr_opts opts;          /* provisioning_token is heap memory owned by the config */

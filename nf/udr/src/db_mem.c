@@ -70,7 +70,7 @@ static void recount(memdb *s)
     }
 }
 
-/* ---- persistence ------------------------------------------------------------------------------------------------ */
+/* ---- persistence ---- */
 
 /* serialise (under the read lock) and replace the file atomically; the journal is folded in and truncated */
 static bool write_file(memdb *s)
@@ -173,8 +173,7 @@ static void *flusher_main(void *arg)
     }
 }
 
-/* A mutation of partition `part` happened (the caller holds the write lock). Before the flusher exists (the first-run
- * creation check) the file is written at once and the result returned. */
+/* A mutation of partition `part` happened (the caller holds the write lock) */
 static bool persist(memdb *s, const char *part)
 {
     if (s->path == NULL)
@@ -243,7 +242,7 @@ static void flusher_start(memdb *s)
         s->flusher_on = true;
 }
 
-/* ---- operations ------------------------------------------------------------------------------------------------- */
+/* ---- operations ---- */
 
 static int64_t now_epoch(void)
 {

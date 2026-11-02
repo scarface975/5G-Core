@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* The storage interface, run against every backend: the same expectations for memory, the journalled file and PostgreSQL
- * (when G5C_UDR_TEST_PG is set). Preconditions, atomic read-modify-write under contention, prefix listing, revisions. */
+/* The storage interface, run against every backend: the same expectations for memory, the journalled file and PostgreSQL (when G5C_UDR_TEST_PG is set) */
 #define _DEFAULT_SOURCE
 #include <pthread.h>
 #include <stdlib.h>

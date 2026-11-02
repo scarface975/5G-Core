@@ -13,7 +13,7 @@
 
 #include <openssl/rand.h>
 
-/* ---- allocation ---------------------------------------------------------- */
+/* ---- allocation ---- */
 
 static void oom(void)
 {
@@ -84,7 +84,7 @@ char *g5c_xasprintf(const char *fmt, ...)
     return p;
 }
 
-/* ---- bytes --------------------------------------------------------------- */
+/* ---- bytes ---- */
 
 void g5c_bytes_init(g5c_bytes *b)
 {
@@ -183,7 +183,7 @@ char *g5c_bytes_take(g5c_bytes *b, size_t *len)
     return p;
 }
 
-/* ---- strings ------------------------------------------------------------- */
+/* ---- strings ---- */
 
 bool g5c_streq(const char *a, const char *b)
 {
@@ -260,7 +260,7 @@ long g5c_hex_decode(const char *s, uint8_t *out, size_t cap)
     return (long)(n / 2);
 }
 
-/* ---- identifiers & time -------------------------------------------------- */
+/* ---- identifiers & time ---- */
 
 int g5c_random(void *p, size_t n)
 {
@@ -302,7 +302,7 @@ int64_t g5c_unix_millis(void)
     return (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 }
 
-/* ---- logging ------------------------------------------------------------- */
+/* ---- logging ---- */
 
 static pthread_mutex_t log_mu = PTHREAD_MUTEX_INITIALIZER;
 static _Atomic int cur_level = G5C_LOG_INFO; /* read without a lock by every log call, written by init and by SIGUSR1 / SIGUSR2 */
@@ -376,7 +376,7 @@ static void json_escape(g5c_bytes *b, const char *s)
     }
 }
 
-/* ---- request tracing ---------------------------------------------------------------------------------------------------------------------- */
+/* ---- request tracing ---- */
 
 static _Thread_local g5c_trace_ctx tl_trace;
 

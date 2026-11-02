@@ -7,7 +7,7 @@
 #include "g5c/nas.h"
 #include "g5c/smf.h"
 
-/* ---- rates -------------------------------------------------------------------------------------------------------------------------------- */
+/* ---- rates ---- */
 
 /* Unit code u >= 1 means multiples of 4^(u-1) kbit/s (Table 9.11.4.14.1 and the QoS flow description parameters). */
 static void rate_encode(uint64_t kbps, uint8_t *unit, uint16_t *val)
@@ -44,7 +44,7 @@ void smf_gsm_session_ambr(uint64_t ul, uint64_t dl, uint8_t out[6])
     out[5] = (uint8_t)v;
 }
 
-/* ---- parsing ------------------------------------------------------------------------------------------------------------------------------ */
+/* ---- parsing ---- */
 
 int smf_gsm_peek(const uint8_t *nas, size_t len, uint8_t *type, uint8_t *psi, uint8_t *pti)
 {
@@ -109,7 +109,7 @@ int smf_gsm_parse_est_req(const uint8_t *nas, size_t len, smf_est_req *out)
     return 0;
 }
 
-/* ---- QoS rules and flow descriptions ------------------------------------------------------------------------------------------------------------------ */
+/* ---- QoS rules and flow descriptions ---- */
 
 static void put_u8(g5c_bytes *b, unsigned v)
 {
@@ -182,7 +182,7 @@ static int put_packet_filter(g5c_bytes *b, uint8_t pfid, uint8_t dir, const char
         }
     }
     if (n == 0) {
-        if (dir == 1) { /* match-all must not be used with "downlink only" (NOTE 2): match every remote IPv4 address instead */
+        if (dir == 1) { /* match-all must not be used with "downlink only" (NOTE 2) */
             static const uint8_t any4[9] = {0x10, 0, 0, 0, 0, 0, 0, 0, 0};
             memcpy(c, any4, sizeof any4);
             n = sizeof any4;
@@ -254,7 +254,7 @@ int smf_gsm_put_qos_flow_desc(g5c_bytes *out, const smf_flow *f)
     return 0;
 }
 
-/* ---- messages -------------------------------------------------------------------------------------------------------------------------------------- */
+/* ---- messages ---- */
 
 static void put_epco(g5c_bytes *b, const smf_est_acc *in)
 {

@@ -11,7 +11,7 @@ static int bad(void)
     return NAS_E_INVALID;
 }
 
-/* ---- PLMN ------------------------------------------------------------------------------------------------------------ */
+/* ---- PLMN ---- */
 
 int nas_plmn_decode(const uint8_t *b, size_t len, char mcc[4], char mnc[4])
 {
@@ -61,7 +61,7 @@ int nas_plmn_encode(const char *mcc, const char *mnc, uint8_t out[3])
     return NAS_OK;
 }
 
-/* ---- BCD ------------------------------------------------------------------------------------------------------------ */
+/* ---- BCD ---- */
 
 /* Digits of b (low nibble first), stopping at a non-digit nibble; at most max digits. */
 static size_t bcd_digits(const uint8_t *b, size_t n, char *out, size_t max)
@@ -90,7 +90,7 @@ static int bcd_pack(const char *digits, size_t octets, uint8_t *out)
     return NAS_OK;
 }
 
-/* ---- 5GS mobile identity ------------------------------------------------------------------------------------------------- */
+/* ---- 5GS mobile identity ---- */
 
 int nas_mobile_identity_decode(const uint8_t *v, size_t len, nas_mobile_identity *out)
 {
@@ -253,7 +253,7 @@ char *nas_suci_to_string(const nas_mobile_identity *id)
     return out;
 }
 
-/* ---- small nibble IEs ------------------------------------------------------------------------------------------------------- */
+/* ---- small nibble IEs ---- */
 
 nas_ngksi nas_ngksi_from_nibble(uint8_t n)
 {
@@ -319,7 +319,7 @@ uint8_t nas_selected_algorithms(uint8_t ciphering, uint8_t integrity)
     return (uint8_t)(((ciphering & 0x0f) << 4) | (integrity & 0x0f));
 }
 
-/* ---- S-NSSAI / NSSAI / DNN -------------------------------------------------------------------------------------------------- */
+/* ---- S-NSSAI / NSSAI / DNN ---- */
 
 int nas_snssai_decode(const uint8_t *v, size_t len, nas_snssai *out)
 {

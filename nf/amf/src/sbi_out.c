@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* The AMF as an SBI consumer: Nnrf_NFDiscovery, Nausf_UEAuthentication, Nudm_UEContextManagement, Nudm_SubscriberDataManagement and
- * Npcf_AMPolicyControl. All calls are blocking; the caller holds only the mutex of the UE it works for. */
+/* The AMF as an SBI consumer: Nnrf_NFDiscovery, Nausf_UEAuthentication, Nudm_UEContextManagement, Nudm_SubscriberDataManagement and Npcf_AMPolicyControl */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -28,7 +27,7 @@ static char *pct(const char *s)
     return o;
 }
 
-/* ---- discovery ---------------------------------------------------------------------------------------------------------------------- */
+/* ---- discovery ---- */
 
 /* The apiRoot of a peer: its configured address, or the one the NRF gives (the shared discovery client caches it for the validity period). */
 char *amf_nf_root(amf *a, const char *nf_type, const char *service, const nas_snssai *s, const char *dnn)
@@ -65,7 +64,7 @@ char *amf_nf_root(amf *a, const char *nf_type, const char *service, const nas_sn
     return root;
 }
 
-/* ---- NSSF ------------------------------------------------------------------------------------------------------------------------------ */
+/* ---- NSSF ---- */
 
 static g5c_json *sn_obj(const nas_snssai *s)
 {
@@ -93,8 +92,7 @@ static size_t sn_list_from(const g5c_json *arr, const char *wrapper, nas_snssai 
     return n;
 }
 
-/* Nnssf_NSSelection for a registration (TS 29.531 5.2.2.2.2): the subscribed and the requested S-NSSAIs and the tracking area go in, the allowed ones and the rejected ones come out.
- * The allowed ones are cut to what this AMF serves. */
+/* Nnssf_NSSelection for a registration (TS 29.531 5.2.2.2.2) */
 int amf_nssf_registration(amf *a, const amf_ue *u, const amf_tai *tai, const nas_snssai *req, size_t nreq, nas_snssai *allowed, size_t *nallowed, nas_snssai *rejected, size_t *nrej)
 {
     char *root = amf_nf_root(a, "NSSF", "nnssf-nsselection", NULL, NULL), *url, *info_txt, *info_enc, *tai_txt, *tai_enc, err[160];
@@ -164,8 +162,7 @@ int amf_nssf_registration(amf *a, const amf_ue *u, const amf_tai *tai, const nas
     return rc;
 }
 
-/* Nnssf_NSSelection for a PDU session establishment (TS 29.531 5.2.2.2.3): is the S-NSSAI served in this tracking area, and which NSI. A refusal (403) stops the establishment; no answer
- * lets it go on (the AMF's own allowed NSSAI already vouched for the slice). */
+/* Nnssf_NSSelection for a PDU session establishment (TS 29.531 5.2.2.2.3): is the S-NSSAI served in this tracking area, and which NSI */
 int amf_nssf_pdu_session(amf *a, const nas_snssai *sn, const amf_tai *tai)
 {
     char *root = amf_nf_root(a, "NSSF", "nnssf-nsselection", NULL, NULL), *url, *info_txt, *info_enc, *tai_txt, *tai_enc, err[160];
@@ -208,7 +205,7 @@ int amf_nssf_pdu_session(amf *a, const nas_snssai *sn, const amf_tai *tai)
     return rc;
 }
 
-/* ---- AUSF ----------------------------------------------------------------------------------------------------------------------------- */
+/* ---- AUSF ---- */
 
 int amf_ausf_start(amf *a, const char *id, const uint8_t *resync_rand, const uint8_t *auts, amf_authv *out, int *http)
 {
@@ -375,7 +372,7 @@ int amf_ausf_confirm(amf *a, const char *ctx_url, const uint8_t res_star[16], ch
     return rc;
 }
 
-/* ---- UDM ------------------------------------------------------------------------------------------------------------------------------ */
+/* ---- UDM ---- */
 
 static void amf_id_hex(const amf *a, char out[7])
 {
@@ -601,7 +598,7 @@ void amf_udm_sdm_unsubscribe(amf *a, amf_ue *u)
     u->sdm_subscribed = false;
 }
 
-/* ---- PCF -------------------------------------------------------------------------------------------------------------------------------- */
+/* ---- PCF ---- */
 
 int amf_pcf_create(amf *a, amf_ue *u)
 {

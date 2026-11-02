@@ -153,8 +153,7 @@ static size_t n_upf_sessions(void)
     return remote ? (size_t)scrape(upf_sbi, "g5c_upf_sessions") : upf_sessions();
 }
 
-/* the count a wave must reach: base + want. Leftovers of an earlier chaos run are released on their own timers while the wave runs, so against a
- * remote cluster "at least the wave's own UEs and at most base + want" is what can be asserted. */
+/* the count a wave must reach: base + want */
 static bool count_is(size_t cur, size_t base, size_t want)
 {
     return remote ? cur >= want && cur <= base + want : cur == base + want;
@@ -191,7 +190,7 @@ static bool traf_on;
 static double traf_mbps, traf_ms;
 static unsigned traf_size;
 
-/* With G5C_LOAD_ECHO the packets go to an echo server behind the UPF and return as downlink: what came back, when, and how much is counted here (all gNB threads). */
+/* With G5C_LOAD_ECHO the packets go to an echo server behind the UPF and return as downlink */
 static const char *echo_ip;
 static pthread_mutex_t echo_mu = PTHREAD_MUTEX_INITIALIZER;
 static unsigned long echo_sent, echo_recv, echo_bytes;
@@ -232,8 +231,7 @@ static void echo_collect(int fd)
     }
 }
 
-/* One UE's uplink traffic (B-02): GTP-U to the UPF's N3 with the TEID the UPF gave, a UDP datagram of `traf_size` octets from the UE's address, paced to `traf_mbps` for `traf_ms`.
- * Without an echo server the packets are not answered and the UPF's counters are the measurement; with one they come back and the receiver measures too. */
+/* One UE's uplink traffic (B-02) */
 static void traffic_phase(const sess_t *ss, int gnb)
 {
     bool echo = echo_ip != NULL;
@@ -382,8 +380,7 @@ static void *gnb_thread(void *arg)
     return NULL;
 }
 
-
-/* ---- chaos mode: a tolerant load that keeps going while network functions are killed and restarted --------------------------------------------- */
+/* ---- chaos mode: a tolerant load that keeps going while network functions are killed and restarted ---- */
 
 static atomic_long c_ok, c_fail_reg, c_fail_est, c_fail_dereg, c_reconnects;
 static atomic_bool chaos_stop;
@@ -617,7 +614,7 @@ int main(void)
         traf_expect = getenv("G5C_LOAD_EXPECT_MBPS") != NULL ? atof(getenv("G5C_LOAD_EXPECT_MBPS")) : 0;
         if (getenv("G5C_LOAD_ECHO") != NULL && getenv("G5C_LOAD_ECHO")[0] != 0) {
             echo_ip = getenv("G5C_LOAD_ECHO");
-            TK_ASSERT(n_gnbs <= 2); /* each gNB thread owns an N3 address: more would share a socket and could not tell their replies apart */
+            TK_ASSERT(n_gnbs <= 2); /* each gNB thread owns an N3 address */
         }
     }
     if (env_uint("G5C_LOAD_CHAOS_SECONDS", 0) != 0)
@@ -749,7 +746,7 @@ int main(void)
         pthread_barrier_destroy(&bar_release);
         pthread_barrier_destroy(&bar_tgo);
         pthread_barrier_destroy(&bar_tdone);
-        (void)malloc_trim(0); /* tell allocator retention (RSS stays high after a free) from a leak (RSS keeps growing wave after wave) */
+        (void)malloc_trim(0); /* tell allocator retention (RSS stays high after a free) from a leak */
         rss_last = rss_kb();
         if (wave == 0)
             rss_first = rss_last;

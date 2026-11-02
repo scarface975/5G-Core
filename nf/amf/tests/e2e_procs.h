@@ -1,12 +1,11 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* The scripted UE and gNB procedures shared by the AMF end-to-end test and the load driver (registration with 5G-AKA and security mode, PDU session
- * establishment, releases). They run on top of the environment in e2e_env.h. */
+/* The scripted UE and gNB procedures shared by the AMF end-to-end test and the load driver */
 #ifndef G5C_AMF_E2E_PROCS_H
 #define G5C_AMF_E2E_PROCS_H
 #include "e2e_env.h"
 #pragma GCC diagnostic ignored "-Wunused-function"
 
-/* ---- UE procedures ------------------------------------------------------------------------------------------------------------------------------ */
+/* ---- UE procedures ---- */
 
 typedef struct {
     uint8_t rand[16], autn[16], abba[2], ngksi;
@@ -96,7 +95,7 @@ static void ue_answer_auth(gnb_t *g, ue_t *u, const auth_req_t *a, uint32_t tac,
     g5c_bytes_free(&out);
 }
 
-/* ---- EAP-AKA' (TS 24.501 5.4.1.2.2): the UE side, an independent peer written from RFC 5448 / RFC 4187 and TS 33.501 Annex F ----------------------------------------- */
+/* ---- EAP-AKA' (TS 24.501 5.4.1.2.2): the UE side, an independent peer written from RFC 5448 / RFC 4187 and TS 33.501 Annex F ---- */
 
 typedef struct {
     uint8_t abba[2], ngksi;
@@ -132,7 +131,7 @@ static bool parse_eap_auth_request(const g5c_bytes *plain, eap_req_t *r)
 
 enum { EAP_OK = 0, EAP_BAD_RES };
 
-/* answer an AUTHENTICATION REQUEST carrying an EAP message: the challenge (verify AUTN and AT_MAC, derive the keys), or the notification that follows a failure */
+/* answer an AUTHENTICATION REQUEST carrying an EAP message */
 static void ue_answer_eap(gnb_t *g, ue_t *u, const eap_req_t *r, uint32_t tac, int mode)
 {
     g5c_eap_pkt p;
@@ -362,7 +361,6 @@ static void gnb_ics_response(gnb_t *g, ue_t *u, const char *psi_list_json)
     gnb_tx(g, p, (uint16_t)(1 + u->ran_id % 7));
 }
 
-
 /* receive the ICS carrying the registration (or service) accept; verify the AS key material; open the NAS PDU */
 static g5c_bytes ue_receive_ics(gnb_t *g, ue_t *u, uint32_t kgnb_count, g5c_json **ics_out)
 {
@@ -550,7 +548,6 @@ static void gnb_confirm_release(gnb_t *g, ue_t *u)
     add_ie(p, NGAP_IE_RAN_UE_NGAP_ID, "ignore", g5c_json_new_int(rn));
     gnb_tx(g, p, 1);
 }
-
 
 static void build_est_req(g5c_bytes *out, uint8_t psi, uint8_t pti)
 {
@@ -752,8 +749,7 @@ static void gnb_pdu_setup_response(gnb_t *g, ue_t *u, uint8_t psi, uint32_t gnb_
     gnb_tx(g, p, (uint16_t)(1 + u->ran_id % 7));
 }
 
-/* A DL NAS TRANSPORT that carries a CONFIGURATION UPDATE COMMAND (the AMF sends one after the first registration when it has a network name to give):
- * answer it with CONFIGURATION UPDATE COMPLETE when it asks for that, and report true so that the caller waits for the next message. */
+/* A DL NAS TRANSPORT that carries a CONFIGURATION UPDATE COMMAND (the AMF sends one after the first registration when it has a network name to give) */
 static bool ue_answer_config_update(gnb_t *g, ue_t *u, const g5c_json *pdu, uint32_t tac)
 {
     uint8_t *nas;

@@ -1,7 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* The SCP end to end, in process, over real HTTP/2 connections: Model C (the apiRoot of the target in the request), Model D (delegated discovery at a scripted NRF), the
- * choice among producers (priority, capacity and load, the producers that fail), retries and reselection, notifications, errors the SCP makes and errors it relays,
- * chained SCPs, the access control on the targets, and the client side of indirect communication (g5c_client_set_scp). */
+/* The SCP end to end, in process, over real HTTP/2 connections */
 #define _DEFAULT_SOURCE
 #include <pthread.h>
 #include <stdlib.h>
@@ -12,7 +10,7 @@
 #include "g5c/testkit.h"
 #include "priv.h"
 
-/* ---- scripted producers and NRF ------------------------------------------------------------------------------------------------ */
+/* ---- scripted producers and NRF ---- */
 
 typedef struct {
     pthread_mutex_t mu;
@@ -165,7 +163,7 @@ static char *profile(const prod_t *p, int priority, int capacity, int load)
         p->id, priority, capacity, load, strrchr(p->root, ':') + 1);
 }
 
-/* ---- the SCP ----------------------------------------------------------------------------------------------------------------------- */
+/* ---- the SCP ---- */
 
 typedef struct {
     scp *s;
@@ -251,7 +249,7 @@ static const char *cause_of(const reply_t *x)
 
 static const char *BASIC = "scp: {}\n";
 
-/* ---- tests ------------------------------------------------------------------------------------------------------------------------- */
+/* ---- tests ---- */
 
 static void test_config(void)
 {

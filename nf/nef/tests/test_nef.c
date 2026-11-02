@@ -1,7 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* The NEF end to end, in process: configuration, the TrafficInfluence API against a real UDR (and the UDM that resolves GPSIs), the MonitoringEvent API against
- * a real UDM and a scripted AMF (Namf_EventExposure), the notifications to an AF (a real HTTP/2 callback server), the access control of the AFs, the state
- * file. */
+/* The NEF end to end, in process */
 #define _DEFAULT_SOURCE
 #include <ctype.h>
 #include <pthread.h>
@@ -25,7 +23,7 @@
 #define PROV "provisioning-token-0123456789"
 #define AF2_TOKEN "af2-bearer-token-0123456789"
 
-/* ---- requests ------------------------------------------------------------------------------------------------------------ */
+/* ---- requests ---- */
 
 typedef struct {
     int status;
@@ -96,14 +94,14 @@ static int http(const char *method, const char *url, const char *body, const cha
     return st;
 }
 
-/* ---- scripted peers ----------------------------------------------------------------------------------------------------------- */
+/* ---- scripted peers ---- */
 
 typedef struct {
     pthread_mutex_t mu;
     g5c_json *items[64];
     size_t n;
     int answer;
-    char *immediate; /* the reportList (JSON text) the AMF answers a subscription with when it is asked for an immediate report */
+    char *immediate; /* the reportList (JSON text) the AMF answers a subscription with when it is asked for an */
     size_t deleted;
     char last_deleted[64];
     unsigned seq;
@@ -206,7 +204,7 @@ static bool wait_deleted(sink_t *s, size_t n, int ms)
     return false;
 }
 
-/* ---- the stack ---------------------------------------------------------------------------------------------------------------- */
+/* ---- the stack ---- */
 
 typedef struct {
     g5c_client *client;
@@ -273,7 +271,7 @@ static void start_nef(S *s, const char *extra_nef)
     TK_ASSERT(s->n != NULL);
     TK_ASSERT(nef_start(s->n, err, sizeof err) == 0);
     s->r = nef_router(s->n);
-    {   /* the PCF and the AMF call the NEF back: its router is served, and its callback address is the one of the server */
+    {   /* the PCF and the AMF call the NEF back */
         g5c_server_cfg cfg = {"127.0.0.1", 0, NULL};
         s->nef_s = g5c_server_start(&cfg, s->r, err, sizeof err);
         TK_ASSERT(s->nef_s != NULL);
@@ -436,7 +434,7 @@ static const char *id_of(const char *location)
 #define ME "/3gpp-monitoring-event/v1"
 #define AQ "/3gpp-as-session-with-qos/v1"
 
-/* ---- configuration ------------------------------------------------------------------------------------------------------------ */
+/* ---- configuration ---- */
 
 static void test_config(void)
 {
@@ -486,7 +484,7 @@ static void test_config(void)
     TK_ASSERT(parse_rfc3339("2030-01-02T03:04:05Z") == 1893553445000LL && parse_rfc3339("2030-01-02T04:04:05+01:00") == 1893553445000LL && parse_rfc3339("2030-01-02") < 0);
 }
 
-/* ---- traffic influence ------------------------------------------------------------------------------------------------------- */
+/* ---- traffic influence ---- */
 
 static void test_traffic_influence(void)
 {
@@ -670,7 +668,7 @@ static void test_traffic_influence(void)
     unstack(&s);
 }
 
-/* ---- monitoring events ----------------------------------------------------------------------------------------------------------- */
+/* ---- monitoring events ---- */
 
 /* what the AMF would send to the NEF: the callback of the subscription the NEF made at the AMF `which` (index into the AMF's log) */
 static R amf_notifies(S *s, size_t which, const char *corr_override, const char *report_list)
@@ -910,7 +908,7 @@ static void test_monitoring(void)
     unstack(&s);
 }
 
-/* ---- the state file ------------------------------------------------------------------------------------------------------------- */
+/* ---- the state file ---- */
 
 /* With `nef.events_via_udm` the NEF subscribes at the UDM (Nudm_EE); the UDM subscribes at the AMF and relays the AMF's reports as MonitoringReports. */
 static void test_monitoring_via_udm(void)
@@ -1017,7 +1015,7 @@ static void test_state(void)
     unstack(&s);
 }
 
-/* ---- AS session with QoS ---------------------------------------------------------------------------------------------------------- */
+/* ---- AS session with QoS ---- */
 
 static bool wait_sink(sink_t *k, size_t n, int ms)
 {
@@ -1189,7 +1187,7 @@ static void test_as_qos(void)
     unstack(&s);
 }
 
-/* ---- the PCF of a UE address through the BSF (TS 29.521 4.2.4): no `pcf:` in the configuration, the NEF asks the BSF ---------------------------------------------- */
+/* ---- the PCF of a UE address through the BSF (TS 29.521 4.2.4): no `pcf:` in the configuration, the NEF asks the BSF ---- */
 
 static void test_as_qos_via_bsf(void)
 {

@@ -7,7 +7,7 @@
 
 #include "priv.h"
 
-/* ---- small helpers ------------------------------------------------------------------------------------------------------------------------ */
+/* ---- small helpers ---- */
 
 bool nrf_valid_uuid(const char *s)
 {
@@ -96,7 +96,7 @@ bool nrf_features_service_map(const char *hex)
     return (v & 1) != 0;
 }
 
-/* ---- notifications ----------------------------------------------------------------------------------------------------------------------- */
+/* ---- notifications ---- */
 
 static const char *event_name(nrf_event ev)
 {
@@ -310,7 +310,7 @@ static void *worker_main(void *arg)
     }
 }
 
-/* ---- state file ----------------------------------------------------------------------------------------------------------------------------- */
+/* ---- state file ---- */
 
 void nrf_mark_dirty(nrf *n) /* the caller holds n->mu */
 {
@@ -424,7 +424,7 @@ int nrf_restore(nrf *n)
     return 0;
 }
 
-/* ---- the monitor: heart-beats, subscription validity, state file ----------------------------------------------------------------------------- */
+/* ---- the monitor: heart-beats, subscription validity, state file ---- */
 
 static void monitor_pass(nrf *n)
 {
@@ -497,7 +497,7 @@ static void *monitor_main(void *arg)
     return NULL;
 }
 
-/* ---- lifecycle ------------------------------------------------------------------------------------------------------------------------------- */
+/* ---- lifecycle ---- */
 
 int nrf_start(nrf *n, char *err, size_t errcap)
 {

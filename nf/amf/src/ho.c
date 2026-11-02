@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* Mobility between gNBs: Xn handover completion by Path Switch Request (TS 38.413 8.4.4) and N2 handover (TS 38.413 8.4.1 - 8.4.5, TS 23.502
- * 4.9.1.3). The user plane is moved by the SMF; the AMF derives the next hop for the target gNB (TS 33.501 6.9.2.3) and relays the containers. */
+/* Mobility between gNBs: Xn handover completion by Path Switch Request (TS 38.413 8.4.4) and N2 handover (TS 38.413 8.4.1 - 8.4.5, TS 23.502 4.9.1.3) */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,7 +9,7 @@
 #define HO_PREP_SECS 10
 #define HO_OVERALL_SECS 15
 
-/* ---- helpers --------------------------------------------------------------------------------------------------------------------------------- */
+/* ---- helpers ---- */
 
 static int send_to(amf *a, const amf_conn *c, g5c_json *pdu)
 {
@@ -117,7 +116,7 @@ static void cancel_at_smf(amf *a, amf_ue *u, const char *cause)
     }
 }
 
-/* ---- Xn: Path Switch Request ---------------------------------------------------------------------------------------------------------- */
+/* ---- Xn: Path Switch Request ---- */
 
 static void path_switch_failure(amf *a, const amf_conn *c, const g5c_json *pdu, uint64_t amf_id, const char *group, const char *cause)
 {
@@ -257,7 +256,7 @@ void ho_path_switch(amf_conn *c, const g5c_json *pdu)
     amf_persist_request(a);
 }
 
-/* ---- N2 handover ------------------------------------------------------------------------------------------------------------------------ */
+/* ---- N2 handover ---- */
 
 static void send_prep_failure(amf *a, amf_conn *sc, const char *group, const char *cause)
 {

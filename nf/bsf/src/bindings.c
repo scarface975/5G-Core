@@ -1,9 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* Nbsf_Management (TS 29.521): the bindings, their indexes, and the four operations.
- *
- * A binding is found by the UE address it was registered with: the IPv4 address (hash), an IPv6 prefix of /64 or longer (hash of its first 64 bits; the prefixes shorter than
- * /64 are a short list), a MAC address (hash), and a framed route (a list: they are rare). The SamePcf check (TS 29.521 4.2.2.2) finds a binding by SUPI, DNN and S-NSSAI
- * (hash) or, when the combination is not complete, in the list of the bindings that hold SM policy addressing information. */
+/* Nbsf_Management (TS 29.521): the bindings, their indexes, and the four operations */
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,7 +8,7 @@
 
 #include "priv.h"
 
-/* ---- the hash table ------------------------------------------------------------------------------------------------------------- */
+/* ---- the hash table ---- */
 
 static uint64_t hash_str(const char *s)
 {
@@ -90,7 +86,7 @@ static hnode_t *ht_head(const ht_t *t, const char *key)
     return t->buckets[(size_t)(hash_str(key) & (t->nbuckets - 1))];
 }
 
-/* ---- keys ----------------------------------------------------------------------------------------------------------------------- */
+/* ---- keys ---- */
 
 static void key_v4(char out[16], uint32_t a)
 {
@@ -112,7 +108,7 @@ static char *key_combo(const char *supi, const char *dnn, int sst, int sd)
     return g5c_xasprintf("s:%s|%s|%d-%d", supi, dnn, sst, sd);
 }
 
-/* ---- a binding ------------------------------------------------------------------------------------------------------------------ */
+/* ---- a binding ---- */
 
 static void bind_clear(bind_t *b)
 {
@@ -274,7 +270,7 @@ static bool bind_parse(bind_t *b, const g5c_json *doc, const char **param)
     return true;
 }
 
-/* ---- the indexes ---------------------------------------------------------------------------------------------------------------- */
+/* ---- the indexes ---- */
 
 static void list_push(bind_t ***v, size_t *n, size_t *cap, bind_t *b, size_t *ix)
 {
@@ -434,7 +430,7 @@ void bsf_bindings_free(bsf *s)
     s->nall = 0;
 }
 
-/* ---- validation of a binding (TS 29.521 4.2.2.2, 5.6.2.2) ------------------------------------------------------------------------ */
+/* ---- validation of a binding (TS 29.521 4.2.2.2, 5.6.2.2) ---- */
 
 static bool semantic_check(const bind_t *nb, const g5c_json *doc, unsigned neg, const char **param, const char **why)
 {
@@ -502,7 +498,7 @@ static void invalid_schema(bsf *s, g5c_resp *resp, const char *e)
     invalid(s, resp, "MANDATORY_IE_INCORRECT", param[0] ? param : "body", why);
 }
 
-/* ---- the SamePcf check -------------------------------------------------------------------------------------------------------------- */
+/* ---- the SamePcf check ---- */
 
 static bool combo_matches(const bind_t *e, const char *supi, const char *dnn, bool has_snssai, int sst, int sd)
 {
@@ -531,7 +527,7 @@ static bind_t *same_pcf_binding(bsf *s, const g5c_json *para)
     return NULL;
 }
 
-/* ---- Nbsf_Management_Register --------------------------------------------------------------------------------------------------- */
+/* ---- Nbsf_Management_Register ---- */
 
 static void count(bsf *s, int op, int result)
 {
@@ -578,9 +574,7 @@ static bool str_eq(const char *a, const char *b)
     return (a == NULL && b == NULL) || (a != NULL && b != NULL && strcmp(a, b) == 0);
 }
 
-/* The earlier bindings for the same UE address, DNN, S-NSSAI and IP domain (caller holds the lock), whichever PCF registered them: an address is unique within its DNN,
- * S-NSSAI and IP domain, so such a binding is stale (a PCF that restarted, a session that moved to another PCF, an address that was handed to another UE) and the new
- * one replaces it. */
+/* The earlier bindings for the same UE address, DNN, S-NSSAI and IP domain (caller holds the lock), whichever PCF registered them */
 static size_t collect_replaced(bsf *s, const bind_t *nb, bind_t **out, size_t cap)
 {
     size_t n = 0;
@@ -715,7 +709,7 @@ rejected:
     count(s, 0, 2);
 }
 
-/* ---- Nbsf_Management_Deregister -------------------------------------------------------------------------------------------------- */
+/* ---- Nbsf_Management_Deregister ---- */
 
 static void h_deregister(void *ctx, const g5c_req *req, g5c_resp *resp)
 {
@@ -737,7 +731,7 @@ static void h_deregister(void *ctx, const g5c_req *req, g5c_resp *resp)
     count(s, 1, 0);
 }
 
-/* ---- Nbsf_Management_Update ------------------------------------------------------------------------------------------------------ */
+/* ---- Nbsf_Management_Update ---- */
 
 static void h_update(void *ctx, const g5c_req *req, g5c_resp *resp)
 {
@@ -826,7 +820,7 @@ rejected:
     count(s, 3, 2);
 }
 
-/* ---- Nbsf_Management_Discovery --------------------------------------------------------------------------------------------------- */
+/* ---- Nbsf_Management_Discovery ---- */
 
 typedef struct {
     bind_t *b;
@@ -1019,7 +1013,7 @@ done:
     free(sf);
 }
 
-/* ---- the state file's way in ----------------------------------------------------------------------------------------------------- */
+/* ---- the state file's way in ---- */
 
 bool bsf_insert_doc(bsf *s, const char *id, const g5c_json *doc, char *err, size_t errcap)
 {

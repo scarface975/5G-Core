@@ -12,7 +12,7 @@
 #include "g5c/sbi.h"
 #include "g5c/testkit.h"
 
-/* ---- handlers ---------------------------------------------------------------------------- */
+/* ---- handlers ---- */
 
 static atomic_int observed;
 static char last_route[128];
@@ -92,7 +92,7 @@ static g5c_router *make_router(void)
     return r;
 }
 
-/* ---- router unit tests ----------------------------------------------------------------------- */
+/* ---- router unit tests ---- */
 
 static void make_req(g5c_req *q, const char *method, const char *path)
 {
@@ -198,7 +198,7 @@ static void test_router(void)
     }
 }
 
-/* ---- loopback ---------------------------------------------------------------------------------- */
+/* ---- loopback ---- */
 
 static char *url_for(const g5c_server *s, const char *scheme, const char *path)
 {
@@ -404,7 +404,6 @@ static void test_tls(void)
     cg_free(&cli);
 }
 
-
 /* certificate rotation: the server swaps its context, new connections see the new certificate, the old CA stops working; the client swaps likewise */
 static void test_tls_rotation(void)
 {
@@ -449,7 +448,6 @@ static void test_tls_rotation(void)
     cg_free(&cli1);
     cg_free(&cli2);
 }
-
 
 /* C-03: the trace id of a request reaches the handler, goes on with the requests the handler sends, and a request without one starts a trace */
 static void h_trace(void *ctx, const g5c_req *req, g5c_resp *resp)
@@ -542,7 +540,6 @@ static void test_trace(void)
     g5c_router_free(r1);
     g5c_router_free(r2);
 }
-
 
 /* D-02: who may connect (identity pinning by certificate name) and revocation (CRL) */
 static char *make_crl(const cg_id *ca, const cg_id *revoked)
@@ -638,7 +635,6 @@ static void test_tls_policy(void)
     cg_free(&evil);
 }
 
-
 /* G5C_TLS_KEYLOG: secrets of both sides land in an NSS key log (0600) for Wireshark; nothing is written when the variable is unset */
 static void test_tls_keylog(void)
 {
@@ -698,7 +694,6 @@ static void test_tls_keylog(void)
     cg_free(&ca);
     cg_free(&srv);
 }
-
 
 /* TLS negative paths: identities the server must refuse, certificates the client must refuse, and unusable key material. */
 static void write_file(const char *path, const char *text)

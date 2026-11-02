@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* libFuzzer target: NGAP APER decode must never crash; a PDU that decodes must encode again, and the encoding must
- * decode to an equal tree. */
+/* libFuzzer target: NGAP APER decode must never crash; a PDU that decodes must encode again, and the encoding must decode to an equal tree. */
 #include <stddef.h>
 #include <stdint.h>
 

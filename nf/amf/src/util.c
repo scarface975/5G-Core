@@ -6,7 +6,7 @@
 
 #include "priv.h"
 
-/* ---- maps ------------------------------------------------------------------------------------------------------------------------------- */
+/* ---- maps ---- */
 
 typedef struct mnode {
     struct mnode *next;
@@ -197,7 +197,7 @@ void smap_del(amf_smap *m, const char *key)
         }
 }
 
-/* ---- helpers ---------------------------------------------------------------------------------------------------------------------------- */
+/* ---- helpers ---- */
 
 void amf_count(amf *a, const char *name, const char *help, const char *lk, const char *lv)
 {

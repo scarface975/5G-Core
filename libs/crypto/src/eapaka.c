@@ -111,7 +111,7 @@ void g5c_eapaka_kausf(const g5c_eapaka_keys *k, uint8_t kausf[32])
     memcpy(kausf, k->emsk, 32);
 }
 
-/* ---- framing ---------------------------------------------------------------------------------------------------------------------------------------- */
+/* ---- framing ---- */
 
 bool g5c_eap_parse(const uint8_t *b, size_t n, g5c_eap_pkt *p)
 {

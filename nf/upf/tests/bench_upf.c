@@ -1,7 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* Packet pipeline throughput of the UPF engine alone (classification, QER, FAR, URR, GTP-U encapsulation), with no sockets and no
- * kernel in the loop, so it shows the ceiling the runtime can approach. Opt-in (needs an optimised build):
- *     G5C_PERF=1 ~/g5c-cbuild/plain/nf/upf/bench_upf        Without G5C_PERF it does nothing. */
+/* Packet pipeline throughput of the UPF engine alone (classification, QER, FAR, URR, GTP-U encapsulation), with no sockets and no kernel in the loop */
 #define _DEFAULT_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
@@ -112,7 +110,7 @@ static void run(const char *name, int nsessions, size_t pktlen, uint64_t iters)
     t1 = secs();
     printf("%-26s downlink %8.2f Mpps  %7.2f Gbit/s (inner payload)\n", name, (double)cnt_dl / (t1 - t0) / 1e6, (double)(cnt_dl * pktlen) * 8 / (t1 - t0) / 1e9);
     TK_ASSERT(cnt_ul == iters && cnt_dl == iters);
-    if (pktlen == 1400 && nsessions == 1) { /* Stage A of the plan: >= 1 Gbit/s on one host; the engine must leave plenty of room for the kernel */
+    if (pktlen == 1400 && nsessions == 1) { /* Stage A of the plan: >= 1 Gbit/s on one host; the engine must leave plenty of room for */
         double gbps = (double)(cnt_dl * pktlen) * 8 / (t1 - t0) / 1e9;
         TK_ASSERT(gbps >= 5.0);
     }

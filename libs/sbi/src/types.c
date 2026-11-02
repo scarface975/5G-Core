@@ -9,7 +9,7 @@
 
 #include "g5c/sbi.h"
 
-/* ---- helpers ------------------------------------------------------------------ */
+/* ---- helpers ---- */
 
 static char *lower_dup(const char *s)
 {
@@ -46,7 +46,7 @@ static void set_body(uint8_t **dst, size_t *len, const void *p, size_t n)
     *len = n;
 }
 
-/* ---- request --------------------------------------------------------------------- */
+/* ---- request ---- */
 
 void g5c_req_init(g5c_req *r)
 {
@@ -138,7 +138,7 @@ g5c_json *g5c_req_json(const g5c_req *r, g5c_resp *err)
     return j;
 }
 
-/* ---- response --------------------------------------------------------------------- */
+/* ---- response ---- */
 
 void g5c_resp_init(g5c_resp *r)
 {
@@ -204,7 +204,7 @@ g5c_json *g5c_resp_parse_json(const g5c_resp *r)
     return g5c_json_parse((const char *)r->body, r->body_len, NULL, 0);
 }
 
-/* ---- ProblemDetails -------------------------------------------------------------------- */
+/* ---- ProblemDetails ---- */
 
 static const char *reason_phrase(int status)
 {
@@ -288,7 +288,7 @@ char *g5c_resp_problem_cause(const g5c_resp *r)
     return out;
 }
 
-/* ---- router ---------------------------------------------------------------------------------- */
+/* ---- router ---- */
 
 typedef struct {
     char *name; /* NULL for a literal */
@@ -556,7 +556,7 @@ done:
         r->obs(r->obs_ctx, req->method, tmpl, resp->status, g5c_now_seconds() - t0);
 }
 
-/* ---- bearer guard ----------------------------------------------------------------------------- */
+/* ---- bearer guard ---- */
 
 const char *g5c_bearer_token(const g5c_req *r)
 {

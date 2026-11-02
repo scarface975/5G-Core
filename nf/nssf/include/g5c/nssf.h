@@ -21,8 +21,7 @@ typedef struct nssf_cfg nssf_cfg;
 #define NSSF_SVC_NSSELECTION "nnssf-nsselection"
 #define NSSF_SVC_NSSAIAVAILABILITY "nnssf-nssaiavailability"
 
-/* The `nssf:` block of the configuration, validated against `serving_mcc` / `serving_mnc` (the PLMN of the common sections) and `nrf_uri` (the NRF
- * of the PLMN, the default NRF of a slice; may be NULL when every slice names its own). NULL with err on an invalid configuration. */
+/* The `nssf:` block of the configuration, validated against `serving_mcc` / `serving_mnc` (the PLMN of the common sections) and `nrf_uri` */
 nssf_cfg *nssf_cfg_parse(const g5c_json *root, const char *serving_mcc, const char *serving_mnc, const char *nrf_uri, char *err, size_t errcap);
 void nssf_cfg_free(nssf_cfg *c);
 
@@ -36,7 +35,7 @@ g5c_router *nssf_router(nssf *n);
 /* Stops the worker, writes the state file, frees. */
 void nssf_destroy(nssf *n);
 
-/* ---- introspection (tests, tools) ------------------------------------------------------------------------------------------------------ */
+/* ---- introspection (tests, tools) ---- */
 size_t nssf_nf_count(nssf *n);           /* NFs that hold NSSAI availability */
 size_t nssf_subscription_count(nssf *n);
 

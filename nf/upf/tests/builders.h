@@ -24,7 +24,7 @@ static const uint8_t *find_ie(const uint8_t *b, size_t bl, uint16_t typ, pfcp_ie
     return NULL;
 }
 
-/* ---- builders ---------------------------------------------------------------------------------------------------------------------- */
+/* ---- builders ---- */
 
 typedef struct {
     uint8_t body[1600];
@@ -197,7 +197,7 @@ static void b_bar(bld_t *b, uint8_t id)
     pfcp_group_end(b->body, &b->pos, m);
 }
 
-/* ---- packets ---------------------------------------------------------------------------------------------------------------------- */
+/* ---- packets ---- */
 
 static size_t ipv4(uint8_t *p, const uint8_t src[4], const uint8_t dst[4], uint8_t proto, uint16_t sport, uint16_t dport, size_t total)
 {
@@ -236,9 +236,7 @@ static size_t gpdu_ul(uint8_t *out, size_t cap, uint32_t teid, uint8_t qfi, cons
     return n;
 }
 
-
-/* A tiny language for raw IE trees, including malformed ones: "TYPE:HEX" is a leaf (decimal type, hex value, empty value allowed),
- * "TYPE:{ ... }" a group. Items are separated by spaces. Appends to b. Returns the position after the parsed text. */
+/* A tiny language for raw IE trees, including malformed ones: "TYPE:HEX" is a leaf (decimal type, hex value, empty value allowed), "TYPE:{ . }" a group */
 static const char *dsl_items(bld_t *b, const char *p)
 {
     while (*p) {

@@ -107,7 +107,7 @@ static uint64_t std_session(uint32_t *teid, uint64_t cp, uint64_t mbr_ul, uint64
     return establish(&b, cp, PFCP_CAUSE_ACCEPTED, teid);
 }
 
-/* ---- golden GTP-U frames: what a real gNB sends and what a real UPF answers ----------------------------------------------------- */
+/* ---- golden GTP-U frames: what a real gNB sends and what a real UPF answers ---- */
 
 static void test_golden_gtpu(void)
 {
@@ -149,7 +149,7 @@ static void test_golden_gtpu(void)
     upf_free(U);
 }
 
-/* ---- IPv6 UE addresses (the /64 prefix identifies the session) ------------------------------------------------------------------ */
+/* ---- IPv6 UE addresses (the /64 prefix identifies the session) ---- */
 
 static size_t ipv6(uint8_t *p, const uint8_t src[16], const uint8_t dst[16], uint8_t next, uint16_t sport, uint16_t dport, size_t total)
 {
@@ -251,7 +251,7 @@ static void test_ipv6(void)
     upf_free(U);
 }
 
-/* ---- 6. every way a rule can be wrong, and every way it can be changed -------------------------------------------------------------- */
+/* ---- 6. every way a rule can be wrong, and every way it can be changed ---- */
 
 static void test_malformed_rules(void)
 {
@@ -474,7 +474,7 @@ static void test_modification_rules(void)
     upf_free(U);
 }
 
-/* ---- 1. the messages Open5GS really sends ------------------------------------------------------------------------------------- */
+/* ---- 1. the messages Open5GS really sends ---- */
 
 static void test_open5gs_replay(void)
 {
@@ -553,7 +553,7 @@ static void test_open5gs_replay(void)
             TK_ASSERT(pfcp_get_u16(&ie, &id) == 0 && id == 1);
         }
     }
-    {   /* the SMF answers and updates FAR 1 with the gNB's tunnel (the real modification from the capture) */
+    {   /* the SMF answers and updates FAR 1 with the gNB's tunnel */
         uint8_t resp[64];
         pfcp_header r;
         size_t rn = 0, p = 0;
@@ -618,7 +618,7 @@ static void test_open5gs_replay(void)
     upf_free(U);
 }
 
-/* ---- 2. QoS ----------------------------------------------------------------------------------------------------------------------- */
+/* ---- 2. QoS ---- */
 
 static void test_qer(void)
 {
@@ -685,7 +685,7 @@ static void test_qer(void)
     }
 }
 
-/* ---- 3. classification ------------------------------------------------------------------------------------------------------------ */
+/* ---- 3. classification ---- */
 
 static void test_sdf_and_precedence(void)
 {
@@ -799,7 +799,7 @@ static void test_uplink_protection(void)
     upf_free(U);
 }
 
-/* ---- 4. buffering and usage reporting ------------------------------------------------------------------------------------------ */
+/* ---- 4. buffering and usage reporting ---- */
 
 static void tweak_small_buffer(upf_config *c)
 {
@@ -969,7 +969,7 @@ static void test_usage_reports(void)
     upf_free(U);
 }
 
-/* ---- 5. N4 behaviour ------------------------------------------------------------------------------------------------------------------ */
+/* ---- 5. N4 behaviour ---- */
 
 static void test_n4_lifecycle(void)
 {
@@ -1216,7 +1216,7 @@ static void test_session_limit_and_ue_takeover(void)
     rig_new(tweak_limit);
     setup_assoc();
     std_session(&teid, 0xa0, 0, 0);
-    {   /* the same UE address again (the SMF lost its state): the new session takes over downlink traffic */
+    {   /* the same UE address again (the SMF lost its state) */
         uint8_t ip[100];
         gtpu_header gh;
         const uint8_t *pl;

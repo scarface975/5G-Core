@@ -5,7 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* ---- MILENAGE (TS 35.206) ------------------------------------------------ */
+/* ---- MILENAGE (TS 35.206) ---- */
 
 typedef struct {
     uint8_t res[8];     /* f2 */
@@ -32,17 +32,15 @@ int g5c_milenage_f1(const g5c_milenage *m, const uint8_t rand[16], const uint8_t
 /* f2, f3, f4, f5, f5*. Returns 0 on success. */
 int g5c_milenage_f2345(const g5c_milenage *m, const uint8_t rand[16], g5c_milenage_vector *out);
 
-/* ---- Generic 3GPP KDF (TS 33.220 Annex B.2) ------------------------------ */
+/* ---- Generic 3GPP KDF (TS 33.220 Annex B.2) ---- */
 
 #define G5C_KDF_MAX_PARAMS 8
 
-/* HMAC-SHA-256 over FC || P0 || L0 || P1 || L1 ... with 2-octet lengths.
- * Returns 0 on success, -1 if a parameter is >= 65536 octets, there are more than
- * G5C_KDF_MAX_PARAMS, or the crypto library fails. */
+/* HMAC-SHA-256 over FC || P0 || L0 || P1 || L1 . with 2-octet lengths */
 int g5c_kdf(const uint8_t *key, size_t key_len, uint8_t fc, const uint8_t *const *params,
             const size_t *param_lens, size_t nparams, uint8_t out[32]);
 
-/* ---- 5G-AKA key hierarchy (TS 33.501 Annex A) ---------------------------- */
+/* ---- 5G-AKA key hierarchy (TS 33.501 Annex A) ---- */
 
 /* "5G:mnc<MNC padded to 3>.mcc<MCC>.3gppnetwork.org". Returns length, or -1 if cap too small / bad input. */
 int g5c_serving_network_name(const char *mcc, const char *mnc, char *out, size_t cap);
@@ -71,7 +69,7 @@ int g5c_algo_key(const uint8_t kamf[32], g5c_alg_type t, uint8_t algo_id, uint8_
 /* access: 0x01 = 3GPP, 0x02 = non-3GPP */
 int g5c_kgnb(const uint8_t kamf[32], uint32_t ul_nas_count, uint8_t access, uint8_t out[32]);
 
-/* ---- NAS security algorithms (TS 33.501 Annex D) -------------------------- */
+/* ---- NAS security algorithms (TS 33.501 Annex D) ---- */
 
 typedef enum { G5C_DIR_UL = 0, G5C_DIR_DL = 1 } g5c_dir;
 
@@ -82,7 +80,7 @@ int g5c_nea2(const uint8_t key[16], uint32_t count, uint8_t bearer, g5c_dir dir,
 int g5c_nia2(const uint8_t key[16], uint32_t count, uint8_t bearer, g5c_dir dir,
              const uint8_t *msg, size_t len, uint8_t mac[4]);
 
-/* ---- SUCI ECIES (TS 33.501 Annex C.3) ------------------------------------- */
+/* ---- SUCI ECIES (TS 33.501 Annex C.3) ---- */
 
 typedef enum { G5C_PROFILE_A = 0, G5C_PROFILE_B = 1 } g5c_profile;
 

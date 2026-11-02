@@ -1,7 +1,6 @@
 #define _DEFAULT_SOURCE
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* The SCP's choice of the producer: discovery at the NRF on behalf of the consumer (TS 29.500 6.10.3), the cache of the answers, the order in which the
- * candidates are tried (priority, then weighted by capacity and load), and the health of the producers (a producer that fails is left alone for a while). */
+/* The SCP's choice of the producer */
 #include <arpa/inet.h>
 #include <ctype.h>
 #include <stdio.h>
@@ -11,7 +10,7 @@
 
 #include "priv.h"
 
-/* ---- candidates ------------------------------------------------------------------------------------------------------------- */
+/* ---- candidates ---- */
 
 void cands_free(cands_t *c)
 {
@@ -47,7 +46,7 @@ static cands_t cands_copy(const cands_t *c)
     return o;
 }
 
-/* ---- URIs ---------------------------------------------------------------------------------------------------------------------- */
+/* ---- URIs ---- */
 
 bool apiroot_ok(const char *s)
 {
@@ -131,7 +130,7 @@ bool target_allowed(const scp_cfg *c, const char *apiroot)
     return ok;
 }
 
-/* ---- health ------------------------------------------------------------------------------------------------------------------- */
+/* ---- health ---- */
 
 static health_t *health_find(scp *s, const char *authority, bool create)
 {
@@ -199,7 +198,7 @@ size_t scp_quarantined(scp *s)
     return n;
 }
 
-/* ---- ordering ------------------------------------------------------------------------------------------------------------------ */
+/* ---- ordering ---- */
 
 static uint32_t rnd32(void)
 {
@@ -280,7 +279,7 @@ static void order(scp *s, cands_t *c)
     *c = out;
 }
 
-/* ---- the profiles of the NRF ------------------------------------------------------------------------------------------------------ */
+/* ---- the profiles of the NRF ---- */
 
 static unsigned uint_of(const g5c_json *j, const char *k, unsigned dflt)
 {
@@ -364,7 +363,7 @@ static void add_profile(cands_t *c, const g5c_json *prof, const char *service)
     }
 }
 
-/* ---- cache --------------------------------------------------------------------------------------------------------------------- */
+/* ---- cache ---- */
 
 static void cache_drop(scp *s, size_t i)
 {
@@ -431,7 +430,7 @@ size_t scp_cached_discoveries(scp *s)
     return n;
 }
 
-/* ---- discovery ------------------------------------------------------------------------------------------------------------------ */
+/* ---- discovery ---- */
 
 #define DISC_PREFIX "3gpp-sbi-discovery-"
 

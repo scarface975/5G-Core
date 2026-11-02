@@ -8,7 +8,7 @@
 #include "priv.h"
 
 #define MAXSN 64
-#define F_RSIPCE 0x4u /* feature 3 of Nnssf_NSSelection: retrieval of slice information during PDN connection establishment */
+#define F_RSIPCE 0x4u /* feature 3 of Nnssf_NSSelection */
 
 typedef struct {
     nssf *n;
@@ -32,7 +32,7 @@ static void qfail(qerr *e, int status, const char *cause, const char *detail)
     snprintf(e->detail, sizeof e->detail, "%s", detail);
 }
 
-/* ---- parameters --------------------------------------------------------------------------------------------------------- */
+/* ---- parameters ---- */
 
 /* A JSON-encoded query parameter: NULL when absent; 400 when it does not parse or break its schema */
 static g5c_json *json_param(nssf *n, const g5c_req *req, const char *name, int schema, bool *bad, g5c_resp *resp)
@@ -99,7 +99,7 @@ static bool to_serving(const qctx *q, const sn_t *home, sn_t *serving)
     return false;
 }
 
-/* The NRF named in the answers is the API URI of its NFDiscovery service (TS 29.531 6.1.6.2.4, TS 29.510 6.2.1); the configuration may give the API root. */
+/* The NRF named in the answers is the API URI of its NFDiscovery service (TS 29.531 6.1.6.2.4, TS 29.510 6.2.1); the configuration may give the API root */
 static void set_disc_uri(g5c_json *o, const char *key, const char *nrf)
 {
     char buf[512];
@@ -127,7 +127,7 @@ static g5c_json *nsi_info(const slice_t *s)
     return o;
 }
 
-/* ---- registration and UE configuration update --------------------------------------------------------------------------- */
+/* ---- registration and UE configuration update ---- */
 
 typedef struct {
     sn_t requested[MAXSN], subscribed[MAXSN], allowed[MAXSN], allowed_home[MAXSN], rejected_plmn[MAXSN], rejected_ta[MAXSN];
@@ -143,8 +143,7 @@ static void push(sn_t *list, size_t *n, const sn_t *s)
         list[(*n)++] = *s;
 }
 
-/* The Allowed NSSAI (TS 23.501 5.15.5.2.1 (B)): the requested S-NSSAIs that the subscription permits, else the default subscribed ones, always
- * limited to the slices that exist in the PLMN and in the tracking area; what falls out is rejected in the PLMN or in the TA. */
+/* The Allowed NSSAI (TS 23.501 5.15.5.2.1 (B)) */
 static void select_allowed(const qctx *q, sel_t *s)
 {
     const nssf_cfg *cfg = q->n->cfg;
@@ -374,7 +373,7 @@ done:
     return out;
 }
 
-/* ---- PDU session establishment ----------------------------------------------------------------------------------------------- */
+/* ---- PDU session establishment ---- */
 
 static g5c_json *procedure_pdu_session(const qctx *q, const g5c_json *pi, qerr *e)
 {
@@ -399,7 +398,7 @@ static g5c_json *procedure_pdu_session(const qctx *q, const g5c_json *pi, qerr *
     return out;
 }
 
-/* ---- PDN connection establishment (RSIPCE) ----------------------------------------------------------------------------------- */
+/* ---- PDN connection establishment (RSIPCE) ---- */
 
 static g5c_json *procedure_pdn(const qctx *q, const g5c_json *list, qerr *e)
 {
@@ -422,7 +421,7 @@ static g5c_json *procedure_pdn(const qctx *q, const g5c_json *list, qerr *e)
     return out;
 }
 
-/* ---- the GET ----------------------------------------------------------------------------------------------------------------- */
+/* ---- the GET ---- */
 
 void nssf_nsselection_get(void *ctx, const g5c_req *req, g5c_resp *resp)
 {

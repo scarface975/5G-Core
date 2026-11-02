@@ -66,7 +66,7 @@ static void done(R *r)
     r->json = NULL;
 }
 
-/* ---- the consumer: a callback server that records what it is sent ------------------------------------------------- */
+/* ---- the consumer: a callback server that records what it is sent ---- */
 
 typedef struct {
     pthread_mutex_t mu;

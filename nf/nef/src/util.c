@@ -20,7 +20,7 @@ void nef_invalid(g5c_resp *resp, int status, const char *cause, const char *poin
     g5c_resp_problem_invalid(resp, status, cause, pointer, reason);
 }
 
-/* ---- URIs ----------------------------------------------------------------------------------------------------------- */
+/* ---- URIs ---- */
 
 /* [start, end) of the host in the authority of an http(s) URI; false when the URI is not acceptable */
 static bool authority(const char *u, const char **hs, const char **he)
@@ -87,7 +87,7 @@ bool notify_host_allowed(const nef_af *af, const char *uri)
     return ok;
 }
 
-/* ---- JSON merge patch ----------------------------------------------------------------------------------------------- */
+/* ---- JSON merge patch ---- */
 
 void merge_patch(g5c_json **doc, const g5c_json *patch)
 {
@@ -115,7 +115,7 @@ void merge_patch(g5c_json **doc, const g5c_json *patch)
     }
 }
 
-/* ---- times ---------------------------------------------------------------------------------------------------------- */
+/* ---- times ---- */
 
 int64_t parse_rfc3339(const char *s)
 {
@@ -171,7 +171,7 @@ void format_rfc3339(int64_t ms, char out[32])
     strftime(out, 32, "%Y-%m-%dT%H:%M:%SZ", &tmv);
 }
 
-/* ---- supported features (TS 29.571 5.2.2) ----------------------------------------------------------------------------- */
+/* ---- supported features (TS 29.571 5.2.2) ---- */
 
 unsigned feat_parse(const char *s)
 {

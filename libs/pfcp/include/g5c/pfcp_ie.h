@@ -1,7 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* Typed PFCP information elements (3GPP TS 29.244 clause 8.2) and builders for grouped IEs. Layout rules were taken from the
- * pinned specification text and checked against messages captured from Open5GS (libs/pfcp/tests/pfcp_vectors.h).
- * Decoders take the IE value octets (as delivered by pfcp_ie_next) and return 0 or -1; they never read past `len`. */
+/* Typed PFCP information elements (3GPP TS 29.244 clause 8.2) and builders for grouped IEs */
 #ifndef G5C_PFCP_IE_H
 #define G5C_PFCP_IE_H
 
@@ -52,19 +50,19 @@ enum { PFCP_ASSOCIATION_UPDATE_REQUEST = 7, PFCP_ASSOCIATION_UPDATE_RESPONSE = 8
        PFCP_SESSION_MODIFICATION_REQUEST = 52, PFCP_SESSION_MODIFICATION_RESPONSE = 53, PFCP_SESSION_DELETION_REQUEST = 54,
        PFCP_SESSION_DELETION_RESPONSE = 55, PFCP_SESSION_REPORT_REQUEST = 56, PFCP_SESSION_REPORT_RESPONSE = 57 };
 
-/* ---- building (grouped IEs need their length patched once the content is known) ----------------------------------- */
+/* ---- building (grouped IEs need their length patched once the content is known) ---- */
 int pfcp_group_begin(uint8_t *out, size_t cap, size_t *pos, uint16_t typ, size_t *mark);
 void pfcp_group_end(uint8_t *out, size_t *pos, size_t mark);
 int pfcp_put_u8(uint8_t *out, size_t cap, size_t *pos, uint16_t typ, uint8_t v);
 int pfcp_put_u16(uint8_t *out, size_t cap, size_t *pos, uint16_t typ, uint16_t v);
 int pfcp_put_u32(uint8_t *out, size_t cap, size_t *pos, uint16_t typ, uint32_t v);
 
-/* ---- plain integers ------------------------------------------------------------------------------------------------ */
+/* ---- plain integers ---- */
 int pfcp_get_u8(const pfcp_ie *ie, uint8_t *v);
 int pfcp_get_u16(const pfcp_ie *ie, uint16_t *v);
 int pfcp_get_u32(const pfcp_ie *ie, uint32_t *v);
 
-/* ---- Node ID (8.2.38) ----------------------------------------------------------------------------------------------- */
+/* ---- Node ID (8.2.38) ---- */
 typedef struct {
     uint8_t type; /* 0 IPv4, 1 IPv6, 2 FQDN */
     uint8_t ip4[4], ip6[16];
@@ -73,7 +71,7 @@ typedef struct {
 int pfcp_node_id_decode(const pfcp_ie *ie, pfcp_node_id *n);
 int pfcp_node_id_put(uint8_t *out, size_t cap, size_t *pos, const pfcp_node_id *n);
 
-/* ---- F-SEID (8.2.37) ------------------------------------------------------------------------------------------------ */
+/* ---- F-SEID (8.2.37) ---- */
 typedef struct {
     bool v4, v6;
     uint64_t seid;
@@ -92,7 +90,7 @@ typedef struct {
 int pfcp_fteid_decode(const pfcp_ie *ie, pfcp_fteid *f);
 int pfcp_fteid_put(uint8_t *out, size_t cap, size_t *pos, const pfcp_fteid *f);
 
-/* ---- UE IP Address (8.2.62) ------------------------------------------------------------------------------------------ */
+/* ---- UE IP Address (8.2.62) ---- */
 typedef struct {
     bool v4, v6, sd /* 1: destination (downlink matching) */, ipv6d, chv4, chv6, has_prefix_len;
     uint8_t ip4[4], ip6[16], ipv6d_len, prefix_len;
@@ -100,7 +98,7 @@ typedef struct {
 int pfcp_ue_ip_decode(const pfcp_ie *ie, pfcp_ue_ip *u);
 int pfcp_ue_ip_put(uint8_t *out, size_t cap, size_t *pos, const pfcp_ue_ip *u);
 
-/* ---- Outer Header Creation (8.2.56) and Removal (8.2.64) ---------------------------------------------------------------- */
+/* ---- Outer Header Creation (8.2.56) and Removal (8.2.64) ---- */
 #define PFCP_OHC_GTPU_IPV4 0x0001
 #define PFCP_OHC_GTPU_IPV6 0x0002
 #define PFCP_OHC_UDP_IPV4 0x0004
@@ -118,7 +116,7 @@ int pfcp_ohc_put(uint8_t *out, size_t cap, size_t *pos, const pfcp_ohc *o);
 enum { PFCP_OHR_GTPU_IPV4 = 0, PFCP_OHR_GTPU_IPV6 = 1, PFCP_OHR_UDP_IPV4 = 2, PFCP_OHR_UDP_IPV6 = 3, PFCP_OHR_IPV4 = 4, PFCP_OHR_IPV6 = 5,
        PFCP_OHR_GTPU_ANY = 6 };
 
-/* ---- Apply Action (8.2.26) ---------------------------------------------------------------------------------------------- */
+/* ---- Apply Action (8.2.26) ---- */
 #define PFCP_AA_DROP 0x01
 #define PFCP_AA_FORW 0x02
 #define PFCP_AA_BUFF 0x04
@@ -126,14 +124,14 @@ enum { PFCP_OHR_GTPU_IPV4 = 0, PFCP_OHR_GTPU_IPV6 = 1, PFCP_OHR_UDP_IPV4 = 2, PF
 #define PFCP_AA_DUPL 0x10
 int pfcp_apply_action_decode(const pfcp_ie *ie, uint16_t *aa); /* low byte = octet 5 */
 
-/* ---- MBR / GBR (8.2.8, 8.2.9), kbit/s; Gate Status (8.2.7) --------------------------------------------------------------- */
+/* ---- MBR / GBR (8.2.8, 8.2.9), kbit/s; Gate Status (8.2.7) ---- */
 typedef struct { uint64_t ul, dl; } pfcp_bitrate;
 int pfcp_bitrate_decode(const pfcp_ie *ie, pfcp_bitrate *b);
 int pfcp_bitrate_put(uint8_t *out, size_t cap, size_t *pos, uint16_t typ, const pfcp_bitrate *b);
 typedef struct { bool ul_closed, dl_closed; } pfcp_gate;
 int pfcp_gate_decode(const pfcp_ie *ie, pfcp_gate *g);
 
-/* ---- SDF Filter (8.2.5): the flow description and the optional fields ---------------------------------------------------- */
+/* ---- SDF Filter (8.2.5): the flow description and the optional fields ---- */
 typedef struct {
     bool has_fd, has_ttc, has_spi, has_fl, has_bid;
     char flow[256]; /* NUL-terminated IPFilterRule */
@@ -142,7 +140,7 @@ typedef struct {
 } pfcp_sdf_filter;
 int pfcp_sdf_filter_decode(const pfcp_ie *ie, pfcp_sdf_filter *f);
 
-/* ---- Volume Threshold / Quota (8.2.13, 8.2.50) and Volume Measurement (8.2.40) ---------------------------------------------- */
+/* ---- Volume Threshold / Quota (8.2.13, 8.2.50) and Volume Measurement (8.2.40) ---- */
 typedef struct {
     bool has_total, has_ul, has_dl;
     uint64_t total, ul, dl;
@@ -154,7 +152,7 @@ typedef struct {
 } pfcp_volume_meas;
 int pfcp_volume_meas_put(uint8_t *out, size_t cap, size_t *pos, const pfcp_volume_meas *v);
 
-/* ---- Network Instance (8.2.4): DNS-style labels <-> dotted name ------------------------------------------------------------ */
+/* ---- Network Instance (8.2.4): DNS-style labels <-> dotted name ---- */
 int pfcp_network_instance_decode(const pfcp_ie *ie, char *out, size_t cap);
 int pfcp_network_instance_put(uint8_t *out, size_t cap, size_t *pos, const char *name);
 
@@ -169,8 +167,7 @@ int pfcp_network_instance_put(uint8_t *out, size_t cap, size_t *pos, const char 
 int pfcp_trigger_decode(const pfcp_ie *ie, uint32_t *mask);
 int pfcp_trigger_put(uint8_t *out, size_t cap, size_t *pos, uint16_t typ, uint32_t mask);
 
-/* UP Function Features (8.2.25). Octet 5: bit 1 BUCP, 2 DDND, 3 DLBD, 4 TRST, 5 FTUP, 6 PFDM, 7 HEEU, 8 TREU.
- * Octet 6: bit 1 EMPU, 2 PDIU, 3 UDBC, 4 QUOAC, 5 TRACE, 6 FRRT, 7 PFDE, 8 EPFAR. Only the ones this code base sets are named. */
+/* UP Function Features (8.2.25). Octet 5: bit 1 BUCP, 2 DDND, 3 DLBD, 4 TRST, 5 FTUP, 6 PFDM, 7 HEEU, 8 TREU */
 #define PFCP_UPF5_FTUP 0x10
 #define PFCP_UPF6_EMPU 0x01
 

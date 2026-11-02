@@ -1,7 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* Opt-in interop check against the Open5GS oracle NRF (see deploy/oracle/README.md).
- * Run: deploy/oracle/oracle.sh up, then G5C_ORACLE_NRF=http://127.1.0.10:7777 ctest -R sbi_oracle_interop.
- * Without the variable the test is a no-op. */
+/* Opt-in interop check against the Open5GS oracle NRF (see deploy/oracle/README.md) */
 #include <stdio.h>
 #include <stdlib.h>
 

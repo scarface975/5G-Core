@@ -99,7 +99,7 @@ static int cmd_routes(void)
     return 0;
 }
 
-/* ---- NAS ------------------------------------------------------------------------------------------------------- */
+/* ---- NAS ---- */
 
 static char *hex_of(const uint8_t *b, size_t n)
 {
@@ -204,7 +204,7 @@ static g5c_json *nas_pdu_to_json(const uint8_t *b, size_t n)
         g5c_json_set_int(sec, "sequenceNumber", a.prot.seq);
         free(mac);
     }
-    {   /* integrity-only, or ciphered with the null algorithm: the inner message is readable; otherwise report it as ciphered */
+    {   /* integrity-only, or ciphered with the null algorithm */
         nas_msg inner;
         if (nas_msg_decode(a.prot.payload, a.prot.payload_len, &inner) == 0) {
             g5c_json_set(o, "message", nas_msg_to_json(&inner, 0));

@@ -1,8 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* Throughput baseline for generate-auth-data (Phase 1 exit criterion: >= 1,000 vectors/s on one instance), with K/OPc
- * encrypted at rest as in production. Opt-in because it needs an optimised build:
- *   G5C_PERF=1 ~/g5c-cbuild/release/nf/udm/perf_udm
- * Without G5C_PERF the program does nothing. UDM, udr and the load generator share one host. */
+/* Throughput baseline for generate-auth-data (Phase 1 exit criterion: >= 1,000 vectors/s on one instance), with K/OPc encrypted at rest as in production */
 #define _DEFAULT_SOURCE
 #include <pthread.h>
 #include <stdio.h>

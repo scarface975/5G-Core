@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* The tables of the AUSF: authentication contexts (by id, and by UE and serving network while pending) and security contexts (by SUPI). Every function that
- * says so expects ausf.mu to be held; the others take it. */
+/* The tables of the AUSF: authentication contexts (by id, and by UE and serving network while pending) and security contexts (by SUPI) */
 #include <stdlib.h>
 #include <string.h>
 
@@ -8,7 +7,7 @@
 
 #include "priv.h"
 
-/* ---- hmap ---------------------------------------------------------------------------------------------------------------------------------------- */
+/* ---- hmap ---- */
 
 static size_t hash_str(const char *s)
 {
@@ -103,7 +102,7 @@ void hmap_each(const hmap *h, void (*fn)(const char *key, void *val, void *arg),
             fn(n->key, n->val, arg);
 }
 
-/* ---- lists ----------------------------------------------------------------------------------------------------------------------------------------- */
+/* ---- lists ---- */
 
 static void list_push(clist *l, ausf_ctx *c)
 {
@@ -131,7 +130,7 @@ static void list_unlink(clist *l, ausf_ctx *c)
     l->n--;
 }
 
-/* ---- contexts ----------------------------------------------------------------------------------------------------------------------------------- */
+/* ---- contexts ---- */
 
 ausf_ctx *ctx_new(const char *id_in, const char *snn)
 {
@@ -305,7 +304,7 @@ void store_finish(ausf *a, ausf_ctx *c)
     pthread_mutex_unlock(&a->mu);
 }
 
-/* ---- security contexts ------------------------------------------------------------------------------------------------------------------------- */
+/* ---- security contexts ---- */
 
 static void ue_free(ausf_ue *u)
 {

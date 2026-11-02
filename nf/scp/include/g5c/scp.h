@@ -20,8 +20,7 @@
 typedef struct scp scp;
 typedef struct scp_cfg scp_cfg;
 
-/* The `scp:` block of the configuration. `name` is the FQDN-like name of this SCP (the common `name`: Server and Via headers), `nrf_uri` the NRF of the common
- * sections (may be NULL: then only Model C and the NRF named by the requests work). NULL with err on an invalid configuration. */
+/* The `scp:` block of the configuration */
 scp_cfg *scp_cfg_parse(const g5c_json *root, const char *name, const char *nrf_uri, char *err, size_t errcap);
 void scp_cfg_free(scp_cfg *c);
 unsigned scp_cfg_workers(const scp_cfg *c);
@@ -33,7 +32,7 @@ g5c_router *scp_router(scp *s);
 unsigned scp_workers(const scp *s); /* threads that forward: set G5C_SBI_WORKERS to it before the server starts */
 void scp_destroy(scp *s);
 
-/* ---- introspection (tests, tools) ------------------------------------------------------------------------------------------------------ */
+/* ---- introspection (tests, tools) ---- */
 size_t scp_quarantined(scp *s);
 size_t scp_cached_discoveries(scp *s);
 

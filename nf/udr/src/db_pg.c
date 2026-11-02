@@ -141,7 +141,7 @@ static void rec_from_row(PGresult *r, int row, int col, udr_rec *out, bool with_
     out->mtime = (int64_t)strtoll(PQgetvalue(r, row, col + 2), NULL, 10);
 }
 
-/* ---- operations ------------------------------------------------------------------------------------------------- */
+/* ---- operations ---- */
 
 static int p_get(void *self, const char *part, const char *key, udr_rec *out)
 {

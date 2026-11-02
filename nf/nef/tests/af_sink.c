@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* A notification receiver for tests and labs (an AF that only listens): af_sink <address> <port> <file>. Every POST body is appended to the file as one line and
- * answered 204; the process runs until it is killed. */
+/* A notification receiver for tests and labs (an AF that only listens): af_sink <address> <port> <file> */
 #define _DEFAULT_SOURCE
 #include <pthread.h>
 #include <signal.h>

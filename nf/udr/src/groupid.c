@@ -1,7 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* Nudr_GroupIDmap (TS 29.504 5.3, API TS29504_Nudr_GroupIDmap.yaml): the NF group a subscriber belongs to, per NF type.
- * The mapping is configured (group_ids: nf_type, nf_group_id, supi_ranges); the NRF and the NFs that need the UDM or AUSF
- * group of a subscriber (TS 23.502 4.2.2.2.1) query it. */
+/* Nudr_GroupIDmap (TS 29.504 5.3, API TS29504_Nudr_GroupIDmap.yaml): the NF group a subscriber belongs to, per NF type */
 #define _POSIX_C_SOURCE 200809L
 #include <ctype.h>
 #include <stdlib.h>

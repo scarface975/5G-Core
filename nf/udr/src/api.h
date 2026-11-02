@@ -10,7 +10,7 @@
 #include "g5c/json.h"
 #include "g5c/oaschema.h"
 
-/* ---- generated tables ------------------------------------------------------------------------------------- */
+/* ---- generated tables ---- */
 
 typedef enum { UDR_PART_UE, UDR_PART_GROUP, UDR_PART_GLOBAL } udr_part_kind;
 
@@ -21,8 +21,7 @@ typedef enum { UDR_PART_UE, UDR_PART_GROUP, UDR_PART_GLOBAL } udr_part_kind;
 #define UDR_OK_201 2u
 #define UDR_OK_204 4u
 
-/* One operation of TS 29.505 / TS 29.519. The partition of a resource is the subscriber, the group or the global one;
- * `key` is the storage key with the {name} path parameters still in it. */
+/* One operation of TS 29.505 / TS 29.519. The partition of a resource is the subscriber, the group or the global one */
 typedef struct {
     const char *method, *path, *op, *src;
     int req_schema, resp_schema, resp201_schema; /* index into the schema pool, -1 none */
@@ -51,18 +50,17 @@ extern const char *const udr_schema_chunks[];
 extern const size_t udr_schema_nchunks;
 extern const size_t udr_schema_count;
 
-/* ---- schema validation (schema.c) ------------------------------------------------------------------------------ */
+/* ---- schema validation (schema.c) ---- */
 
 typedef oa_schemas udr_schemas;
 udr_schemas *udr_schemas_load(char *err, size_t errcap);
 void udr_schemas_free(udr_schemas *s);
-/* 0 when `doc` conforms to schema `id`; otherwise -1 and "<json pointer>: <reason>" in err. Properties the schema does
- * not describe are accepted (the 3GPP schemas are open); unresolved references accept anything. */
+/* 0 when `doc` conforms to schema `id`; otherwise -1 and "<json pointer>: <reason>" in err */
 int udr_schema_validate(const udr_schemas *s, int id, const g5c_json *doc, char *err, size_t errcap);
 /* The schema (JSON text of the simplified form) for diagnostics. */
 const g5c_json *udr_schema_node(const udr_schemas *s, int id);
 
-/* ---- storage interface ------------------------------------------------------------------------------------------ */
+/* ---- storage interface ---- */
 
 /* A stored document with its revision (the entity tag) and modification time (seconds since the epoch). */
 typedef struct {
@@ -98,8 +96,7 @@ typedef struct {
     const char *name;
     /* 1 found (rec filled), 0 absent, -1 error */
     int (*get)(void *self, const char *part, const char *key, udr_rec *out);
-    /* Replace or create; takes doc. *created tells which. out (optional) gets the stored revision and time (doc NULL);
-     * old (optional) the record that was replaced (doc NULL when the key was new). */
+    /* Replace or create; takes doc. *created tells which */
     int (*put)(void *self, const char *part, const char *key, g5c_json *doc, const udr_cond *c, bool *created,
                udr_rec *out, udr_rec *old);
     /* Remove; old (optional) receives the removed record. */

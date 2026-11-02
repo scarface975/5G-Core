@@ -66,7 +66,7 @@ const g5c_json *bsf_nrf_info(const bsf *b)
     return b->cfg->info;
 }
 
-/* ---- the state writer --------------------------------------------------------------------------------------------------------------- */
+/* ---- the state writer ---- */
 
 void bsf_kick(bsf *b)
 {

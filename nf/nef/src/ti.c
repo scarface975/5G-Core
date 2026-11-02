@@ -1,9 +1,6 @@
 #define _DEFAULT_SOURCE
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* The TrafficInfluence API (TS 29.522 5.4, procedures 4.4.7): an AF's requirement for the routing of the traffic of a UE, of a group of UEs or of any
- * UE. A request that is not identified by an address of the UE is stored as application (influence) data in the UDR (Nudr_DataRepository,
- * TS 29.519 6.2.6.2.2 TrafficInfluData), from where the PCF and the SMF read it (4.4.7.3). A request identified by an address of the UE goes to
- * the PCF (4.4.7.2): not supported yet, answered 501. */
+/* The TrafficInfluence API (TS 29.522 5.4, procedures 4.4.7): an AF's requirement for the routing of the traffic of a UE, of a group of UEs or of any UE */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -21,7 +18,7 @@ static char *self_url(const g5c_req *req, const char *af, const char *id)
     return u;
 }
 
-/* ---- the other functions ---------------------------------------------------------------------------------------------- */
+/* ---- the other functions ---- */
 
 /* the SUPI of a GPSI; 0 on success, else the HTTP status to answer */
 static int udm_supi_of(nef *n, const char *gpsi, char **supi, char *detail, size_t dcap)
@@ -100,7 +97,7 @@ static int udr_call(nef *n, const char *method, const char *id, const g5c_json *
     return 0;
 }
 
-/* ---- TrafficInfluSub -> TrafficInfluData (TS 29.519 6.2.6.2.2) ------------------------------------------------------ */
+/* ---- TrafficInfluSub -> TrafficInfluData (TS 29.519 6.2.6.2.2) ---- */
 
 static void copy_member(g5c_json *to, const char *to_key, const g5c_json *from, const char *from_key)
 {
@@ -139,7 +136,7 @@ static g5c_json *influence_data(const g5c_json *sub, const char *supi, const cha
     return d;
 }
 
-/* ---- the resource -------------------------------------------------------------------------------------------------------- */
+/* ---- the resource ---- */
 
 typedef struct {
     nef *n;
@@ -167,8 +164,7 @@ static bool request_ok(nef *n, const nef_af *af, g5c_json *sub, g5c_resp *resp)
     return true;
 }
 
-/* Makes (or replaces) the influence data of a subscription at the UDR. `sub` is the whole representation. 0 on success, else the status to answer
- * with the detail in `detail`. */
+/* Makes (or replaces) the influence data of a subscription at the UDR. `sub` is the whole representation */
 static int provision(nef *n, const g5c_req *req, const nef_af *af, const char *id, const g5c_json *sub, const char *corr_id, int *created, char *detail, size_t dcap)
 {
     char *supi = NULL, *res = self_url(req, af->id, id), *notif = NULL;

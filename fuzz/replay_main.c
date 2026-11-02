@@ -1,7 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* Standalone driver for the libFuzzer targets, for compilers without -fsanitize=fuzzer (gcc): feeds every input of the
- * given files (a ".hex" file holds one "<id> <hex>" PDU per line, anything else is one raw input) plus deterministic
- * mutations through LLVMFuzzerTestOneInput. Used by ctest under ASan/UBSan. */
+/* Standalone driver for the libFuzzer targets, for compilers without -fsanitize=fuzzer (gcc) */
 #define _POSIX_C_SOURCE 200809L
 #include <stdint.h>
 #include <stdio.h>

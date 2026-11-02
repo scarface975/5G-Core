@@ -5,7 +5,7 @@
 #include "priv.h"
 #include "rules.h"
 
-/* ---- lookups --------------------------------------------------------------------------------------------------------------------- */
+/* ---- lookups ---- */
 
 upf_pdr *sess_find_pdr(upf_session *s, uint16_t id)
 {
@@ -49,7 +49,7 @@ upf_bar *sess_find_bar(upf_session *s, uint8_t id)
 
 #define ADD(arr, n, T) ((arr) = g5c_xrealloc((arr), ((n) + 1) * sizeof(T)), memset(&(arr)[(n)], 0, sizeof(T)), &(arr)[(n)++])
 
-/* ---- TEID and index management ------------------------------------------------------------------------------------------------------ */
+/* ---- TEID and index management ---- */
 
 static uint32_t alloc_teid(upf *u)
 {
@@ -128,7 +128,7 @@ void sess_free(upf *u, upf_session *s)
     free(s);
 }
 
-/* ---- Create PDR --------------------------------------------------------------------------------------------------------------------- */
+/* ---- Create PDR ---- */
 
 static int parse_pdi(const pfcp_ie *pdi, upf_pdr *p, uint16_t *bad)
 {
@@ -186,7 +186,7 @@ static int parse_pdi(const pfcp_ie *pdi, upf_pdr *p, uint16_t *bad)
                 }
                 p->sdf = g5c_xrealloc(p->sdf, (p->nsdf + 1) * sizeof *p->sdf);
                 p->sdf[p->nsdf++] = rule;
-            } /* filters carrying only ToS, SPI, flow label or a filter id are not matched on: they never restrict */
+            } /* filters carrying only ToS, SPI, flow label or a filter id are not matched on */
             break;
         }
         case PFCP_IE_QFI: {
@@ -479,7 +479,7 @@ int rules_remove_pdr(upf *u, upf_session *s, const pfcp_ie *grp, uint16_t *bad)
     return 0;
 }
 
-/* ---- FAR ---------------------------------------------------------------------------------------------------------------------------- */
+/* ---- FAR ---- */
 
 static int parse_far_forwarding(const pfcp_ie *grp, upf_far *f, uint16_t *bad)
 {
@@ -684,7 +684,7 @@ int rules_remove_id(upf_session *s, const pfcp_ie *grp, uint16_t type, uint16_t 
     return 0;
 }
 
-/* ---- QER ---------------------------------------------------------------------------------------------------------------------------- */
+/* ---- QER ---- */
 
 void bucket_init(upf_bucket *b, uint64_t kbps, double now)
 {
@@ -814,7 +814,7 @@ int rules_update_qer(upf_session *s, const pfcp_ie *grp, double now, uint16_t *b
     return c;
 }
 
-/* ---- URR ---------------------------------------------------------------------------------------------------------------------------- */
+/* ---- URR ---- */
 
 static int parse_urr_members(const pfcp_ie *grp, upf_urr *r, uint16_t *bad)
 {
@@ -913,7 +913,7 @@ int rules_update_urr(upf_session *s, const pfcp_ie *grp, uint16_t *bad)
     return parse_urr_members(grp, r, bad);
 }
 
-/* ---- BAR ---------------------------------------------------------------------------------------------------------------------------- */
+/* ---- BAR ---- */
 
 int rules_create_bar(upf_session *s, const pfcp_ie *grp, bool update, uint16_t *bad)
 {

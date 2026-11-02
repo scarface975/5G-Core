@@ -1,9 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* NRF: the NF repository of the service-based architecture (3GPP TS 23.501 6.2.6, TS 29.510).
- *   Nnrf_NFManagement  /nnrf-nfm/v1   register, update (replace, patch, heart-beat), deregister, retrieve, list, subscribe / notify
- *   Nnrf_NFDiscovery   /nnrf-disc/v1  search over the registered profiles
- *   Nnrf_AccessToken   /oauth2/token  OAuth2 client-credentials tokens (ES256 JWT, TS 33.501 13.4.1)
- * Profiles and subscriptions are held in memory and written to a state file (write-behind) so that a restart keeps the registry. */
+/* NRF: the NF repository of the service-based architecture (3GPP TS 23.501 6.2.6, TS 29.510) */
 #ifndef G5C_NRF_H
 #define G5C_NRF_H
 
@@ -16,8 +12,7 @@
 
 typedef struct nrf nrf;
 
-/* `cfg` is the whole configuration document (the nrf: block is read from it); `nf` supplies the metrics registry, the outgoing client and the
- * instance id. NULL with err on an invalid configuration. */
+/* `cfg` is the whole configuration document (the nrf */
 nrf *nrf_from_config(const g5c_json *cfg, g5c_nf *nf, char *err, size_t errcap);
 /* Starts the monitor and notification threads and restores the state file. */
 int nrf_start(nrf *n, char *err, size_t errcap);
@@ -31,7 +26,7 @@ void nrf_set_self_uri_default(nrf *n, const char *uri);
 /* Stops the threads, writes the state file, frees. */
 void nrf_destroy(nrf *n);
 
-/* ---- introspection (tests, tools) ------------------------------------------------------------------------------------------------------ */
+/* ---- introspection (tests, tools) ---- */
 
 size_t nrf_profile_count(nrf *n);
 size_t nrf_subscription_count(nrf *n);

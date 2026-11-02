@@ -1,7 +1,6 @@
 #define _DEFAULT_SOURCE
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* The NEF: construction, the resource table, calls to the other functions, the delivery queue and the state file. The APIs are in ti.c (traffic
- * influence) and me.c (monitoring event). */
+/* The NEF: construction, the resource table, calls to the other functions, the delivery queue and the state file */
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -13,7 +12,7 @@
 
 #include "priv.h"
 
-/* ---- resources ----------------------------------------------------------------------------------------------------- */
+/* ---- resources ---- */
 
 char *nef_key(int api, const char *af, const char *id)
 {
@@ -126,7 +125,7 @@ void nef_reply_res(g5c_resp *resp, int status, const res_t *r, const g5c_req *re
     }
 }
 
-/* ---- the other functions -------------------------------------------------------------------------------------------- */
+/* ---- the other functions ---- */
 
 char *nef_root(nef *n, const char *configured, const char *type, const char *service)
 {
@@ -137,7 +136,7 @@ char *nef_root(nef *n, const char *configured, const char *type, const char *ser
     return NULL;
 }
 
-/* the address a PCF binding gives for Npcf_PolicyAuthorization: an IP endpoint (the first with an IPv4 address, else an IPv6 one), else the FQDN; the scheme is the BSF's */
+/* the address a PCF binding gives for Npcf_PolicyAuthorization */
 static char *binding_root(const g5c_json *b, const char *bsf_root)
 {
     const g5c_json *eps = g5c_json_get(b, "pcfIpEndPoints");
@@ -237,7 +236,7 @@ char *nef_self_url(const nef *n, const char *path)
     return n->cfg->callback_uri != NULL ? g5c_xasprintf("%s%s", n->cfg->callback_uri, path) : NULL;
 }
 
-/* ---- delivery ------------------------------------------------------------------------------------------------------------ */
+/* ---- delivery ---- */
 
 #define MAX_QUEUE 10000
 
@@ -385,7 +384,7 @@ void nef_worker_stop(nef *n)
     n->qlen = 0;
 }
 
-/* ---- state file ------------------------------------------------------------------------------------------------------- */
+/* ---- state file ---- */
 
 void nef_state_save(nef *n)
 {
@@ -484,7 +483,7 @@ int nef_state_load(nef *n, char *err, size_t errcap)
     return 0;
 }
 
-/* ---- construction -------------------------------------------------------------------------------------------------------- */
+/* ---- construction ---- */
 
 nef *nef_new(nef_cfg *cfg, g5c_client *client, g5c_disc *disc, g5c_registry *metrics)
 {
@@ -596,7 +595,7 @@ void nef_destroy(nef *n)
     free(n);
 }
 
-/* ---- the AF ----------------------------------------------------------------------------------------------------------- */
+/* ---- the AF ---- */
 
 static bool token_equal(const char *a, const char *b)
 {

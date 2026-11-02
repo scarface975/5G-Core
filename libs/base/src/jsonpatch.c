@@ -9,7 +9,7 @@
 #include "g5c/base.h"
 #include "g5c/json.h"
 
-/* ---- JSON Patch ------------------------------------------------------------------------------------------- */
+/* ---- JSON Patch ---- */
 
 static void perr(char *err, size_t cap, const char *prefix, const char *a)
 {
@@ -182,4 +182,3 @@ int g5c_json_patch(g5c_json **doc, const g5c_json *items, char *err, size_t errc
     }
     return G5C_PATCH_OK;
 }
-

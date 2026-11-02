@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* The BSF in process: configuration, register / discover / update / deregister (TS 29.521) by IPv4 address, IPv6 prefix (longest prefix match) and MAC address, framed
- * routes, overlapping addresses, the SamePcf check, feature negotiation, the replacement and clean-up rules, the state file, and many bindings from many threads. */
+/* The BSF in process: configuration, register / discover / update / deregister (TS 29.521) by IPv4 address, IPv6 prefix (longest prefix match) */
 #define _DEFAULT_SOURCE
 #include <pthread.h>
 #include <stdio.h>

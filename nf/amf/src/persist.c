@@ -1,7 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* Externalised UE contexts (the "stateless-ready" requirement): registered UEs are written to a state file as one JSON document and read back at
- * start-up, so that a restarted AMF still knows the GUTI, the security context and the PDU session references of its UEs. The file is the
- * complete state of the idle contexts; it is rewritten atomically (coalesced) after changes. */
+/* Externalised UE contexts (the "stateless-ready" requirement) */
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -204,7 +202,7 @@ amf_ue *amf_ue_from_json(amf *a, const g5c_json *j)
     return u; /* referenced */
 }
 
-/* ---- file ------------------------------------------------------------------------------------------------------------------------------------ */
+/* ---- file ---- */
 
 void amf_persist_timer(amf *a)
 {

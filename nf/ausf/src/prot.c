@@ -1,7 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* Nausf_SoRProtection (TS 29.509 5.3, 6.2) and Nausf_UPUProtection (TS 29.509 5.4, 6.3): the AUSF computes the MACs that protect the steering of roaming information
- * and the UE parameters update data with the latest KAUSF of the UE (TS 33.501 6.14, 6.15, Annex A.17 to A.20). The SoR header and the lists are encoded as TS 24.501
- * 9.11.3.51 and 9.11.3.53A say; the PLMN identities as TS 24.008 10.5.1.13; the access technologies as TS 31.102 4.2.5. */
+/* Nausf_SoRProtection (TS 29.509 5.3, 6.2) and Nausf_UPUProtection (TS 29.509 5.4, 6.3) */
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,7 +15,7 @@
 #define MAX_SECURED_PACKET 1000
 #define MAX_UPU_LIST 1000
 
-/* ---- encodings ----------------------------------------------------------------------------------------------------------------------------------- */
+/* ---- encodings ---- */
 
 /* PLMN identity, 3 octets (TS 24.008 10.5.1.13): MCC2|MCC1, MNC3|MCC3, MNC2|MNC1; a two digit MNC has 1111 as its third digit */
 static bool plmn_octets(const g5c_json *plmn, uint8_t out[3])
@@ -35,9 +33,7 @@ static bool plmn_octets(const g5c_json *plmn, uint8_t out[3])
     return true;
 }
 
-/* one access technology of TS 29.571 / TS 29.509 6.2.6.3.3 into the two octets of EFPLMNwAcT (TS 31.102 4.2.5): b8 UTRAN, b7..b5 E-UTRAN (b7 selected; b6 and b5
- * say which of WB-S1 and NB-S1 mode), b4 NG-RAN, b3 satellite NG-RAN in the first octet; b8 and b4 b3 GSM and EC-GSM-IoT, b7 GSM COMPACT, b6 cdma2000 HRPD,
- * b5 cdma2000 1xRTT in the second */
+/* one access technology of TS 29.571 / TS 29.509 6.2.6.3.3 into the two octets of EFPLMNwAcT (TS 31.102 4.2.5) */
 static bool act_bits(const char *name, uint8_t *o1, uint8_t *o2)
 {
     static const struct {
@@ -96,7 +92,7 @@ static bool encode_steering(const g5c_json *arr, uint8_t *out, size_t *len)
     return true;
 }
 
-/* ---- the counters --------------------------------------------------------------------------------------------------------------------------------- */
+/* ---- the counters ---- */
 
 typedef struct {
     uint8_t kausf[32];
@@ -157,7 +153,7 @@ static void grant_failure(int rc, const char *what, g5c_resp *resp)
         g5c_resp_problem_simple(resp, 503, "COUNTER_WRAP", what);
 }
 
-/* ---- Nausf_SoRProtection ------------------------------------------------------------------------------------------------------------------------- */
+/* ---- Nausf_SoRProtection ---- */
 
 static void sor_generate(void *ctx, const g5c_req *req, g5c_resp *resp)
 {
@@ -262,7 +258,7 @@ done:
     g5c_json_free(j);
 }
 
-/* ---- Nausf_UPUProtection ------------------------------------------------------------------------------------------------------------------------- */
+/* ---- Nausf_UPUProtection ---- */
 
 /* one S-NSSAI value of the NSSAI IE: length octet, SST, SD when given (TS 24.501 9.11.2.8) */
 static bool encode_snssai(const g5c_json *s, uint8_t *out, size_t *n)

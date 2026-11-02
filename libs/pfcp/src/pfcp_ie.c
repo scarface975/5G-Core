@@ -5,7 +5,7 @@
 #include <string.h>
 #include <time.h>
 
-/* ---- building ------------------------------------------------------------------------------------------------------------- */
+/* ---- building ---- */
 
 int pfcp_group_begin(uint8_t *out, size_t cap, size_t *pos, uint16_t typ, size_t *mark)
 {
@@ -95,7 +95,7 @@ static int wr_finish(wr_t *w, uint16_t typ)
 #define RD(ie) rd_t r = {(ie)->value, (ie)->len, 0}
 #define WR(o, c, p) wr_t w = {(o), (c), (p), {0}, 0}
 
-/* ---- integers --------------------------------------------------------------------------------------------------------------- */
+/* ---- integers ---- */
 
 int pfcp_get_u8(const pfcp_ie *ie, uint8_t *v)
 {
@@ -121,7 +121,7 @@ int pfcp_get_u32(const pfcp_ie *ie, uint32_t *v)
     return 0;
 }
 
-/* ---- Node ID ---------------------------------------------------------------------------------------------------------------- */
+/* ---- Node ID ---- */
 
 int pfcp_node_id_decode(const pfcp_ie *ie, pfcp_node_id *n)
 {
@@ -156,7 +156,7 @@ int pfcp_node_id_put(uint8_t *out, size_t cap, size_t *pos, const pfcp_node_id *
     return wr_finish(&w, PFCP_IE_NODE_ID);
 }
 
-/* ---- F-SEID ----------------------------------------------------------------------------------------------------------------- */
+/* ---- F-SEID ---- */
 
 int pfcp_fseid_decode(const pfcp_ie *ie, pfcp_fseid *f)
 {
@@ -194,7 +194,7 @@ int pfcp_fseid_put(uint8_t *out, size_t cap, size_t *pos, const pfcp_fseid *f)
     return wr_finish(&w, PFCP_IE_FSEID);
 }
 
-/* ---- F-TEID ----------------------------------------------------------------------------------------------------------------- */
+/* ---- F-TEID ---- */
 
 int pfcp_fteid_decode(const pfcp_ie *ie, pfcp_fteid *f)
 {
@@ -248,7 +248,7 @@ int pfcp_fteid_put(uint8_t *out, size_t cap, size_t *pos, const pfcp_fteid *f)
     return wr_finish(&w, PFCP_IE_FTEID);
 }
 
-/* ---- UE IP Address ---------------------------------------------------------------------------------------------------------- */
+/* ---- UE IP Address ---- */
 
 int pfcp_ue_ip_decode(const pfcp_ie *ie, pfcp_ue_ip *u)
 {
@@ -304,7 +304,7 @@ int pfcp_ue_ip_put(uint8_t *out, size_t cap, size_t *pos, const pfcp_ue_ip *u)
     return wr_finish(&w, PFCP_IE_UE_IP_ADDRESS);
 }
 
-/* ---- Outer Header Creation -------------------------------------------------------------------------------------------------- */
+/* ---- Outer Header Creation ---- */
 
 int pfcp_ohc_decode(const pfcp_ie *ie, pfcp_ohc *o)
 {
@@ -354,7 +354,7 @@ int pfcp_ohc_put(uint8_t *out, size_t cap, size_t *pos, const pfcp_ohc *o)
     return wr_finish(&w, PFCP_IE_OUTER_HEADER_CREATION);
 }
 
-/* ---- small ones ------------------------------------------------------------------------------------------------------------- */
+/* ---- small ones ---- */
 
 int pfcp_apply_action_decode(const pfcp_ie *ie, uint16_t *aa)
 {

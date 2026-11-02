@@ -20,24 +20,24 @@
 typedef struct g5c_oauth_rs g5c_oauth_rs;
 typedef struct g5c_oauth_client g5c_oauth_client;
 
-/* ---- producer ---------------------------------------------------------------------------------------------------------------------------------------------- */
+/* ---- producer ---- */
 
 /* `client` fetches the key set at `nrf_uri`; `services` are the NF's service names (the first segment of their paths); `metrics` may be NULL. */
 g5c_oauth_rs *g5c_oauth_rs_new(g5c_client *client, const char *nrf_uri, const char *own_type, const char *own_instance_id, const char *const *services, size_t nservices,
                                unsigned leeway_s, unsigned jwks_refresh_s, g5c_registry *metrics);
 void g5c_oauth_rs_free(g5c_oauth_rs *rs);
-/* Puts the check in front of the router's own guard (which still runs for what passes). The router must outlive `rs` use; `rs` is freed by the caller after the router. */
+/* Puts the check in front of the router's own guard (which still runs for what passes) */
 void g5c_oauth_rs_attach(g5c_oauth_rs *rs, g5c_router *router);
 /* The guard itself (for tests): 0 to go on, non-zero after filling `resp`. */
 int g5c_oauth_rs_guard(void *rs, const g5c_req *req, g5c_resp *resp);
 
-/* ---- consumer ---------------------------------------------------------------------------------------------------------------------------------------------- */
+/* ---- consumer ---- */
 
 g5c_oauth_client *g5c_oauth_client_new(g5c_client *client, const char *nrf_uri, const char *own_type, const char *own_instance_id, g5c_registry *metrics);
 void g5c_oauth_client_free(g5c_oauth_client *c);
 /* A g5c_token_fn: the token for a request to `url`, or NULL when the request needs none (not a service of another NF) or the NRF refused. */
 char *g5c_oauth_client_token(void *client, const char *method, const char *url);
-/* A g5c_token_reject_fn: the producer answered 401 to the token for this URL: drop it and let the next call ask the NRF again (the NRF's key changed, the token was revoked). */
+/* A g5c_token_reject_fn: the producer answered 401 to the token for this URL: drop it and let the next call ask the NRF again */
 void g5c_oauth_client_reject(void *client, const char *method, const char *url);
 
 /* The NF type that offers a service (nudm-sdm: UDM); NULL for names that are not services of the 5GC. */

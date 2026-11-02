@@ -65,10 +65,7 @@ static void create(void *ctx, const g5c_req *req, g5c_resp *resp)
     p->assocs[p->nassocs++] = a;
     pthread_mutex_unlock(&p->mu);
     G5C_COUNT(p->metrics, "g5c_pcf_am_policy_associations_total", "AM policy associations created.");
-    /* PolicyAssociation: the request is echoed back, plus our decisions. `triggers` has minItems 1 in the OpenAPI
-     * schema: omit it when there is nothing to report. `suppFeat` is mandatory in PolicyAssociation (TS 29.507
-     * 5.6.2.2); we support no optional features, so we answer with the intersection with the request's, which is
-     * empty. */
+    /* PolicyAssociation: the request is echoed back, plus our decisions */
     body = g5c_json_new_obj();
     g5c_json_set(body, "request", request); /* takes ownership */
     g5c_json_set_str(body, "suppFeat", "");

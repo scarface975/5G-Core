@@ -84,7 +84,7 @@ void smf_set_self_uri(smf *s, const char *uri)
     s->self_uri = uri != NULL ? g5c_xstrdup(uri) : NULL;
 }
 
-/* ---- N4 hooks ---------------------------------------------------------------------------------------------------------------------------- */
+/* ---- N4 hooks ---- */
 
 static void on_upf_event(void *user, smf_upf *u, int kind)
 {
@@ -105,7 +105,7 @@ static uint8_t on_session_report(void *user, smf_upf *u, uint64_t cp_seid, const
     while (pfcp_ie_next(body, len, &p, &ie) == 1)
         if (ie.typ == PFCP_IE_REPORT_TYPE && ie.len >= 1)
             type = ie.value[0];
-    /* bit 1 of the Report Type is DLDR (downlink data report), bit 2 USAR (usage report: the usage monitoring URR reached its threshold); other reports are acknowledged */
+    /* bit 1 of the Report Type is DLDR (downlink data report), bit 2 USAR (usage report */
     if ((type & 0x02) != 0) {
         uint8_t c = smf_usage_report(s, u, cp_seid, body, len, up_seid);
         if (c != PFCP_CAUSE_ACCEPTED || (type & 0x01) == 0)
@@ -114,7 +114,7 @@ static uint8_t on_session_report(void *user, smf_upf *u, uint64_t cp_seid, const
     return smf_downlink_data(s, u, cp_seid, (type & 0x01) != 0, up_seid);
 }
 
-/* ---- configuration ----------------------------------------------------------------------------------------------------------------------- */
+/* ---- configuration ---- */
 
 static int parse_addr_list(const g5c_json *arr, uint8_t d4[2][4], size_t *n4, uint8_t d6[2][16], size_t *n6, char *err, size_t cap)
 {
@@ -300,7 +300,7 @@ smf *smf_from_config(const g5c_json *root, g5c_nf *nf, char *err, size_t cap)
         }
         s->mtu = (uint16_t)v;
     }
-    if (g5c_json_get(c, "inject") != NULL) { /* failure injection, for testing a RAN against a core that misbehaves: `inject: { pdu_session_reject: [{ supi: imsi-0010199, status: 403 }], n4_drop_responses_percent: 30 }` */
+    if (g5c_json_get(c, "inject") != NULL) { /* failure injection, for testing a RAN against a core that misbehaves */
         static const char *const k_inj[] = {"pdu_session_reject", "n4_drop_responses_percent", NULL}, *const k_rej[] = {"supi", "status", NULL};
         const g5c_json *inj = g5c_json_get(c, "inject"), *rl = g5c_json_get(inj, "pdu_session_reject");
         int64_t pct = 0;
@@ -526,7 +526,7 @@ int smf_start(smf *s, char *err, size_t cap)
     if (s->n4 == NULL)
         return -1;
     smf_worker_start(s);
-    if (s->state_file != NULL) { /* sessions of the previous run come back before the first association, so a restarted UPF is noticed */
+    if (s->state_file != NULL) { /* sessions of the previous run come back before the first association */
         g5c_json *doc = smf_state_read(s);
         if (doc != NULL) {
             size_t n;

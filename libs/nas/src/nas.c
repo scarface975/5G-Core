@@ -126,7 +126,7 @@ bool nas_msg_equal(const nas_msg *a, const nas_msg *b)
     return true;
 }
 
-/* ---- decode ---------------------------------------------------------------------------------------------------------- */
+/* ---- decode ---- */
 
 static const uint8_t *take(const uint8_t *b, size_t blen, size_t *pos, size_t n)
 {
@@ -342,7 +342,7 @@ int nas_msg_decode(const uint8_t *b, size_t len, nas_msg *out)
     return rc;
 }
 
-/* ---- encode ---------------------------------------------------------------------------------------------------------- */
+/* ---- encode ---- */
 
 static int put(g5c_bytes *out, uint8_t f, int16_t iei, bool half_iei, const uint8_t *v, size_t n)
 {

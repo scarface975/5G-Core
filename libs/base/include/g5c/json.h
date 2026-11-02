@@ -83,19 +83,14 @@ int g5c_json_write(const g5c_json *j, g5c_bytes *out);
 /* Convenience: heap string (caller frees). */
 char *g5c_json_to_string(const g5c_json *j, size_t *len);
 
-/* ---- YAML subset (configuration files) -------------------------------------
- * Block mappings/sequences by indentation, flow {..} and [..], quoted and plain scalars, comments.
- * Plain scalars become bool/int/null when unambiguous (leading zeros stay strings: 001 is "001"). Anchors, tags,
- * multi-line scalars and multiple documents are rejected. */
+/* ---- YAML subset (configuration files) ------------------------------------- Block mappings/sequences by indentation, flow {..} and [..], quoted */
 g5c_json *g5c_yaml_parse(const char *s, size_t len, char *err, size_t errcap);
 
-/* ---- JSON Patch (RFC 6902): add, replace, remove ---------------------------------------------------- */
+/* ---- JSON Patch (RFC 6902): add, replace, remove ---- */
 
 typedef enum { G5C_PATCH_OK = 0, G5C_PATCH_ITEM = -1, G5C_PATCH_PATH = -2 } g5c_patch_rc;
 
-/* Apply `items` (an array) to *doc in order. On error the document may be partially modified: patch a copy when
- * atomicity matters. *doc may be replaced (patch of the root). err gets a message (may be NULL). */
+/* Apply `items` (an array) to *doc in order. On error the document may be partially modified: patch a copy when atomicity matters */
 int g5c_json_patch(g5c_json **doc, const g5c_json *items, char *err, size_t errcap);
-
 
 #endif

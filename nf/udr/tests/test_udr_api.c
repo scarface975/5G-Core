@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* The UDR's Nudr_DataRepository behaviour, in process (no sockets): validation against the 3GPP schemas, entity tags
- * and preconditions, `fields`, composite and collection resources, subscriptions, GPSI aliasing, provisioning access. */
+/* The UDR's Nudr_DataRepository behaviour, in process (no sockets) */
 #include <stdlib.h>
 #include <string.h>
 
@@ -170,7 +169,7 @@ static void test_etag_and_patch(void)
         TK_ASSERT(x.status == 304);
         done(&x);
     }
-    {   /* If-Modified-Since: the resource was written now, so a date in the past is a full answer, the future 304 */
+    {   /* If-Modified-Since: the resource was written now, so a date in the past is a full answer */
         const char *past[] = {"if-modified-since", "Sat, 01 Jan 2000 00:00:00 GMT", NULL};
         const char *future[] = {"if-modified-since", "Fri, 01 Jan 2100 00:00:00 GMT", NULL};
         x = rq_h(r, "GET", A, NULL, NULL, past);
@@ -180,7 +179,7 @@ static void test_etag_and_patch(void)
         TK_ASSERT(x.status == 304);
         done(&x);
     }
-    {   /* a write with a stale If-Match is refused and changes nothing; the current one succeeds and moves the tag */
+    {   /* a write with a stale If-Match is refused and changes nothing */
         const char *stale[] = {"if-match", "\"ffff\"", NULL};
         const char *cur[] = {"if-match", etag1, NULL};
         const char *bad[] = {"if-match", "garbage", NULL};

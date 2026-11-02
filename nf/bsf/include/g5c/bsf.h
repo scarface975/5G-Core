@@ -1,9 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* BSF: the Binding Support Function (3GPP TS 23.501 6.2.? / 7.2.15, TS 23.503; TS 29.521).
- *   Nbsf_Management   /nbsf-management/v1   register (POST /pcfBindings), update (PATCH), deregister (DELETE) and discover (GET) the PCF that holds the SM policy
- *                                           association of a PDU session, by the UE's IPv4 address, IPv6 prefix or MAC address
- * A binding is what a PCF registers when a PDU session gets its address; an NEF or AF that wants to talk to "the PCF of this UE" asks the BSF for it. The bindings
- * are state, kept in a file when one is configured. */
+/* BSF: the Binding Support Function (3GPP TS 23.501 6.2.? / 7.2.15, TS 23.503; TS 29.521) */
 #ifndef G5C_BSF_H
 #define G5C_BSF_H
 
@@ -31,10 +27,10 @@ g5c_router *bsf_router(bsf *b);
 /* Stops the thread, writes the state file, frees. */
 void bsf_destroy(bsf *b);
 
-/* The bsfInfo of the NF profile (TS 29.510 6.1.6.2.? BsfInfo): the DNNs, IP domains and address ranges the BSF serves; NULL when none is configured. Owned by `b`. */
+/* The bsfInfo of the NF profile (TS 29.510 6.1.6.2.? BsfInfo): the DNNs, IP domains and address ranges the BSF serves; NULL when none is configured */
 const g5c_json *bsf_nrf_info(const bsf *b);
 
-/* ---- introspection (tests, tools) ------------------------------------------------------------------------------------------------------ */
+/* ---- introspection (tests, tools) ---- */
 size_t bsf_binding_count(bsf *b);
 
 #endif

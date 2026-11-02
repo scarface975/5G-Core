@@ -61,7 +61,7 @@ void upf_rt_config_defaults(upf_rt_config *c)
     c->n6_fd = -1;
 }
 
-/* ---- I/O callbacks ----------------------------------------------------------------------------------------------------------------- */
+/* ---- I/O callbacks ---- */
 
 static void sa_of(const upf_addr *a, struct sockaddr_in *sa)
 {
@@ -123,7 +123,7 @@ static void rt_tx_n6(void *ctx, const uint8_t *p, size_t n)
         rt->tx_drops++;
 }
 
-/* ---- setup ---------------------------------------------------------------------------------------------------------------------------- */
+/* ---- setup ---- */
 
 static int bind_udp(const upf_addr *a, uint16_t *port_out, char *err, size_t errcap, const char *what)
 {
@@ -278,7 +278,7 @@ void upf_rt_stop(upf_rt *rt)
     }
 }
 
-/* ---- metrics ------------------------------------------------------------------------------------------------------------------------------ */
+/* ---- metrics ---- */
 
 static void sync_metrics(upf_rt *rt)
 {
@@ -325,7 +325,7 @@ static void sync_metrics(upf_rt *rt)
     *l = *s;
 }
 
-/* ---- the loop ---------------------------------------------------------------------------------------------------------------------------- */
+/* ---- the loop ---- */
 
 static void drain_gtpu(upf_rt *rt)
 {

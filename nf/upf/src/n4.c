@@ -15,7 +15,7 @@ static inline int okc(int rc)
     return rc == 0 ? PFCP_CAUSE_ACCEPTED : rc;
 }
 
-/* ---- peers, sending and the response cache --------------------------------------------------------------------------------------- */
+/* ---- peers, sending and the response cache ---- */
 
 upf_peer *n4_find_peer(upf *u, const upf_addr *a)
 {
@@ -99,7 +99,7 @@ static void put_cause(uint8_t *out, size_t cap, size_t *pos, uint8_t cause, uint
         (void)pfcp_put_u16(out, cap, pos, PFCP_IE_OFFENDING_IE, offending);
 }
 
-/* ---- peer lifecycle ---------------------------------------------------------------------------------------------------------------- */
+/* ---- peer lifecycle ---- */
 
 void n4_peer_down(upf *u, uint32_t pi)
 {
@@ -152,8 +152,7 @@ static void handle_association_setup(upf *u, const upf_addr *from, const pfcp_he
     p->node_type = node.type;
     put_cause(out, sizeof out, &pos, PFCP_CAUSE_ACCEPTED, 0);
     pfcp_put_u32(out, sizeof out, &pos, PFCP_IE_RECOVERY_TIME_STAMP, u->recovery_ts);
-    {   /* UP Function Features (8.2.25): only what is implemented. FTUP: F-TEIDs are allocated here (CHOOSE). EMPU: End Marker packets are sent.
-         * Not claimed: DLBD/DDND (the BAR timers of Session Report Response / notification delay), PFDM (PFD management is accepted and ignored). */
+    {   /* UP Function Features (8.2.25): only what is implemented. FTUP: F-TEIDs are allocated here (CHOOSE). EMPU: End Marker packets are sent */
         uint8_t f[4] = {PFCP_UPF5_FTUP, PFCP_UPF6_EMPU, 0x00, 0x00};
         pfcp_put_ie(out, sizeof out, &pos, PFCP_IE_UP_FUNCTION_FEATURES, f, 4);
     }
@@ -192,7 +191,7 @@ static void handle_heartbeat(upf *u, const upf_addr *from, const pfcp_header *h,
     }
 }
 
-/* ---- sessions ---------------------------------------------------------------------------------------------------------------------- */
+/* ---- sessions ---- */
 
 static void created_pdrs(const upf *u, upf_session *s, const upf_choose *ch, uint8_t *out, size_t cap, size_t *pos)
 {
@@ -555,7 +554,7 @@ static void handle_report_response(upf *u, const pfcp_header *h, const uint8_t *
     }
 }
 
-/* ---- requests we send ------------------------------------------------------------------------------------------------------------------ */
+/* ---- requests we send ---- */
 
 void n4_send_session_report(upf *u, upf_session *s, uint8_t report_type, const uint16_t *dl_pdr, const upf_urr *urr, uint32_t trigger)
 {
@@ -641,7 +640,7 @@ void n4_timers(upf *u, double now)
     }
 }
 
-/* ---- entry point ------------------------------------------------------------------------------------------------------------------------ */
+/* ---- entry point ---- */
 
 void upf_n4_message(upf *u, const upf_addr *from, const uint8_t *msg, size_t len, double now)
 {

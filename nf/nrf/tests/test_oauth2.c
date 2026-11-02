@@ -1,7 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* OAuth2 access tokens between functions (TS 33.501 13.4.1) end to end: a real NRF issues the tokens, a producer behind the resource server guard checks them, a consumer's SBI client
- * acquires, caches and refreshes them. Refusals of every kind (no token, damaged, another key, alg none, expired, wrong audience, wrong scope), the requests the check leaves alone
- * (health, callbacks, routes that authenticate for themselves), the guard that was there before, and an NRF that cannot be reached. */
+/* OAuth2 access tokens between functions (TS 33.501 13.4.1) end to end */
 #define _DEFAULT_SOURCE
 #include <pthread.h>
 #include <stdio.h>
@@ -66,7 +64,7 @@ static void register_nf(g5c_client *c, const nrf_env *e, const char *id, const c
     g5c_json_free(p);
 }
 
-/* ---- the producer: a router with two services, things the check leaves alone, and a guard of its own ---------------------------------------------------------- */
+/* ---- the producer: a router with two services, things the check leaves alone, and a guard of its own ---- */
 
 static int g_own_guard_calls, g_fail_once;
 
@@ -231,7 +229,7 @@ static void test_guard_and_tokens(void)
     TK_ASSERT(strstr(text, "g5c_oauth_token_requests_total{result=\"issued\"} 1") != NULL);
     free(text);
     TK_ASSERT(g_own_guard_calls == 20);
-    /* the key id is the thumbprint of the key, so it is the same after the NRF restarts with the same key; a 401 for the cached token makes the client drop it and ask the NRF again once */
+    /* the key id is the thumbprint of the key, so it is the same after the NRF restarts with the same key */
     {
         g5c_json *jw;
         char *u2 = g5c_xasprintf("%s/oauth2/jwks", e.base), err[100], *sum;

@@ -1,7 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* PFCP message header and IE framing (3GPP TS 29.244 clauses 7.2 and 8.1).
- * Typed IEs and message bodies are added per procedure in later phases; this library provides the transport-level
- * codec every message needs. Decoding never copies: slices point into the input datagram. */
+/* PFCP message header and IE framing (3GPP TS 29.244 clauses 7.2 and 8.1) */
 #ifndef G5C_PFCP_H
 #define G5C_PFCP_H
 
@@ -44,16 +42,14 @@ int pfcp_encode(const pfcp_header *h, const uint8_t *body, size_t blen, uint8_t 
 /* Decode a datagram; *body points into buf. */
 int pfcp_decode(const uint8_t *buf, size_t len, pfcp_header *h, const uint8_t **body, size_t *blen);
 
-/* A single TLV information element (TS 29.244 8.1.1). Enterprise IEs (type >= 32768) carry an enterprise id in the
- * first two value octets. */
+/* A single TLV information element (TS 29.244 8.1.1). Enterprise IEs (type >= 32768) carry an enterprise id in the first two value octets. */
 typedef struct {
     uint16_t typ;
     const uint8_t *value;
     size_t len;
 } pfcp_ie;
 
-/* Iterate over the IEs of a message body: returns 1 with *ie set, 0 at the end, or a negative error on malformed
- * framing. *pos starts at 0. */
+/* Iterate over the IEs of a message body: returns 1 with *ie set, 0 at the end, or a negative error on malformed framing. *pos starts at 0. */
 int pfcp_ie_next(const uint8_t *body, size_t blen, size_t *pos, pfcp_ie *ie);
 /* Append one IE at out[*pos]; advances *pos. */
 int pfcp_put_ie(uint8_t *out, size_t cap, size_t *pos, uint16_t typ, const uint8_t *value, size_t len);

@@ -1,14 +1,12 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* N2 application protocol (TS 38.413): message builders, the non-UE-associated procedures (NG Setup, RAN Configuration Update, NG Reset,
- * Error Indication) and the routing of UE-associated messages to connection objects and their handlers. Field names are those of the pinned
- * ASN.1 (docs/specs/asn1). */
+/* N2 application protocol (TS 38.413) */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "priv.h"
 
-/* ---- JSON builders ---------------------------------------------------------------------------------------------------------------------- */
+/* ---- JSON builders ---- */
 
 g5c_json *ng_pdu_new(const char *kind, int proc, const char *crit)
 {
@@ -179,7 +177,7 @@ static uint8_t *hex_to_bytes(const char *h, size_t *len)
     return b;
 }
 
-/* ---- sending ---------------------------------------------------------------------------------------------------------------------------- */
+/* ---- sending ---- */
 
 static int conn_send(amf_conn *c, g5c_json *pdu)
 {
@@ -284,7 +282,7 @@ int conn_send_release_cmd(amf_conn *c, const char *group, const char *cause, uin
     pair = g5c_json_set(ids, "uE-NGAP-ID-pair", g5c_json_new_obj());
     g5c_json_set_int(pair, "aMF-UE-NGAP-ID", (int64_t)c->amf_id);
     g5c_json_set_int(pair, "rAN-UE-NGAP-ID", (int64_t)c->ran_id);
-    if (c->ran_id == 0) { /* the gNB has not told us its identifier yet (a handover target): only the AMF identifier is known */
+    if (c->ran_id == 0) { /* the gNB has not told us its identifier yet (a handover target) */
         g5c_json_free(ids);
         ids = g5c_json_new_obj();
         g5c_json_set_int(ids, "aMF-UE-NGAP-ID", (int64_t)c->amf_id);
@@ -348,7 +346,7 @@ int ng_send_error_indication(amf *a, uint32_t gnb, uint32_t gen, uint16_t stream
     return rc;
 }
 
-/* ---- paging (TS 38.413 8.5, TS 23.502 4.2.3.3) ------------------------------------------------------------------------------------------ */
+/* ---- paging (TS 38.413 8.5, TS 23.502 4.2.3.3) ---- */
 
 /* Page the UE in its registration area. The caller holds u->mu. */
 void amf_page_ue(amf *a, amf_ue *u)
@@ -400,7 +398,7 @@ void amf_page_ue(amf *a, amf_ue *u)
     G5C_LOGI(AMF_LOG, "paging %s on %zu gNB(s)", u->supi, n);
 }
 
-/* ---- non-UE-associated procedures --------------------------------------------------------------------------------------------------------- */
+/* ---- non-UE-associated procedures ---- */
 
 static void send_setup_failure(amf *a, uint32_t gnb, uint32_t gen, uint16_t stream, const char *group, const char *cause)
 {
@@ -598,7 +596,7 @@ void ngap_gnb_lost(amf *a, uint32_t gnb)
     amf_gauges(a);
 }
 
-/* ---- routing ------------------------------------------------------------------------------------------------------------------------------ */
+/* ---- routing ---- */
 
 static void route_ue_message(amf *a, uint32_t gnb, uint32_t gen, uint16_t stream, g5c_json *pdu, int64_t code, bool is_initial)
 {
@@ -765,7 +763,7 @@ void ngap_reader_dispatch(amf *a, uint32_t gnb, uint32_t gen, uint16_t stream, c
     g5c_json_free(pdu);
 }
 
-/* ---- per-connection handling (runs on a pool worker) --------------------------------------------------------------------------------------- */
+/* ---- per-connection handling (runs on a pool worker) ---- */
 
 static void note_location(amf_conn *c, const g5c_json *msg)
 {

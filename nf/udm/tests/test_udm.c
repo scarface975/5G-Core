@@ -15,7 +15,7 @@
 #define K_HEX "465b5ce8b199b49faa5f0a2ee238a6bc"
 #define OP_HEX "cdc202d5123e20f62b6d676ac72cb318"
 
-/* ---- unit tests ------------------------------------------------------------------------------------ */
+/* ---- unit tests ---- */
 
 static void h(const char *hex, uint8_t *out, size_t n)
 {
@@ -181,7 +181,7 @@ static void test_util(void)
     TK_ASSERT(!udm_valid_snn("5G:mnc001.mcc001.3gppnetwork.org "));
 }
 
-/* ---- service fixtures --------------------------------------------------------------------------------- */
+/* ---- service fixtures ---- */
 
 typedef struct {
     g5c_udr_store *store;
@@ -301,7 +301,7 @@ static const char *PLMN = "%7B%22mcc%22%3A%22001%22%2C%22mnc%22%3A%2201%22%7D";
 
 #define EXPECT_STR(j, key, want) TK_ASSERT(strcmp(g5c_json_get_str((j), (key)), (want)) == 0)
 
-/* ---- SDM ------------------------------------------------------------------------------------------------ */
+/* ---- SDM ---- */
 
 static void test_sdm(void)
 {
@@ -461,7 +461,7 @@ static void test_sdm_multiple_datasets(void)
     teardown(&t);
 }
 
-/* ---- UECM ------------------------------------------------------------------------------------------------ */
+/* ---- UECM ---- */
 
 static atomic_int dereg_calls;
 static char dereg_reason[64], dereg_access[64];
@@ -563,7 +563,7 @@ static void test_uecm_validation_and_smf(void)
 }
 
 /* TS 29.500 requires absolute URIs in Location headers; Open5GS's AUSF rejects relative ones. */
-/* ---- Nudm_EventExposure: a fake AMF and a fake subscriber over real sockets ---------------------------------------------------------------------- */
+/* ---- Nudm_EventExposure: a fake AMF and a fake subscriber over real sockets ---- */
 
 static atomic_int ee_amf_posts, ee_amf_deletes, ee_cb_calls;
 static char ee_amf_body[2048], ee_cb_body[2048];
@@ -791,7 +791,7 @@ static void test_auth_removal(void)
     teardown(&t);
 }
 
-/* ---- UEAU ------------------------------------------------------------------------------------------------- */
+/* ---- UEAU ---- */
 
 static void test_ueau(bool encrypt)
 {
@@ -888,8 +888,7 @@ static void test_ueau(bool encrypt)
     teardown(&t);
 }
 
-/* EAP-AKA' (TS 33.501 6.1.3.1 step 1 and 2): a subscriber whose method is EAP_AKA_PRIME gets an AV' with the AMF separation bit and CK' / IK' derived with the
- * serving network name; the FN-RG answer; the methods the UDM cannot run */
+/* EAP-AKA' (TS 33.501 6.1.3.1 step 1 and 2) */
 static void test_ueau_eap(void)
 {
     T t;
@@ -981,8 +980,7 @@ static void test_ueau_eap(void)
     teardown(&t);
 }
 
-/* The UDR's provisioning extensions need its bearer token: the UDM presents the configured one, and without it (or with a wrong one) it
- * cannot create subscribers, while the reads and the registrations of the signalling procedures need no token at all. */
+/* The UDR's provisioning extensions need its bearer token */
 static void test_udr_provisioning_token(void)
 {
     static const char *const body = "{\"supi\":\"imsi-001010000000009\",\"k\":\"" K_HEX "\",\"op\":\"" OP_HEX "\"}";
@@ -1059,7 +1057,7 @@ static void test_admin(void)
     teardown(&t);
 }
 
-/* ---- negative, abuse and failure-injection tests (strategy 4.1: component layer, Phase 1 test plan) -------------------- */
+/* ---- negative, abuse and failure-injection tests (strategy 4.1: component layer, Phase 1 test plan) ---- */
 
 /* Every malformed provisioning request is refused with 400 and stores nothing. */
 static void test_admin_validation(void)

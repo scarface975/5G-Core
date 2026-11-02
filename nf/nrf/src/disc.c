@@ -5,7 +5,7 @@
 
 #include "priv.h"
 
-/* ---- query string ------------------------------------------------------------------------------------------------------------------------------- */
+/* ---- query string ---- */
 
 char *nrf_pct_decode(const char *s, size_t n)
 {
@@ -70,7 +70,7 @@ static char *query_one(const g5c_req *req, const char *name)
     return r;
 }
 
-/* ---- matching ------------------------------------------------------------------------------------------------------------------------------------ */
+/* ---- matching ---- */
 
 typedef struct {
     char *target_type, *requester_type, *dnn, *supi, *amf_region, *amf_set, *locality, *target_id;
@@ -375,7 +375,7 @@ static bool match_profile(const nrf *n, const g5c_json *doc, const char *id, con
     return true;
 }
 
-/* ---- selection order: preferred locality first, then priority (lower is better), then load ----------------------------------------------------- */
+/* ---- selection order: preferred locality first, then priority (lower is better), then load ---- */
 
 typedef struct {
     g5c_json *prof;
@@ -424,7 +424,7 @@ static void discover(void *ctx, const g5c_req *req, g5c_resp *resp)
         q_free(&q);
         return;
     }
-    {   /* style: form, explode: false - "service-names=nudm-sdm,nudm-uecm" (repeated parameters are accepted too) */
+    {   /* style: form, explode: false - "service-names=nudm-sdm,nudm-uecm" */
         size_t raw_n = 0;
         char **raw = nrf_query_all(req, "service-names", &raw_n);
         for (size_t i = 0; i < raw_n; i++) {

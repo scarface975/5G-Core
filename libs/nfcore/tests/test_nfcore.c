@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* NF runtime end to end: health/readiness, metrics, and registration + heartbeat + deregistration against a mock NRF
- * built from the same SBI library. */
+/* NF runtime end to end: health/readiness, metrics, and registration + heartbeat + deregistration against a mock NRF built from the same SBI library. */
 #define _DEFAULT_SOURCE
 #include <stdatomic.h>
 #include <unistd.h>

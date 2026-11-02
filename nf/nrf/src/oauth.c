@@ -154,7 +154,7 @@ static void jwks(void *ctx, const g5c_req *req, g5c_resp *resp)
     g5c_json_free(j);
 }
 
-/* ---- the guard ------------------------------------------------------------------------------------------------------------------------------ */
+/* ---- the guard ---- */
 
 int nrf_guard(void *ctx, const g5c_req *req, g5c_resp *resp)
 {
@@ -172,7 +172,7 @@ int nrf_guard(void *ctx, const g5c_req *req, g5c_resp *resp)
         return 0; /* the token endpoint, the key set, health and metrics */
     if (strcmp(service, NRF_SVC_NFM) == 0 && strncmp(req->path, "/nnrf-nfm/v1/nf-instances/", 26) == 0 &&
         (strcmp(req->method, "PUT") == 0 || strcmp(req->method, "PATCH") == 0 || strcmp(req->method, "DELETE") == 0))
-        return 0; /* an NF registers, heart-beats and deregisters itself before it can have a token (authenticated by the transport) */
+        return 0; /* an NF registers, heart-beats and deregisters itself before it can have a token */
     tok = g5c_bearer_token(req);
     if (tok == NULL) {
         g5c_resp_problem_simple(resp, 401, "UNAUTHORIZED", "a bearer access token is required");

@@ -4,7 +4,7 @@
 
 #include "priv.h"
 
-/* ---- helpers --------------------------------------------------------------------------------------------------------------------------------- */
+/* ---- helpers ---- */
 
 static bool valid_status(const char *s)
 {
@@ -86,7 +86,7 @@ static void problem_invalid(g5c_resp *resp, const char *param, const char *reaso
     g5c_resp_problem_invalid(resp, 400, "INVALID_PARAM", param, reason);
 }
 
-/* ---- nf-instance ------------------------------------------------------------------------------------------------------------------------------ */
+/* ---- nf-instance ---- */
 
 static void nf_put(void *ctx, const g5c_req *req, g5c_resp *resp)
 {
@@ -250,7 +250,7 @@ static void nf_patch(void *ctx, const g5c_req *req, g5c_resp *resp)
             return;
         }
     }
-    {   /* an NF that comes back from SUSPENDED is sent its profile (TS 29.510 5.2.2.3.2 allows 200 with the profile instead of 204) */
+    {   /* an NF that comes back from SUSPENDED is sent its profile */
         const char *was = g5c_json_get_str(n->profs[idx].doc, "nfStatus"), *now_st = g5c_json_get_str(copy, "nfStatus");
         revived = was != NULL && now_st != NULL && strcmp(was, "SUSPENDED") == 0 && strcmp(now_st, "SUSPENDED") != 0;
     }
@@ -361,7 +361,7 @@ static void nf_get(void *ctx, const g5c_req *req, g5c_resp *resp)
     g5c_json_free(out);
 }
 
-/* ---- nf-instances ----------------------------------------------------------------------------------------------------------------------------- */
+/* ---- nf-instances ---- */
 
 static void nf_list(void *ctx, const g5c_req *req, g5c_resp *resp)
 {
@@ -413,7 +413,7 @@ static void nf_options(void *ctx, const g5c_req *req, g5c_resp *resp)
     g5c_resp_header(resp, "accept-encoding", "identity");
 }
 
-/* ---- subscriptions ----------------------------------------------------------------------------------------------------------------------------- */
+/* ---- subscriptions ---- */
 
 static const char *check_subscription(const g5c_json *d)
 {

@@ -1,8 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* libFuzzer target: the whole UPF engine. A fresh engine gets the association and the session establishment of a real Open5GS SMF (so
- * TEID 0x1001 and UE 10.46.0.2 exist), then the input is delivered as one of: an N4 message from the SMF, a GTP-U datagram from the
- * gNB, or an IP packet from the data network. Timer ticks follow, so retransmission, report and buffer-expiry paths run too.
- * Input: byte 0 selects the entry point, the rest is the datagram. */
+/* libFuzzer target: the whole UPF engine */
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>

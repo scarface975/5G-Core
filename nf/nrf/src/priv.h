@@ -2,7 +2,6 @@
 #ifndef G5C_NRF_PRIV_H
 #define G5C_NRF_PRIV_H
 
-
 #include <pthread.h>
 #include <stdatomic.h>
 #include <stdint.h>
@@ -21,7 +20,7 @@ typedef struct {
     g5c_json *doc;       /* the NFProfile as stored (and as returned) */
     double last_hb;      /* monotonic seconds of the last registration / heart-beat */
     double suspended_at; /* monotonic, 0 when not suspended */
-    uint64_t etag;       /* changes with every modification of the profile (not with a heart-beat that changes nothing) */
+    uint64_t etag;       /* changes with every modification of the profile */
 } nrf_prof;
 
 typedef struct {
@@ -82,13 +81,12 @@ struct nrf {
     char kid[64];
 };
 
-/* ---- store.c ----------------------------------------------------------------------------------------------------------------------------- */
+/* ---- store.c ---- */
 
 typedef enum { NRF_EV_REGISTERED, NRF_EV_DEREGISTERED, NRF_EV_PROFILE_CHANGED } nrf_event;
 
 bool nrf_valid_uuid(const char *s);
-/* The profile with its services in the representation the consumer understands: the nfServiceList map when it supports the Service-Map feature
- * (TS 29.510 6.1.9, feature 1), the nfServices array otherwise. Caller frees. */
+/* The profile with its services in the representation the consumer understands */
 g5c_json *nrf_profile_view(const g5c_json *doc, bool service_map);
 /* does a supportedFeatures string (hex, feature 1 = least significant bit of the last digit) include Service-Map? */
 bool nrf_features_service_map(const char *hex);
@@ -102,7 +100,7 @@ void nrf_flush(nrf *n);
 int nrf_restore(nrf *n);
 void nrf_count(nrf *n, const char *name, const char *help, const char *label, const char *value);
 
-/* ---- mgmt.c / disc.c / oauth.c ----------------------------------------------------------------------------------------------------------- */
+/* ---- mgmt.c / disc.c / oauth.c ---- */
 
 void nrf_mgmt_routes(g5c_router *r, nrf *n);
 void nrf_disc_routes(g5c_router *r, nrf *n);

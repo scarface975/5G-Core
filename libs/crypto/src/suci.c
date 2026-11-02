@@ -23,7 +23,7 @@ size_t g5c_suci_pubkey_len(g5c_profile p)
     return p == G5C_PROFILE_A ? 32U : P256_COMPRESSED;
 }
 
-/* ---- P-256 helpers ------------------------------------------------------- */
+/* ---- P-256 helpers ---- */
 
 /* Public point for secret, compressed. 0 on success. */
 static int p256_pub(const uint8_t secret[32], uint8_t out[P256_COMPRESSED])
@@ -81,7 +81,7 @@ done:
     return pk;
 }
 
-/* ---- ECDH ---------------------------------------------------------------- */
+/* ---- ECDH ---- */
 
 static int derive(EVP_PKEY *sk, EVP_PKEY *pk, uint8_t z[32])
 {
@@ -164,7 +164,7 @@ int g5c_suci_public_key(g5c_profile p, const uint8_t secret[32], uint8_t *out, s
     return 0;
 }
 
-/* ---- key schedule, tag, CTR --------------------------------------------- */
+/* ---- key schedule, tag, CTR ---- */
 
 typedef struct {
     uint8_t enc[16], icb[16], mac[32];
@@ -243,7 +243,7 @@ static int ctr_xor(const keys_t *k, const uint8_t *in, uint8_t *out, size_t len)
     return ok ? 0 : -1;
 }
 
-/* ---- conceal / deconceal -------------------------------------------------- */
+/* ---- conceal / deconceal ---- */
 
 int g5c_suci_conceal(g5c_profile p, const uint8_t *hn_pub, size_t hn_pub_len,
                      const uint8_t eph_secret[32], const uint8_t *msin_bcd, size_t msin_len,
@@ -305,7 +305,7 @@ done:
     return rc;
 }
 
-/* ---- BCD ------------------------------------------------------------------ */
+/* ---- BCD ---- */
 
 int g5c_msin_to_bcd(const char *msin, uint8_t *out, size_t cap, size_t *out_len)
 {

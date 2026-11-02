@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* Prometheus-style metrics registry (text exposition format 0.0.4): counters, gauges, histograms with labels.
- * Thread-safe. Metric handles are owned by the registry and stay valid until g5c_registry_free(). */
+/* Prometheus-style metrics registry (text exposition format 0.0.4): counters, gauges, histograms with labels. Thread-safe */
 #ifndef G5C_METRICS_H
 #define G5C_METRICS_H
 

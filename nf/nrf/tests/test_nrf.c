@@ -1,7 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* NRF end to end: a real HTTP/2 server and client, a callback server for the status notifications.
- * Covers Nnrf_NFManagement (register, replace, patch, heart-beat, deregister, retrieve, list, subscribe), Nnrf_NFDiscovery (filters and ordering),
- * the heart-beat monitor (SUSPENDED, purge), Nnrf_AccessToken (ES256 JWT, scopes, enforcement), persistence and configuration errors. */
+/* NRF end to end: a real HTTP/2 server and client, a callback server for the status notifications */
 #define _GNU_SOURCE
 #include <pthread.h>
 #include <stdio.h>
@@ -11,7 +9,7 @@
 #include "g5c/nrf.h"
 #include "g5c/testkit.h"
 
-/* ---- environment ------------------------------------------------------------------------------------------------------------------------------ */
+/* ---- environment ---- */
 
 typedef struct {
     g5c_registry *reg;
@@ -75,7 +73,7 @@ static void env_stop(env_t *e)
     g5c_nf_free(e->nf);
 }
 
-/* ---- the notification receiver ------------------------------------------------------------------------------------------------------------------ */
+/* ---- the notification receiver ---- */
 
 static pthread_mutex_t cb_mu = PTHREAD_MUTEX_INITIALIZER;
 static char cb_body[64][3000];
@@ -136,7 +134,7 @@ static void cb_reset(void)
     pthread_mutex_unlock(&cb_mu);
 }
 
-/* ---- HTTP helpers ---------------------------------------------------------------------------------------------------------------------------- */
+/* ---- HTTP helpers ---- */
 
 static int call(const char *method, const char *url, const char *ctype, const char *body, const char *bearer, g5c_resp *out)
 {
@@ -220,7 +218,7 @@ static size_t discover(const env_t *e, const char *query, char ids[8][37], int *
     return n;
 }
 
-/* ---- cases ---------------------------------------------------------------------------------------------------------------------------------------- */
+/* ---- cases ---- */
 
 static void test_registration(const env_t *e)
 {
@@ -460,8 +458,7 @@ static void test_discovery(const env_t *e)
     TK_ASSERT(st == 200 && n == 0);
     n = discover(e, "target-nf-type=UDM&requester-nf-type=AMF&target-plmn-list=%5B%7B%22mcc%22%3A%22001%22%2C%22mnc%22%3A%2201%22%7D%5D", ids, &st);
     TK_ASSERT(n == 2);
-    /* Service-Map: a profile registered with the nfServiceList map is returned as the nfServices array unless the consumer supports the feature,
-     * and the other way round (TS 29.510 6.1.9) */
+    /* Service-Map: a profile registered with the nfServiceList map is returned as the nfServices array unless the consumer supports the feature */
     {
         char url[500], err[64];
         g5c_resp r;

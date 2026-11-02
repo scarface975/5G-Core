@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* NAS security: protected-message envelope, integrity and ciphering (TS 24.501 clause 4.4 and 9.3,
- * TS 33.501 clause 6.4 and Annex D). */
+/* NAS security: protected-message envelope, integrity and ciphering (TS 24.501 clause 4.4 and 9.3, TS 33.501 clause 6.4 and Annex D). */
 #include <stdlib.h>
 #include <string.h>
 

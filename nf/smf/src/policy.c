@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* SmPolicyDecision (TS 29.512 5.6.2.4) -> the SMF's flow model: one default QoS flow (QFI 1) plus one flow per distinct QoS data
- * referenced by PCC rules, and the SDF filters of those rules. */
+/* SmPolicyDecision (TS 29.512 5.6.2.4) -> the SMF's flow model */
 #define _DEFAULT_SOURCE
 #include <arpa/inet.h>
 #include <ctype.h>
@@ -22,7 +21,7 @@ void smf_policy_free(smf_policy *p)
     memset(p, 0, sizeof *p);
 }
 
-/* ---- IPFilterRule ------------------------------------------------------------------------------------------------------------------------- */
+/* ---- IPFilterRule ---- */
 
 static bool parse_port_range(const char *t, uint16_t *lo, uint16_t *hi)
 {
@@ -147,7 +146,7 @@ int smf_ipfilter_parse(const char *rule, smf_ipfilter *o)
     return 0;
 }
 
-/* ---- decision ------------------------------------------------------------------------------------------------------------------------------- */
+/* ---- decision ---- */
 
 static bool get_rate(const g5c_json *o, const char *key, uint64_t *out, bool *present, char *err, size_t cap)
 {
@@ -313,7 +312,7 @@ int smf_policy_from_decision(const g5c_json *dec, smf_policy *out, char *err, si
             dst->nfilters++;
         }
     }
-    {   /* usage monitoring (umDecs): the volume threshold the UPF reports at; the first entry that has one */
+    {   /* usage monitoring (umDecs) */
         const g5c_json *um = g5c_json_get(dec, "umDecs");
         for (size_t i = 0; g5c_json_is(um, G5C_J_OBJECT) && i < g5c_json_len(um); i++) {
             int64_t th = 0;

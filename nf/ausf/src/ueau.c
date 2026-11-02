@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* Nausf_UEAuthentication (TS 29.509 clause 5.2, 6.1): start of an authentication (5G AKA and EAP-AKA'), the 5G AKA confirmation, the removal of a result, the
- * clean-up of a security context and the FN-RG authentication. The EAP session is in eap.c. */
+/* Nausf_UEAuthentication (TS 29.509 clause 5.2, 6.1) */
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -78,7 +77,7 @@ void ausf_udm_failure(const udm_answer *u, g5c_resp *resp)
     }
 }
 
-/* ---- POST /ue-authentications --------------------------------------------------------------------------------------------------------------------- */
+/* ---- POST /ue-authentications ---- */
 
 static void bad_request(ausf *a, g5c_resp *resp, const char *param, const char *reason)
 {
@@ -93,7 +92,7 @@ void ausf_ueau_start(ausf *a, const g5c_req *req, g5c_resp *resp)
     const char *id_in, *snn, *auth_type, *supi;
     udm_answer u;
     ausf_ctx *c = NULL;
-    char *href, *loc, cid[37]; /* the id outlives the context: a newer start for the same UE may replace it the moment it is in the table */
+    char *href, *loc, cid[37]; /* the id outlives the context */
     bool n5gc = false;
 
     memset(&u, 0, sizeof u);
@@ -270,7 +269,7 @@ static void start_route(void *ctx, const g5c_req *req, g5c_resp *resp)
     ausf_ueau_start(ctx, req, resp);
 }
 
-/* ---- PUT .../5g-aka-confirmation ------------------------------------------------------------------------------------------------------------------ */
+/* ---- PUT .../5g-aka-confirmation ---- */
 
 static void not_found(g5c_resp *resp)
 {
@@ -358,7 +357,7 @@ static void confirm(void *ctx, const g5c_req *req, g5c_resp *resp)
     g5c_json_free(conf);
 }
 
-/* ---- DELETE .../5g-aka-confirmation and .../eap-session ------------------------------------------------------------------------------------------- */
+/* ---- DELETE .../5g-aka-confirmation and .../eap-session ---- */
 
 static void remove_result(ausf *a, const g5c_req *req, g5c_resp *resp, ausf_method m)
 {
@@ -370,8 +369,7 @@ static void remove_result(ausf *a, const g5c_req *req, g5c_resp *resp, ausf_meth
         not_found(resp);
         return;
     }
-    /* TS 29.509 5.2.2.2.5 / 5.2.2.2.6: the AUSF has the UDM remove the result. Only the current result of the UE is removed: a newer authentication has replaced
-     * this one in the UDM already. */
+    /* TS 29.509 5.2.2.2.5 / 5.2.2.2.6: the AUSF has the UDM remove the result */
     if (c->st == ST_DONE && c->supi != NULL && c->auth_event_id != NULL && ue_is_current(a, c->supi, c->id))
         (void)udm_auth_removal(a, c->supi, c->snn, m == M_5GAKA ? "5G_AKA" : "EAP_AKA_PRIME", c->auth_event_id);
     ausf_count2(a, "g5c_ausf_authentications_total", "Authentication starts and results by method and outcome.", "method", m == M_5GAKA ? "5g-aka" : "eap-aka-prime", "result", "removed");
@@ -389,7 +387,7 @@ static void del_eap(void *ctx, const g5c_req *req, g5c_resp *resp)
     remove_result(ctx, req, resp, M_EAP_PRIME);
 }
 
-/* ---- POST /ue-authentications/deregister ------------------------------------------------------------------------------------------------------------ */
+/* ---- POST /ue-authentications/deregister ---- */
 
 static void deregister(void *ctx, const g5c_req *req, g5c_resp *resp)
 {
@@ -413,7 +411,7 @@ static void deregister(void *ctx, const g5c_req *req, g5c_resp *resp)
     g5c_json_free(j);
 }
 
-/* ---- POST /rg-authentications ----------------------------------------------------------------------------------------------------------------------- */
+/* ---- POST /rg-authentications ---- */
 
 static void rg_auth(void *ctx, const g5c_req *req, g5c_resp *resp)
 {

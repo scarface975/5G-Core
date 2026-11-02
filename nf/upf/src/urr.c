@@ -42,8 +42,7 @@ void urr_account(upf *u, upf_session *s, const upf_pdr *p, bool ul, size_t bytes
     (void)u;
 }
 
-/* One Usage Report group (type 78, 79 or 80) into out; returns its length or 0 when it does not fit. With reset the counters
- * restart, so the next report covers only what follows. */
+/* One Usage Report group (type 78, 79 or 80) into out; returns its length or 0 when it does not fit */
 size_t urr_build_report(const upf *u, upf_urr *r, uint16_t group_type, uint32_t trigger, uint8_t *out, size_t cap, bool reset)
 {
     size_t pos = 0, mark;

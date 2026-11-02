@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* TLS / mutual-TLS configuration for the SBI (TS 33.501 clause 13.1, TS 29.500 clause 5.2.2).
- * Servers and clients negotiate ALPN "h2". A client CA on the server turns on mutual authentication. */
+/* TLS / mutual-TLS configuration for the SBI (TS 33.501 clause 13.1, TS 29.500 clause 5.2.2). Servers and clients negotiate ALPN "h2" */
 #define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
 #include <stdlib.h>
@@ -40,8 +39,7 @@ static int alpn_select(SSL *ssl, const unsigned char **out, unsigned char *outle
     return SSL_TLSEXT_ERR_ALERT_FATAL;
 }
 
-/* G5C_TLS_KEYLOG=<file>: append the TLS secrets in the NSS key log format so Wireshark can decrypt a capture of the SBI (Edit > Preferences > TLS > (Pre)-Master-Secret log).
- * Off unless the variable is set; the file holds session secrets, so it is created 0600 and every context made while it is set logs a warning once. */
+/* G5C_TLS_KEYLOG=<file>: append the TLS secrets in the NSS key log format so Wireshark can decrypt a capture of the SBI */
 static void keylog_cb(const SSL *ssl, const char *line)
 {
     const char *path = getenv("G5C_TLS_KEYLOG");
@@ -74,7 +72,7 @@ static void keylog_enable(SSL_CTX *ctx)
     }
 }
 
-/* ---- who may connect (identity pinning) and revocation ------------------------------------------------------------------------------------------ */
+/* ---- who may connect (identity pinning) and revocation ---- */
 
 typedef struct {
     char **pat;

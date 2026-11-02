@@ -15,8 +15,7 @@ static bool ue_supports(const uint8_t *cap, size_t len, bool integrity, uint8_t 
     return (cap[idx] & (0x80u >> id)) != 0;
 }
 
-/* The first algorithm of our preference list that the UE supports (TS 33.501 6.7.1.1). NEA0 is always acceptable to a UE that lists it; NIA0 only
- * when configured, because it is allowed for unauthenticated emergency sessions only. */
+/* The first algorithm of our preference list that the UE supports (TS 33.501 6.7.1.1) */
 int sec_select_algs(const amf *a, const uint8_t *ue_cap, size_t len, uint8_t *int_alg, uint8_t *enc_alg)
 {
     bool ok_i = false, ok_e = false;

@@ -60,7 +60,7 @@ static void strip_comment(char *s)
         s[--n] = '\0';
 }
 
-/* ---- scalars / flow -------------------------------------------------------- */
+/* ---- scalars / flow ---- */
 
 static g5c_json *resolve_plain(const char *s)
 {
@@ -307,7 +307,7 @@ static g5c_json *parse_inline(y_t *y, const char *text, int lineno)
     return j;
 }
 
-/* ---- block structure -------------------------------------------------------- */
+/* ---- block structure ---- */
 
 static g5c_json *parse_block(y_t *y, int indent, int depth);
 

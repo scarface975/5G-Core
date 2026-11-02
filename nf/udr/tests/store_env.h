@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* The store the UDR tests run on: in memory, or PostgreSQL when G5C_UDR_TEST_PG holds a connection string (the ctest
- * wrappers *_postgres start a throw-away server for it). A PostgreSQL store is emptied before use. */
+/* The store the UDR tests run on */
 #ifndef G5C_UDR_STORE_ENV_H
 #define G5C_UDR_STORE_ENV_H
 

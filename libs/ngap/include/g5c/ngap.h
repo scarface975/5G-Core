@@ -34,7 +34,7 @@
 #define NGAP_MAX_NODES 200000
 #define NGAP_MAX_DEPTH 48
 
-/* ---- schema (generated) ------------------------------------------------------------------------------------------ */
+/* ---- schema (generated) ---- */
 
 enum {
     NG_BOOL,
@@ -113,14 +113,13 @@ extern const size_t NGAP_NPROCS;
 extern const ngap_named NGAP_NAMED[];
 extern const size_t NGAP_NNAMED;
 
-/* ---- codec -------------------------------------------------------------------------------------------------------- */
+/* ---- codec ---- */
 
 /* Decode an NGAP-PDU. Returns NULL and fills err on failure; caller frees the tree. */
 g5c_json *ngap_decode(const uint8_t *buf, size_t len, char *err, size_t errcap);
 /* Encode an NGAP-PDU tree, appending to out. 0 / -1 with err. */
 int ngap_encode(const g5c_json *pdu, g5c_bytes *out, char *err, size_t errcap);
-/* Same for a named ASN.1 type, e.g. "PDUSessionResourceSetupRequestTransfer" (the contents of OCTET STRING
- * (CONTAINING ...) IEs). NULL / -1 if the type name is unknown. */
+/* Same for a named ASN.1 type, e.g. "PDUSessionResourceSetupRequestTransfer" (the contents of OCTET STRING (CONTAINING ...) IEs) */
 g5c_json *ngap_decode_as(const char *type_name, const uint8_t *buf, size_t len, char *err, size_t errcap);
 int ngap_encode_as(const char *type_name, const g5c_json *v, g5c_bytes *out, char *err, size_t errcap);
 

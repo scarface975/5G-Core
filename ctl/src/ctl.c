@@ -201,7 +201,7 @@ static int cmd_subscriber(ctl *c, int argc, char **argv)
         }
         return subscriber_add_flags(c, argc - 1, argv + 1);
     }
-    if (strcmp(argv[0], "bulk") == 0 && argc == 2) { /* a JSON array (or JSON lines) of subscribers, stored one by one: the answer lists what became of each */
+    if (strcmp(argv[0], "bulk") == 0 && argc == 2) { /* a JSON array (or JSON lines) of subscribers, stored one by one */
         g5c_json *j = load_doc(c, argv[1]);
         if (j == NULL)
             return RC_USAGE;

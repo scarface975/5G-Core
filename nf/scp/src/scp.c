@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* The SCP: construction, the router (every request that is not a health or metrics request is forwarded), shutdown. The forwarding is in proxy.c, the choice of the
- * producer in select.c. */
+/* The SCP: construction, the router (every request that is not a health or metrics request is forwarded), shutdown */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

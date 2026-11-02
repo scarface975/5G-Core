@@ -1,9 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* Nudr_DataRepository: one generic engine over the generated operation table (TS 29.505 / TS 29.519).
- *
- * A resource is addressed by its URI. The storage key is the path without the subscriber and the serving PLMN, the
- * partition is the subscriber, the group or the global one. GET, PUT, PATCH, DELETE and POST behave the same on every
- * resource; what differs (which schema, which status codes, collections, composite parents) comes from the table. */
+/* Nudr_DataRepository: one generic engine over the generated operation table (TS 29.505 / TS 29.519). A resource is addressed by its URI */
 #define _POSIX_C_SOURCE 200809L
 #include <ctype.h>
 #include <stdio.h>
@@ -44,8 +40,7 @@ struct g5c_udr {
     size_t nallocs;
 };
 
-
-/* ---- small helpers ---------------------------------------------------------------------------------------------- */
+/* ---- small helpers ---- */
 
 static void problem(g5c_resp *resp, int status, const char *cause, const char *detail)
 {
@@ -133,8 +128,7 @@ static bool is_ue_part(const udr_op_def *op)
     return op->part == UDR_PART_UE;
 }
 
-/* The partition of a subscriber, a group or the global one. A subscriber may be addressed by a GPSI: the alias index
- * (maintained from the identity data) maps it to the SUPI. */
+/* The partition of a subscriber, a group or the global one */
 char *udr_part_for_id(g5c_udr *u, udr_part_kind kind, const char *id)
 {
     char *part;
@@ -351,7 +345,7 @@ static void not_found(g5c_udr *u, const udr_op_def *op, const char *part, g5c_re
     g5c_counter_inc(u->c_notfound);
 }
 
-/* ---- the `fields` query parameter ------------------------------------------------------------------------------- */
+/* ---- the `fields` query parameter ---- */
 
 static void copy_path(const g5c_json *src, char **segs, size_t n, g5c_json **dst)
 {
@@ -430,7 +424,7 @@ static g5c_json *select_fields(const g5c_json *doc, const char *fields)
     return out != NULL ? out : g5c_json_new_obj();
 }
 
-/* ---- views ------------------------------------------------------------------------------------------------------ */
+/* ---- views ---- */
 
 /* S-NSSAI equality (TS 23.003 28.4.2): the slice differentiator FFFFFF means that none is associated, like an absent `sd` */
 bool udr_snssai_equal(const g5c_json *a, const g5c_json *b)
@@ -577,7 +571,7 @@ static g5c_json *assemble(g5c_udr *u, const char *part, const char *key, bool *i
     return out;
 }
 
-/* ---- GET -------------------------------------------------------------------------------------------------------- */
+/* ---- GET ---- */
 
 static void send_doc(const g5c_udr *u, const g5c_req *req, g5c_resp *resp, g5c_json *doc, const udr_rec *rec)
 {
@@ -673,7 +667,7 @@ out:
     free(key);
 }
 
-/* ---- PUT / POST ------------------------------------------------------------------------------------------------- */
+/* ---- PUT / POST ---- */
 
 static bool ext_allowed(const rctx *c, const g5c_req *req, g5c_resp *resp);
 
@@ -735,8 +729,7 @@ static void created_reply(const g5c_req *req, g5c_resp *resp, const char *id_suf
     g5c_resp_json(resp, status, doc);
 }
 
-/* The UDR decides how long a subscription lives (TS 29.504 5.2.2.6.2): the consumer's expiry is a hint, never more than
- * the configured maximum, and spread a little so that subscriptions made together do not all expire together. */
+/* The UDR decides how long a subscription lives (TS 29.504 5.2.2.6.2) */
 static bool prepare_subscription(g5c_udr *u, const char *key, g5c_json *body, bool is_new, g5c_resp *resp)
 {
     int64_t now = (int64_t)time(NULL), max = u->o.subscription_max_s ? u->o.subscription_max_s : 86400, want = now + max;
@@ -794,8 +787,7 @@ static void h_put(void *ctx, const g5c_req *req, g5c_resp *resp)
     }
     if (!prepare_subscription(u, key, body, false, resp))
         goto done;
-    /* A PUT creates the subscriber's partition when it is the first data written for it (registrations and policy data
-     * can precede the subscription data). */
+    /* A PUT creates the subscriber's partition when it is the first data written for it (registrations and policy data can precede the subscription data). */
     {
         udr_rec old;
         rc = u->db->ops->put(u->db->self, part, key, g5c_json_dup(body), &cond, &created, &out, &old);
@@ -888,7 +880,7 @@ done:
     free(child);
 }
 
-/* ---- PATCH ------------------------------------------------------------------------------------------------------ */
+/* ---- PATCH ---- */
 
 typedef struct {
     const rctx *c;
@@ -977,7 +969,7 @@ done:
     free(key);
 }
 
-/* ---- DELETE ----------------------------------------------------------------------------------------------------- */
+/* ---- DELETE ---- */
 
 static void h_delete(void *ctx, const g5c_req *req, g5c_resp *resp)
 {
@@ -1020,7 +1012,7 @@ done:
     free(key);
 }
 
-/* ---- provisioning extensions ------------------------------------------------------------------------------------ */
+/* ---- provisioning extensions ---- */
 
 static bool ct_equal(const char *a, const char *b)
 {
@@ -1096,7 +1088,7 @@ static void h_remove_sub(void *ctx, const g5c_req *req, g5c_resp *resp)
     free(id);
 }
 
-/* ---- router ------------------------------------------------------------------------------------------------------ */
+/* ---- router ---- */
 
 static rctx *mk_ctx(g5c_udr *u, const udr_op_def *op, int doc_schema, bool ext)
 {
@@ -1165,8 +1157,7 @@ static void register_ops(g5c_udr *u, g5c_router *r)
             g5c_router_route(r, op->method, tmpl, handler_for(op->method, op->post_create), c);
             free(tmpl);
         }
-        /* The resources that have a GET but no write operation are provisioned through the same URI by an extension; these routes check the provisioning token themselves
-         * (G5C_ROUTE_OWN_AUTH: the access token of the NRF is not asked for). */
+        /* The resources that have a GET but no write operation are provisioned through the same URI by an extension */
         for (size_t i = 0; i < udr_ops_count; i++) {
             const udr_op_def *op = &udr_ops[i];
             int ds;

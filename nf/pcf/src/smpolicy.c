@@ -62,8 +62,7 @@ static bool supi_ok(const char *s)
     return strncmp(s, "imsi-", 5) == 0 && g5c_is_digits(s + 5);
 }
 
-/* Usage monitoring (backlog A-03, TS 29.512 5.6.2.? UsageMonitoringData and 4.2.6.2.? usage report): with `policy.usage_monitoring` configured, a decision carries a volume threshold
- * (umDecs, referenced by the session rule, with the trigger US_RE) until the SMF has reported that much; from then on the decisions carry the throttle AMBR instead. */
+/* Usage monitoring (backlog A-03, TS 29.512 5.6.2.? UsageMonitoringData and 4.2.6.2.? usage report) */
 static void usage_monitoring(pcf *p, const char *sm_id, g5c_json *d)
 {
     bool throttled = false;
@@ -216,7 +215,7 @@ static void create(void *ctx, const g5c_req *req, g5c_resp *resp)
         p->sessions = g5c_xrealloc(p->sessions, p->capsessions * sizeof *p->sessions);
     }
     p->sessions[p->nsessions++] = s;
-    pcf_bsf_registered(p, id, s.context); /* copies what it needs and queues the work: under the lock, so that the association cannot end meanwhile */
+    pcf_bsf_registered(p, id, s.context); /* copies what it needs and queues the work */
     pthread_mutex_unlock(&p->mu);
     count_req(p, "created");
     update_gauge(p);
@@ -371,7 +370,7 @@ void pcf_smpolicy_routes(g5c_router *r, pcf *p)
     g5c_router_route(r, "POST", BASE "/{smPolicyId}/delete", del, p);
 }
 
-/* ---- notifications towards the SMF ------------------------------------------------------------------------------------------- */
+/* ---- notifications towards the SMF ---- */
 
 typedef struct {
     char *id, *notif_uri, *resource_uri;

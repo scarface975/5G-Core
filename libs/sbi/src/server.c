@@ -1,7 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* HTTP/2 server: libuv for sockets, nghttp2 for the protocol, OpenSSL memory BIOs for TLS.
- * Request handlers run on a per-server pool of worker threads (not libuv's process-global pool), so they may block
- * (e.g. call other NFs) without starving anything else, including another server in the same process. */
+/* HTTP/2 server: libuv for sockets, nghttp2 for the protocol, OpenSSL memory BIOs for TLS */
 #define _POSIX_C_SOURCE 200809L
 #include <pthread.h>
 #include <signal.h>
@@ -80,7 +78,7 @@ struct g5c_server {
     char err[160];
 };
 
-/* ---- stream lifetime --------------------------------------------------------------------- */
+/* ---- stream lifetime ---- */
 
 static void stream_release(stream_t *s)
 {
@@ -91,7 +89,7 @@ static void stream_release(stream_t *s)
     free(s);
 }
 
-/* ---- connection lifetime ------------------------------------------------------------------ */
+/* ---- connection lifetime ---- */
 
 static void conn_free(conn_t *c)
 {
@@ -132,7 +130,7 @@ static void conn_close(conn_t *c)
     uv_close((uv_handle_t *)&c->tcp, on_conn_closed);
 }
 
-/* ---- output path ---------------------------------------------------------------------------- */
+/* ---- output path ---- */
 
 typedef struct {
     uv_write_t req;
@@ -151,8 +149,7 @@ static void on_write(uv_write_t *w, int status)
     conn_unref(c);
 }
 
-/* Queue bytes for the peer. Returns false when the connection was torn down (the caller must not touch it again if it
- * held the last reference; this function never frees it itself while the libuv handle is still open). */
+/* Queue bytes for the peer */
 static bool send_bytes(conn_t *c, g5c_bytes *out)
 {
     wreq_t *wr;
@@ -170,7 +167,7 @@ static bool send_bytes(conn_t *c, g5c_bytes *out)
     if (uv_write(&wr->req, (uv_stream_t *)&c->tcp, &b, 1, on_write) != 0) {
         g5c_bytes_free(&wr->buf);
         free(wr);
-        c->refs--; /* the handle is still open (conn_close below only starts closing it), so this is not the last ref */
+        c->refs--; /* the handle is still open (conn_close below only starts closing it) */
         conn_close(c);
         return false;
     }
@@ -223,8 +220,7 @@ static void conn_flush(conn_t *c)
         conn_close(c);
 }
 
-/* ---- request dispatch ----------------------------------------------------------------------- */
-
+/* ---- request dispatch ---- */
 
 static ssize_t body_read(nghttp2_session *sess, int32_t id, uint8_t *buf, size_t length, uint32_t *flags,
                          nghttp2_data_source *src, void *ud)
@@ -374,7 +370,7 @@ static void dispatch(stream_t *st)
     pthread_mutex_unlock(&srv->wmu);
 }
 
-/* ---- nghttp2 callbacks ------------------------------------------------------------------------- */
+/* ---- nghttp2 callbacks ---- */
 
 static int cb_begin_headers(nghttp2_session *s, const nghttp2_frame *f, void *ud)
 {
@@ -513,7 +509,7 @@ static int cb_stream_close(nghttp2_session *s, int32_t id, uint32_t code, void *
     return 0;
 }
 
-/* ---- input path --------------------------------------------------------------------------------- */
+/* ---- input path ---- */
 
 static int feed_plain(conn_t *c, const uint8_t *p, size_t n)
 {
@@ -638,7 +634,7 @@ static void on_connection(uv_stream_t *l, int status)
         conn_flush(c); /* send our SETTINGS right away on cleartext connections */
 }
 
-/* ---- loop thread ---------------------------------------------------------------------------------- */
+/* ---- loop thread ---- */
 
 static void walk_close(uv_handle_t *h, void *arg)
 {
@@ -728,7 +724,7 @@ g5c_server *g5c_server_start(const g5c_server_cfg *cfg, const g5c_router *router
         return NULL;
     }
     srv->started = true;
-    {   /* handlers may block on other NFs: the pool size bounds concurrent in-flight requests (G5C_SBI_WORKERS, default 32) */
+    {   /* handlers may block on other NFs */
         const char *e = getenv("G5C_SBI_WORKERS");
         long n = e ? strtol(e, NULL, 10) : 32;
         if (n < 1 || n > 512)

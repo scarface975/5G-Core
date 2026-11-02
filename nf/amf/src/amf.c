@@ -9,7 +9,7 @@
 
 #include "priv.h"
 
-/* ---- worker pool ------------------------------------------------------------------------------------------------------------------------- */
+/* ---- worker pool ---- */
 
 void amf_post(amf *a, amf_task_fn fn, void *arg)
 {
@@ -83,7 +83,7 @@ void amf_workers_stop(amf *a)
     a->qt = NULL;
 }
 
-/* ---- timers ------------------------------------------------------------------------------------------------------------------------------- */
+/* ---- timers ---- */
 
 typedef struct {
     int target, kind;
@@ -101,9 +101,7 @@ static void fire_task(amf *a, void *arg)
     free(f);
 }
 
-/* The timers are a binary min-heap on the due time: starting one costs O(log n) and the timer thread looks at the top only (UEs hold long timers for hours,
- * so a table of every pending timer, scanned on every wake-up, cost O(UEs) per started timer). A cancelled timer stays until it is due: its generation
- * no longer matches and gmm_timer ignores it. */
+/* The timers are a binary min-heap on the due time */
 static void heap_swap(amf_tmr *x, amf_tmr *y)
 {
     amf_tmr t = *x;
@@ -227,7 +225,7 @@ void amf_drain_tasks(amf *a)
     pthread_mutex_unlock(&a->qmu);
 }
 
-/* ---- UE table ---------------------------------------------------------------------------------------------------------------------------- */
+/* ---- UE table ---- */
 
 void amf_ue_ref(amf_ue *u)
 {
@@ -384,7 +382,7 @@ void amf_ue_set_tmsi(amf_ue *u, uint32_t tmsi)
     pthread_mutex_unlock(&a->tmu);
 }
 
-/* ---- connections --------------------------------------------------------------------------------------------------------------------------- */
+/* ---- connections ---- */
 
 amf_conn *amf_conn_new(amf *a, uint32_t gnb, uint16_t stream, uint32_t ran_id)
 {
@@ -497,7 +495,7 @@ void amf_conn_authenticated(amf_conn *c)
     pthread_mutex_unlock(&a->tmu);
 }
 
-/* ---- connection mailbox ---------------------------------------------------------------------------------------------------------------------- */
+/* ---- connection mailbox ---- */
 
 static void conn_run(amf *a, void *arg)
 {
@@ -579,7 +577,7 @@ void amf_conn_post_timer(amf_conn *c, int kind, uint32_t gen)
     post_ev(c, e);
 }
 
-/* ---- gauges ------------------------------------------------------------------------------------------------------------------------------- */
+/* ---- gauges ---- */
 
 void amf_gauges(amf *a)
 {
@@ -604,7 +602,7 @@ void amf_gauges(amf *a)
     pthread_mutex_unlock(&a->tmu);
 }
 
-/* ---- configuration ----------------------------------------------------------------------------------------------------------------------- */
+/* ---- configuration ---- */
 
 static bool http_uri(const char *u)
 {
@@ -976,7 +974,7 @@ amf *amf_from_config(const g5c_json *root, g5c_nf *nf, char *err, size_t cap)
         get_uint(c, "max_unauthenticated", 1, 1000000, &cf->unauth_ue_max, "amf", err, cap) != 0)
         goto fail;
     (void)u;
-    if (g5c_json_get(c, "inject") != NULL) { /* `inject: { registration_reject: [{ supi: imsi-0010100, cause: 11 }], accept_delay_ms: 2000 }` */
+    if (g5c_json_get(c, "inject") != NULL) { /* `inject: { registration_reject: [{ supi: imsi-0010100, cause: 11 }], accept_delay_ms */
         static const char *const k_inj[] = {"registration_reject", "accept_delay_ms", NULL}, *const k_rej[] = {"supi", "cause", NULL};
         const g5c_json *inj = g5c_json_get(c, "inject"), *rl = g5c_json_get(inj, "registration_reject");
         int64_t d = 0;
@@ -1026,7 +1024,7 @@ fail:
     return NULL;
 }
 
-/* ---- lifecycle ---------------------------------------------------------------------------------------------------------------------------- */
+/* ---- lifecycle ---- */
 
 void amf_set_self_uri(amf *a, const char *uri)
 {
@@ -1117,7 +1115,7 @@ void amf_destroy(amf *a)
     free(a);
 }
 
-/* ---- introspection ----------------------------------------------------------------------------------------------------------------------- */
+/* ---- introspection ---- */
 
 uint16_t amf_ngap_port(const amf *a)
 {
@@ -1233,7 +1231,7 @@ g5c_json *amf_nrf_info(const amf *a)
     return o;
 }
 
-/* ---- test hooks ------------------------------------------------------------------------------------------------------------------------------ */
+/* ---- test hooks ---- */
 
 int amf_test_start(amf *a)
 {

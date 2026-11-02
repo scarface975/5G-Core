@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* The UPF runtime over real sockets: an SMF, a gNB and a data network talk to it through UDP and a datagram socketpair (standing in
- * for the TUN device, so no privileges are needed). */
+/* The UPF runtime over real sockets */
 #define _DEFAULT_SOURCE
 #include <arpa/inet.h>
 #include <pthread.h>

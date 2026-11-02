@@ -39,7 +39,7 @@ void amf_set_self_uri(amf *a, const char *uri);
 /* The AmfInfo the NRF profile carries (caller frees). */
 g5c_json *amf_nrf_info(const amf *a);
 
-/* ---- introspection (tests, g5c-ctl) ------------------------------------------------------------------------------------------------------ */
+/* ---- introspection (tests, g5c-ctl) ---- */
 
 uint16_t amf_ngap_port(const amf *a);
 size_t amf_gnb_count(amf *a);
@@ -67,7 +67,7 @@ void amf_get_stats(amf *a, amf_stats *out);
 int amf_ue_deregister(amf *a, const char *supi, bool reregister);
 int amf_ue_config_update(amf *a, const char *supi, bool new_guti);
 
-/* ---- hooks for the fuzz harness and unit tests (no sockets involved) ------------------------------------------------------------------------ */
+/* ---- hooks for the fuzz harness and unit tests (no sockets involved) ---- */
 
 /* Start the workers and the timer thread only (no SCTP listener, no state file). */
 int amf_test_start(amf *a);

@@ -15,7 +15,7 @@
 
 #define SQN_MASK ((1ULL << 48) - 1)
 
-/* ---- AKA ------------------------------------------------------------------------------------------------------ */
+/* ---- AKA ---- */
 
 uint64_t udm_next_sqn(uint64_t stored)
 {
@@ -115,7 +115,7 @@ int udm_resync(const uint8_t k[16], const uint8_t opc[16], const uint8_t rand[16
     return 0;
 }
 
-/* ---- credential protection -------------------------------------------------------------------------------------- */
+/* ---- credential protection ---- */
 
 void udm_keys_none(udm_keys *k)
 {
@@ -266,7 +266,7 @@ int udm_keys_set_previous_hex(udm_keys *k, const char *hex64)
     return 0;
 }
 
-/* ---- identity ------------------------------------------------------------------------------------------------------ */
+/* ---- identity ---- */
 
 static bool all_digits(const char *s, size_t n)
 {
@@ -367,7 +367,7 @@ int udm_resolve(const char *id, const udm_hnkey *keys, size_t nkeys, char *out, 
     return 0;
 }
 
-/* ---- util ----------------------------------------------------------------------------------------------------------- */
+/* ---- util ---- */
 
 void udm_iso8601_utc(uint64_t secs, char out[21])
 {

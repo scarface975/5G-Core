@@ -151,8 +151,7 @@ int udm_auth_removal(ausf *a, const char *supi, const char *snn, const char *aut
         return -1;
     url = g5c_xasprintf("%s/nudm-ueau/v1/%s/auth-events/%s", root, supi, event_id != NULL ? event_id : "unknown");
     free(root);
-    /* TS 29.503 6.3.6.2.6: success is false when the result is removed. Open5GS's UDM insists on true next to authRemovalInd (its own AUSF sends that): a UDM that
-     * answers 400 gets the second form. */
+    /* TS 29.503 6.3.6.2.6: success is false when the result is removed */
     st = put_removal(a, url, snn, auth_type, false);
     if (st == 400) {
         st = put_removal(a, url, snn, auth_type, true);

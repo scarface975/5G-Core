@@ -32,14 +32,13 @@
 #define SMF_MAX_RULES 16 /* PCC rules per session */
 #define SMF_MAX_FILTERS 8 /* flow descriptions per PCC rule */
 
-/* ---- bit rates (TS 29.571 BitRate: "<number> bps|Kbps|Mbps|Gbps|Tbps") ---------------------------------------------------------- */
+/* ---- bit rates (TS 29.571 BitRate: "<number> bps|Kbps|Mbps|Gbps|Tbps") ---- */
 bool smf_parse_bitrate(const char *s, uint64_t *kbps); /* rounds up to whole kbit/s */
 char *smf_format_bitrate(uint64_t kbps);               /* the largest unit that represents it exactly; caller frees */
 
-/* ---- UE address pools --------------------------------------------------------------------------------------------------------- */
+/* ---- UE address pools ---- */
 typedef struct smf_pool smf_pool;
-/* cidr4 / cidr6 may each be NULL. IPv4: /8../30, the first host address is reserved for the gateway. IPv6: a prefix of /48../63
- * from which /64 prefixes are handed out (at most 65536 of them). NULL with err on failure. */
+/* cidr4 / cidr6 may each be NULL. IPv4: /8../30, the first host address is reserved for the gateway */
 smf_pool *smf_pool_new(const char *cidr4, const char *cidr6, char *err, size_t errcap);
 void smf_pool_free(smf_pool *p);
 int smf_pool_alloc4(smf_pool *p, uint8_t ip[4]);     /* 0, or -1 when the pool is exhausted or has no IPv4 range */
@@ -54,7 +53,7 @@ size_t smf_pool_used6(smf_pool *p);
 bool smf_pool_has4(const smf_pool *p);
 bool smf_pool_has6(const smf_pool *p);
 
-/* ---- policy model (from the PCF's SmPolicyDecision, TS 29.512 5.6.2.4) ------------------------------------------------------------- */
+/* ---- policy model (from the PCF's SmPolicyDecision, TS 29.512 5.6.2.4) ---- */
 typedef struct {
     uint8_t qfi, qi5, arp_prio;
     bool pre_cap, pre_vuln;
@@ -90,8 +89,7 @@ typedef struct {
 /* 0, or -1 with err. Rules whose QoS data is missing or whose flows are malformed are rejected as a whole. */
 int smf_policy_from_decision(const g5c_json *decision, smf_policy *out, char *err, size_t errcap);
 void smf_policy_free(smf_policy *p);
-/* Give the flows of `np` the QFIs / QER ids and its rules the PDR ids they had in `old` when they are unchanged, and fresh unused ones otherwise
- * (old may be NULL: ids are then derived from position). A rule's qfi follows its flow. */
+/* Give the flows of `np` the QFIs / QER ids and its rules the PDR ids they had in `old` when they are unchanged, and fresh unused ones otherwise */
 void smf_policy_assign_ids(smf_policy *np, const smf_policy *old);
 
 /* IPFilterRule (TS 29.212 5.4.2) subset used in SDF filters: "permit out <proto|ip> from <addr[/len]|any|assigned> [ports] to <...> [ports]". */
@@ -106,7 +104,7 @@ typedef struct {
 } smf_ipfilter;
 int smf_ipfilter_parse(const char *rule, smf_ipfilter *out); /* 0, or -1 (not an IPv4 permit-out rule this code understands) */
 
-/* ---- 5GSM NAS (TS 24.501) --------------------------------------------------------------------------------------------------------- */
+/* ---- 5GSM NAS (TS 24.501) ---- */
 typedef struct {
     uint8_t psi, pti;
     uint8_t pdu_type;  /* 0: not given (use the subscribed default), else 1 IPv4, 2 IPv6, 3 IPv4v6 */
@@ -149,8 +147,7 @@ void smf_gsm_session_ambr(uint64_t ul_kbps, uint64_t dl_kbps, uint8_t out[6]);
 int smf_gsm_put_qos_rule(g5c_bytes *out, uint8_t qri, bool dqr, uint8_t precedence, uint8_t qfi, const char *const *filters,
                          const uint8_t *dirs, size_t nfilters);
 int smf_gsm_put_qos_flow_desc(g5c_bytes *out, const smf_flow *f);
-/* PDU SESSION MODIFICATION COMMAND taking the UE from `oldp` to `newp` (ids assigned): the new Session-AMBR, QoS rules created / deleted, QoS flow
- * descriptions created / modified / deleted. PTI 0: a network-requested procedure. 0, or -1. */
+/* PDU SESSION MODIFICATION COMMAND taking the UE from `oldp` to `newp` (ids assigned) */
 int smf_gsm_build_mod_cmd(uint8_t psi, const smf_policy *oldp, const smf_policy *newp, g5c_bytes *out);
 
 /* 5GSM cause values used (TS 24.501 Table 9.11.4.2.1) */
@@ -172,7 +169,7 @@ enum {
     SMF_5GSM_PDU_TYPE_IPV6_ONLY = 51
 };
 
-/* ---- N2 SM information (TS 38.413 9.3.4) ------------------------------------------------------------------------------------------------ */
+/* ---- N2 SM information (TS 38.413 9.3.4) ---- */
 typedef struct {
     uint8_t pdu_type; /* 1 IPv4, 2 IPv6, 3 IPv4v6 */
     uint64_t ambr_ul, ambr_dl;
@@ -203,7 +200,7 @@ int smf_n2_parse_ho_ack(const uint8_t *buf, size_t len, smf_an_tunnel *out, char
 int smf_n2_build_path_switch_ack(const uint8_t upf_ip4[4], uint32_t ul_teid, g5c_bytes *out);
 int smf_n2_build_ho_command(g5c_bytes *out);
 
-/* ---- N4: PFCP client towards the UPFs ----------------------------------------------------------------------------------------------------- */
+/* ---- N4: PFCP client towards the UPFs ---- */
 typedef struct smf_upf smf_upf;
 typedef struct smf_n4 smf_n4;
 
@@ -219,7 +216,7 @@ typedef struct {
         uint32_t sd;
     } snssai[8];
     size_t nsnssai; /* empty: serves every slice */
-    bool has_known_recovery; /* the Recovery Time Stamp this UPF had when the SMF last ran (restored state): a different one on association means a restart */
+    bool has_known_recovery; /* the Recovery Time Stamp this UPF had when the SMF last ran (restored state) */
     uint32_t known_recovery;
 } smf_upf_cfg;
 
@@ -231,7 +228,7 @@ typedef struct {
     unsigned hb_interval_s, hb_failures;
     unsigned lost_after_s; /* a UPF that stays unreachable this long is declared lost (0: never) */
     unsigned inject_drop_pct; /* `smf.inject.n4_drop_responses_percent`: test knob, PFCP responses thrown away on arrival */
-    uint16_t gtpu_port;    /* UDP port for GTP-U towards the UPFs (control-plane user-plane traffic: router solicitation / advertisement); 0: none */
+    uint16_t gtpu_port;    /* UDP port for GTP-U towards the UPFs (control-plane user-plane traffic */
     smf_upf_cfg *upfs;
     size_t nupfs;
 } smf_n4_cfg;
@@ -272,8 +269,7 @@ smf_upf *smf_n4_select(smf_n4 *n, const char *dnn, uint8_t sst, bool has_sd, uin
 /* Block until every configured UPF is associated or timeout_ms elapsed. True if all are up. */
 bool smf_n4_wait_up(smf_n4 *n, unsigned timeout_ms);
 uint64_t smf_n4_new_seid(smf_n4 *n);
-/* The SMF's own Recovery Time Stamp (what it tells UPFs about its start). A restart that keeps its sessions must keep the stamp: UPFs drop the
- * sessions of a peer whose stamp changed. Set it before smf_n4_start(). */
+/* The SMF's own Recovery Time Stamp (what it tells UPFs about its start) */
 uint32_t smf_n4_recovery(const smf_n4 *n);
 void smf_n4_set_recovery(smf_n4 *n, uint32_t ts);
 /* Never hand out a CP SEID below `floor` (restored sessions keep theirs). */
@@ -288,7 +284,7 @@ int smf_n4_send_gtpu(smf_n4 *n, const smf_peer *to, uint32_t teid, const uint8_t
 int smf_n4_call(smf_n4 *n, smf_upf *u, uint8_t type, bool session, uint64_t seid, const uint8_t *body, size_t blen, smf_n4_msg *resp);
 void smf_n4_local_addr(const smf_n4 *n, uint8_t ip4[4]);
 
-/* ---- N4 rule generation: sessions -> PFCP --------------------------------------------------------------------------------------------------- */
+/* ---- N4 rule generation: sessions -> PFCP ---- */
 typedef struct {
     uint64_t cp_seid;
     uint8_t smf_ip4[4];
@@ -302,11 +298,10 @@ typedef struct {
     uint32_t sd;
     uint32_t rs_teid; /* IPv6: the TEID the UPF puts on router solicitations it forwards to us */
     const smf_policy *pol;
-    bool want_usage; /* a usage reporting rule (URR 1: volume and duration) is created and the session's PDRs refer to it: the CDR of the session */
+    bool want_usage; /* a usage reporting rule (URR 1 */
 } smf_n4_est;
 
-/* Fixed ids: default PDRs 1 (uplink) and 2 (downlink), FAR 1 = uplink, FAR 2 = downlink, QER 1 = session AMBR, BAR 1. Flows and PCC rules carry
- * their own QER / PDR ids (smf_flow.qer_id, smf_pcc.pdr_ul/pdr_dl), which stay stable across policy updates. */
+/* Fixed ids: default PDRs 1 (uplink) and 2 (downlink), FAR 1 = uplink, FAR 2 = downlink, QER 1 = session AMBR, BAR 1. Flows */
 enum { SMF_URR_SESSION = 1, SMF_URR_MONITOR = 2, SMF_FAR_UL = 1, SMF_FAR_DL = 2, SMF_FAR_CP = 3, SMF_QER_SESSION = 1, SMF_BAR = 1, SMF_PDR_UL_DEFAULT = 1, SMF_PDR_DL_DEFAULT = 2, SMF_PDR_CP = 3,
        SMF_PDR_RS = 4 };
 int smf_n4_build_est(const smf_n4_est *in, uint8_t *out, size_t cap, size_t *len);
@@ -324,8 +319,7 @@ int smf_n4_parse_usage_for(const uint8_t *body, size_t blen, uint32_t urr_id, sm
 /* Update FAR 2 so downlink goes to the gNB tunnel (activate) or is buffered with a downlink-data report (deactivate). */
 int smf_n4_build_mod_activate(const smf_an_tunnel *t, const char *dnn, uint8_t *out, size_t cap, size_t *len);
 int smf_n4_build_mod_deactivate(uint8_t *out, size_t cap, size_t *len);
-/* The N4 modification that takes a session from policy `oldp` to `newp` (ids already assigned): Update QER for changed rates, Create QER / PDR for new
- * flows and rules, Remove PDR / QER for gone ones. *changed is false (and the message empty) when nothing differs on the UPF. */
+/* The N4 modification that takes a session from policy `oldp` to `newp` (ids already assigned) */
 int smf_n4_build_policy_update(const smf_n4_est *ctx, const smf_policy *oldp, const smf_policy *newp, uint8_t *out, size_t cap, size_t *len, bool *changed);
 
 typedef struct {
@@ -341,7 +335,7 @@ typedef struct {
 int smf_n4_parse_est_rsp(const smf_n4_msg *m, smf_n4_est_rsp *out);
 uint8_t smf_n4_cause_of(const smf_n4_msg *m); /* 0 when absent */
 
-/* ---- SMF configuration and state --------------------------------------------------------------------------------------------------------------- */
+/* ---- SMF configuration and state ---- */
 typedef struct {
     char *dnn;
     smf_pool *pool;
@@ -355,7 +349,7 @@ typedef enum { SMF_S_CREATING = 0, SMF_S_ACTIVE, SMF_S_IDLE, SMF_S_RELEASING } s
 enum { SMF_HO_NONE = 0, SMF_HO_PREPARING, SMF_HO_PREPARED };
 
 typedef struct smf_sess {
-    time_t t_est; /* wall clock time the session was established (the start of its CDR); 0 when unknown (restored from the state file) */
+    time_t t_est; /* wall clock time the session was established (the start of its CDR); 0 when unknown */
     char ref[37]; /* smContextRef */
     char supi[64];
     char dnn[64];
@@ -408,7 +402,7 @@ typedef struct smf {
     smf_n4 *n4;
     g5c_client *client; /* not owned */
     g5c_registry *metrics;
-    char *udm, *pcf, *amf; /* base URIs; NULL udm / pcf: discovered through the NRF; amf optional (otherwise discovered, else derived from smContextStatusUri) */
+    char *udm, *pcf, *amf; /* base URIs; NULL udm / pcf */
     g5c_disc *disc;        /* NRF discovery client for the UDM and PCF when their addresses are not configured */
     char *nrf;             /* NRF base URI for discovery; NULL: none */
     pthread_mutex_t cmu;   /* guards the discovery cache */
@@ -447,7 +441,7 @@ typedef struct smf {
     } inject_reject[8]; /* `smf.inject.pdu_session_reject`: test knob (failure injection for RAN tests) */
     unsigned ninject_reject;
     unsigned inject_drop_pct; /* `smf.inject.n4_drop_responses_percent`, handed to the N4 client */
-    char *cdr_path;            /* `smf.cdr.file`: one JSON record per released PDU session (NULL: no charging records, no URR on the UPF) */
+    char *cdr_path;            /* `smf.cdr.file`: one JSON record per released PDU session */
     pthread_mutex_t cdr_mu;
     uint64_t cdr_seq;
     pthread_mutex_t pmu;
@@ -475,8 +469,7 @@ void smf_set_self_uri(smf *s, const char *uri);
 /* Test hook: wait for the deferred-work queue to drain. */
 void smf_drain(smf *s);
 
-/* IPv6 router advertisement answering a router solicitation (RFC 4861): `rs` is the whole IPv6 packet. 0 and the packet in out, or -1 when `rs` is not a
- * valid solicitation. The prefix is the session's /64. */
+/* IPv6 router advertisement answering a router solicitation (RFC 4861): `rs` is the whole IPv6 packet */
 int smf_ra_build(const uint8_t prefix[8], uint16_t mtu, const uint8_t *rs, size_t rslen, uint8_t *out, size_t cap, size_t *len);
 
 /* Create / Update / Release SM context (sm.c) */

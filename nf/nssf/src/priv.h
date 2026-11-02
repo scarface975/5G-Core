@@ -10,13 +10,13 @@
 #include "g5c/nssf.h"
 #include "g5c/oaschema.h"
 
-/* ---- generated schema pool -------------------------------------------------------------------------------------- */
+/* ---- generated schema pool ---- */
 extern const char *const nssf_schema_chunks[];
 extern const size_t nssf_schema_nchunks;
 extern const size_t nssf_schema_count;
 #include "api_ids.gen.h"
 
-/* ---- identifiers ---------------------------------------------------------------------------------------------------- */
+/* ---- identifiers ---- */
 
 typedef struct {
     int sst;
@@ -62,7 +62,7 @@ bool ext_sn_from_json(const g5c_json *j, sn_ext_t *out);
 void ext_sn_free(sn_ext_t *e);
 bool ext_sn_matches(const sn_ext_t *e, const sn_t *s); /* the configured slice `s` is covered by the supported S-NSSAI `e` */
 
-/* ---- configuration -------------------------------------------------------------------------------------------------- */
+/* ---- configuration ---- */
 
 typedef struct {
     sn_t sn;
@@ -110,7 +110,7 @@ const slice_t *cfg_slice(const nssf_cfg *c, const sn_t *s);
 bool slice_in_tai(const slice_t *s, const tai_t *t);
 bool slice_in_range(const slice_t *s, const trange_t *r);
 
-/* ---- state ---------------------------------------------------------------------------------------------------------- */
+/* ---- state ---- */
 
 typedef struct {
     tai_t *tais;

@@ -1,8 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* Dump the JSON our NFs really produce to $G5C_PAYLOAD_DIR, so tools/validate_openapi.py can check every payload against
- * the official 3GPP OpenAPI schemas (scripts/validate_payloads.ps1). Without the variable this is a no-op, so it can sit
- * in the normal test run. Covers the AUSF, UDM (UEAU, SDM, UECM, admin), udr, PCF (SM and AM policy, notifications)
- * and the NRF profile we register. */
+/* Dump the JSON our NFs really produce to $G5C_PAYLOAD_DIR, so tools/validate_openapi.py can check every payload against the official 3GPP OpenAPI */
 #define _DEFAULT_SOURCE
 #include <pthread.h>
 #include <stdio.h>
@@ -91,9 +88,9 @@ static void h_sdm_cb(void *ctx, const g5c_req *req, g5c_resp *resp)
     g5c_resp_status(resp, 204);
 }
 
-/* ---- authentication, UDM, UDR ------------------------------------------------------------------------------------ */
+/* ---- authentication, UDM, UDR ---- */
 
-/* ---- AUSF: EAP-AKA', SoR and UPU protection, FN-RG ---------------------------------------------------------------------------------------------------- */
+/* ---- AUSF: EAP-AKA', SoR and UPU protection, FN-RG ---- */
 
 static void ausf_more_payloads(const char *ausf_uri, const char *udm_uri, const char *k_hex, const char *op_hex)
 {
@@ -351,7 +348,7 @@ static void identity_stack_payloads(void)
     g5c_registry_free(m2);
 }
 
-/* ---- PCF -------------------------------------------------------------------------------------------------------------- */
+/* ---- PCF ---- */
 
 typedef struct {
     pthread_mutex_t mu;
@@ -496,7 +493,7 @@ static void pcf_payloads(void)
     pthread_mutex_destroy(&notes.mu);
 }
 
-/* ---- NRF: registration, heart-beat, subscription, notification, discovery, access token ------------------------------------------------------- */
+/* ---- NRF: registration, heart-beat, subscription, notification, discovery, access token ---- */
 
 static void nrf_cb(void *c, const g5c_req *q, g5c_resp *r)
 {
@@ -620,7 +617,7 @@ static void nrf_payloads(void)
     g5c_nf_free(nf);
 }
 
-/* ---- UDR: the resources, the subscriptions and the notifications it sends ---------------------------------------------------------------------- */
+/* ---- UDR: the resources, the subscriptions and the notifications it sends ---- */
 
 /* the consumer: /cb/<payload-name> receives a DataChangeNotify (an object) or an array of the other notifications; element 0 is dumped */
 static void udr_cb(void *ctx, const g5c_req *req, g5c_resp *resp)
@@ -781,7 +778,7 @@ static void udr_payloads(void)
     g5c_router_free(cbr);
 }
 
-/* ---- NSSF: slice selection, NSSAI availability, subscriptions, notifications ------------------------------------------------------------------------ */
+/* ---- NSSF: slice selection, NSSAI availability, subscriptions, notifications ---- */
 
 static char *url_encode(const char *in)
 {
@@ -904,7 +901,7 @@ static void nssf_payloads(void)
     g5c_router_free(cbr);
 }
 
-/* ---- NEF: traffic influence, monitoring events, notifications ---------------------------------------------------------------------------------------- */
+/* ---- NEF: traffic influence, monitoring events, notifications ---- */
 
 typedef struct {
     pthread_mutex_t mu;
@@ -1100,7 +1097,7 @@ static void nef_payloads(void)
     dump("nef_ProblemDetails_500", v);
     g5c_json_free(v);
     free(e);
-    {   /* the notification of the AMF: found by the callback path the NEF gave it (a fake peer cannot do it, the NEF's own router is used) */
+    {   /* the notification of the AMF */
         g5c_req req;
         g5c_resp resp;
         char *id = strrchr(loc, '/') + 1, path[160];

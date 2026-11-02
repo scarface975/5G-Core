@@ -11,7 +11,7 @@
 
 #define AUSF_LOG "g5c_ausf"
 
-/* ---- a small chained hash map with string keys (the tables are guarded by ausf.mu) ------------------------------------------------------------- */
+/* ---- a small chained hash map with string keys (the tables are guarded by ausf.mu) ---- */
 
 typedef struct hnode {
     char *key;
@@ -32,7 +32,7 @@ void *hmap_del(hmap *h, const char *key);          /* returns the value */
 /* visit every entry; the callback must not modify the map */
 void hmap_each(const hmap *h, void (*fn)(const char *key, void *val, void *arg), void *arg);
 
-/* ---- authentication contexts ----------------------------------------------------------------------------------------------------------------- */
+/* ---- authentication contexts ---- */
 
 typedef enum {
     M_5GAKA = 1,
@@ -72,7 +72,7 @@ typedef struct {
     size_t n;
 } clist; /* oldest first: contexts expire in the order they were created */
 
-/* ---- security contexts (the latest KAUSF per SUPI) --------------------------------------------------------------------------------------------- */
+/* ---- security contexts (the latest KAUSF per SUPI) ---- */
 
 typedef struct ausf_ue {
     char *supi;
@@ -108,7 +108,7 @@ struct ausf {
     int gap_ms;
 };
 
-/* ---- helpers ------------------------------------------------------------------------------------------------------------------------------------- */
+/* ---- helpers ---- */
 
 /* the response is not to be cached (TS 29.509 6.1.3.2.3: this response shall not be cached), and a body with _links is 3GPP hypermedia (6.1.2.2.2) */
 void ausf_no_store(g5c_resp *resp);

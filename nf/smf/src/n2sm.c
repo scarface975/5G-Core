@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* N2 SM information (TS 38.413 clause 9.3.4): the transfer containers the SMF builds for, and reads from, the AN. Encoded with the
- * generic APER codec; the field names are those of the pinned ASN.1 (NGAP-IEs.asn). */
+/* N2 SM information (TS 38.413 clause 9.3.4): the transfer containers the SMF builds for, and reads from, the AN */
 #include <stdio.h>
 #include <string.h>
 
@@ -256,7 +255,7 @@ int smf_n2_build_mod_req(const smf_policy *oldp, const smf_policy *newp, g5c_byt
     return rc;
 }
 
-/* ---- handover transfers (TS 38.413 9.3.4.8, 9.3.4.9, 9.3.4.14, 9.3.4.15) ------------------------------------------------------------------------------ */
+/* ---- handover transfers (TS 38.413 9.3.4.8, 9.3.4.9, 9.3.4.14, 9.3.4.15) ---- */
 
 static int gtp_tunnel_of(const g5c_json *up, const g5c_json *flows, smf_an_tunnel *o, char *err, size_t cap)
 {

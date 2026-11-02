@@ -79,8 +79,7 @@ enum { D_HIT = 0, D_MISS, D_FAIL, D_NONE };                          /* c_disc *
 /* select.c */
 void cands_free(cands_t *c);
 void cands_add(cands_t *c, const char *apiroot, const char *nf_id, int priority, unsigned capacity, unsigned load);
-/* the discovery query of the request's 3gpp-Sbi-Discovery-* headers; fills `out` (the candidates, in the order to try them) from the cache or the NRF.
- * 0, or the status of the error to answer (400 NF_DISCOVERY_FAILURE ..., with cause and detail). */
+/* the discovery query of the request's 3gpp-Sbi-Discovery-* headers; fills `out` (the candidates, in the order to try them) from the cache or the NRF */
 int scp_discover(scp *s, const g5c_req *req, const char *ua, const char *nrf_hdr, const char *extra_query, cands_t *out, char **cache_key, const char **cause, char *detail, size_t dcap);
 void scp_cache_forget(scp *s, const char *query_key);
 bool scp_healthy(scp *s, const char *authority);

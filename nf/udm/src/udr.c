@@ -115,7 +115,7 @@ static udr_result do_req(const udm_udr *u, const char *method, const char *path_
     }
     s = body ? g5c_json_to_string(body, &n) : NULL;
     {
-        char *auth = u->token != NULL ? g5c_xstrdup(u->token) : NULL; /* the provisioning token has a header of its own: Authorization is for the NRF's access token */
+        char *auth = u->token != NULL ? g5c_xstrdup(u->token) : NULL; /* the provisioning token has a header of its own */
         g5c_kv hdr = {"x-g5c-provisioning-token", auth};
         rc = g5c_client_request(u->client, method, path_url, auth != NULL ? &hdr : NULL, auth != NULL ? 1 : 0,
                                 ctype ? ctype : G5C_JSON_TYPE, s, n, &r, NULL, 0);

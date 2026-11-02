@@ -4,7 +4,7 @@
 
 #include "e2e_procs.h"
 
-/* ---- cases -------------------------------------------------------------------------------------------------------------------------------------- */
+/* ---- cases ---- */
 
 static void test_ng_setup(void)
 {
@@ -137,7 +137,7 @@ static void test_registration(void)
     }
     gnb_confirm_release(&g, &u);
     TK_ASSERT(wait_ue_gone(u.supi));
-    {   /* the SDM subscription the AMF made at registration goes with the context (found by the soak: the UDM kept one per registration) */
+    {   /* the SDM subscription the AMF made at registration goes with the context (found by the soak */
         double end = now_s() + 3;
         size_t n = 1;
         while (now_s() < end && n != 0) {
@@ -260,8 +260,7 @@ static void test_auth_failures(void)
     (void)p;
 }
 
-
-/* ---- sessions, user plane, idle mode -------------------------------------------------------------------------------------------------------- */
+/* ---- sessions, user plane, idle mode ---- */
 
 static void ip4pkt(uint8_t *p, const uint8_t src[4], const uint8_t dst[4], uint8_t proto, uint16_t sport, uint16_t dport, size_t total)
 {
@@ -340,7 +339,6 @@ static void dn_send(const uint8_t *ip, size_t n)
     TK_ASSERT(write(E.dn, ip, n) == (ssize_t)n);
 }
 
-
 static size_t upf_sessions(void)
 {
     size_t n = 0;
@@ -389,7 +387,7 @@ static void check_user_plane(int idx, const sess_t *s, uint32_t gnb_teid)
     TK_ASSERT(teid == gnb_teid && plen == sizeof pkt);
 }
 
-/* EAP-AKA': the challenge in the EAP message of the Authentication request, the EAP response through the AUSF, the EAP-success in the Security mode command */
+/* EAP-AKA': the challenge in the EAP message of the Authentication request, the EAP response through the AUSF */
 static void test_eap_registration(void)
 {
     gnb_t g;
@@ -632,8 +630,7 @@ static void test_sessions(void)
     TK_ASSERT(wait_ue(u.supi, 1, 0, -1)); /* the association went away: CM-IDLE, still registered */
 }
 
-
-/* ---- idle mode, service request, paging ---------------------------------------------------------------------------------------------------- */
+/* ---- idle mode, service request, paging ---- */
 
 static void put_stmsi(const ue_t *u, g5c_bytes *out)
 {
@@ -938,8 +935,7 @@ static void test_paging_failure(void)
     gnb_close(&g);
 }
 
-
-/* ---- context reuse, identification, network-initiated procedures -------------------------------------------------------------------------------- */
+/* ---- context reuse, identification, network-initiated procedures ---- */
 
 static void test_context_reuse(void)
 {
@@ -1349,8 +1345,7 @@ static void test_sbi_errors(void)
     g5c_resp_free(&r);
 }
 
-
-/* ---- mobility: Xn path switch and N2 handover ------------------------------------------------------------------------------------------------- */
+/* ---- mobility: Xn path switch and N2 handover ---- */
 
 static char *encoded_hex(const char *type, g5c_json *tree)
 {
@@ -1801,8 +1796,7 @@ static void test_handover_failure(void)
     gnb_close(&b);
 }
 
-
-/* ---- algorithm negotiation, rejects, timers, persistence ------------------------------------------------------------------------------------- */
+/* ---- algorithm negotiation, rejects, timers, persistence ---- */
 
 static void test_algorithms_and_rejects(void)
 {

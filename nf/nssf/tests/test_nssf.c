@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* The NSSF end to end, in process: slice selection for registration, PDU session establishment, UE configuration update and PDN connection
- * (home and roaming), the NSSAI availability of the AMFs, the subscriptions and the notifications (a real HTTP/2 callback server), the state file. */
+/* The NSSF end to end, in process */
 #define _DEFAULT_SOURCE
 #include <ctype.h>
 #include <pthread.h>
@@ -140,7 +139,7 @@ static const g5c_json *allowed(const g5c_json *out)
     return g5c_json_get(g5c_json_at(g5c_json_get(out, "allowedNssaiList"), 0), "allowedSnssaiList");
 }
 
-/* ---- slice selection --------------------------------------------------------------------------------------------------------- */
+/* ---- slice selection ---- */
 
 static void test_registration(void)
 {
@@ -281,7 +280,7 @@ static void test_roaming(void)
     TK_ASSERT(g5c_json_get(g5c_json_at(allowed(x.json), 0), "mappedHomeSnssai") != NULL);
     TK_ASSERT(has_sn(g5c_json_get(x.json, "mappingOfNssai"), 1, NULL) || g5c_json_len(g5c_json_get(x.json, "mappingOfNssai")) == 1);
     done(&x);
-    x = sel(r, "amf-9", regbad); /* the mapped home S-NSSAI is not subscribed: not permitted; the default home S-NSSAI 9 maps to serving sst 1 instead */
+    x = sel(r, "amf-9", regbad); /* the mapped home S-NSSAI is not subscribed */
     TK_ASSERT(x.status == 200 && has_sn(allowed(x.json), 1, NULL) && has_sn(g5c_json_get(x.json, "rejectedNssaiInPlmn"), 1, NULL) == false);
     done(&x);
     x = sel(r, "amf-9", map);
@@ -345,7 +344,7 @@ static void test_policy_and_errors(void)
     nssf_destroy(n);
 }
 
-/* ---- NSSAI availability ------------------------------------------------------------------------------------------------------ */
+/* ---- NSSAI availability ---- */
 
 #define AVAIL_AMF1                                                                                                                            \
     "{\"supportedNssaiAvailabilityData\":[{\"tai\":" TAI1 ",\"supportedSnssaiList\":[{\"sst\":1},{\"sst\":1,\"sd\":\"000001\"},{\"sst\":5}]}],"       \
@@ -446,7 +445,7 @@ static void test_availability(void)
     nssf_destroy(n);
 }
 
-/* ---- subscriptions and notifications -------------------------------------------------------------------------------------------------- */
+/* ---- subscriptions and notifications ---- */
 
 typedef struct {
     pthread_mutex_t mu;
@@ -623,7 +622,7 @@ static void test_subscriptions(void)
         g5c_json_free(sink.items[i]);
 }
 
-/* ---- the state file --------------------------------------------------------------------------------------------------------------- */
+/* ---- the state file ---- */
 
 static void test_state(void)
 {
@@ -670,7 +669,7 @@ static void test_state(void)
     free(extra);
 }
 
-/* ---- configuration ----------------------------------------------------------------------------------------------------------------- */
+/* ---- configuration ---- */
 
 static void test_config(void)
 {

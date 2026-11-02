@@ -28,7 +28,7 @@ extern const size_t nef_schema_nchunks, nef_schema_count;
 enum { API_TI = 0, API_ME = 1, API_AQ = 2, API_COUNT = 3 };
 extern const char *const nef_api_names[API_COUNT];
 
-/* ---- configuration -------------------------------------------------------------------------------------------------- */
+/* ---- configuration ---- */
 
 typedef struct {
     char *id, *token;
@@ -50,12 +50,12 @@ struct nef_cfg {
     unsigned sub_lifetime_s, notify_retries, max_reports, max_wait_s;
     unsigned udr_timeout_ms;
     bool validate;
-    bool events_via_udm; /* monitoring events: subscribe at the UDM (Nudm_EventExposure) instead of at the AMF directly */
+    bool events_via_udm; /* monitoring events: subscribe at the UDM (Nudm_EventExposure) instead of at the AMF */
 };
 
 const nef_af *cfg_af(const nef_cfg *c, const char *id);
 
-/* ---- state ---------------------------------------------------------------------------------------------------------- */
+/* ---- state ---- */
 
 typedef struct {
     int api;
@@ -95,7 +95,7 @@ struct nef {
     g5c_gauge *g_subs[API_COUNT];
 };
 
-/* ---- util.c ----------------------------------------------------------------------------------------------------------- */
+/* ---- util.c ---- */
 void nef_problem(g5c_resp *resp, int status, const char *cause, const char *detail);
 void nef_invalid(g5c_resp *resp, int status, const char *cause, const char *pointer, const char *reason);
 bool uri_ok(const char *u);                                       /* http or https, a host, no userinfo, no fragment */
@@ -110,7 +110,7 @@ bool is_hex_id(const char *s);
 char *pct_encode(const char *s);
 int peer_status(int upstream);
 
-/* ---- nef.c ------------------------------------------------------------------------------------------------------------ */
+/* ---- nef.c ---- */
 char *nef_key(int api, const char *af, const char *id);
 res_t *res_find(nef *n, int api, const char *af, const char *id); /* caller holds mu */
 res_t *res_add(nef *n, int api, const char *af, const char *id, g5c_json *doc, g5c_json *ctx); /* takes doc and ctx; caller holds mu */
@@ -119,8 +119,7 @@ size_t res_count(nef *n, int api, const char *af);                 /* caller hol
 void nef_dirty(nef *n);                                            /* the state changed: write it */
 void nef_enqueue(nef *n, const char *url, char *body, const char *res_key, double delay_s); /* takes body */
 char *nef_root(nef *n, const char *configured, const char *type, const char *service);
-/* The PCF that holds the PDU session of the UE of an AsSessionWithQoS request: the configured one, else the one the BSF names for the UE's address (TS 29.521 4.2.4),
- * else a PCF of the NRF. NULL when there is none. */
+/* The PCF that holds the PDU session of the UE of an AsSessionWithQoS request */
 char *nef_pcf_root(nef *n, const g5c_json *req);
 void nef_call_failed(nef *n, int api_peer);                        /* a call to another function failed: forget the discovered address */
 int nef_peer(nef *n, const char *root, const char *method, const char *path, const g5c_json *body, g5c_resp *out, char *err, size_t errcap);
@@ -133,7 +132,7 @@ void nef_worker_stop(nef *n);
 bool nef_body_ok(nef *n, const g5c_json *body, int schema, g5c_resp *resp);
 void nef_reply_res(g5c_resp *resp, int status, const res_t *r, const g5c_req *req, const char *base);
 
-/* ---- ti.c, me.c --------------------------------------------------------------------------------------------------------- */
+/* ---- ti.c, me.c ---- */
 void ti_routes(g5c_router *r, nef *n);
 void me_routes(g5c_router *r, nef *n);
 void as_routes(g5c_router *r, nef *n);

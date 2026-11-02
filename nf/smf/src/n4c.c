@@ -1,7 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* PFCP client side of N4 (TS 29.244): one UDP socket shared by all UPFs, a receive thread that completes pending requests by
- * sequence number (and answers requests from the UPF), request retransmission (clause 6.2.1: T1 / N1), association set-up and
- * heartbeats (clause 6.2.6) with restart detection through the Recovery Time Stamp (clause 6.2.2). */
+/* PFCP client side of N4 (TS 29.244) */
 #define _DEFAULT_SOURCE
 #include <arpa/inet.h>
 #include <errno.h>
@@ -214,7 +212,7 @@ static void handle_request(smf_n4 *n, const struct sockaddr_in *from, const pfcp
         break;
     }
     default:
-        break; /* PFD management, node report etc. are not used by this SMF; unanswered requests are retransmitted by the peer and given up */
+        break; /* PFD management, node report etc */
     }
 }
 
@@ -283,7 +281,7 @@ static void *rx_main(void *a)
     return NULL;
 }
 
-/* ---- requests ------------------------------------------------------------------------------------------------------------------------------- */
+/* ---- requests ---- */
 
 static int call_ex(smf_n4 *n, smf_upf *u, uint8_t type, bool session, uint64_t seid, const uint8_t *body, size_t blen, smf_n4_msg *resp,
                    unsigned tries)
@@ -293,7 +291,7 @@ static int call_ex(smf_n4 *n, smf_upf *u, uint8_t type, bool session, uint64_t s
     pfcp_header h;
     uint32_t seq = (uint32_t)(atomic_fetch_add(&n->seq, 1) & 0x7fffff) + 1;
     int rc = -1;
-    memset(resp, 0, offsetof(smf_n4_msg, body)); /* a call that fails (UPF gone, timeout) leaves an empty response: the callers read the cause from it */
+    memset(resp, 0, offsetof(smf_n4_msg, body)); /* a call that fails (UPF gone, timeout) leaves an empty response */
     resp->blen = 0;
     if (session)
         pfcp_header_session(&h, type, seid, seq);
@@ -424,7 +422,7 @@ static void *hb_main(void *a)
                             have = true;
                     bool changed = have && atomic_load(&u->have_recovery) && atomic_load(&u->peer_recovery) != rec;
                     upf_mark_up(n, u, rec, have);
-                    if (changed) { /* a restarted UPF has no association with us: set it up again (it refuses sessions with cause 72 until then) */
+                    if (changed) { /* a restarted UPF has no association with us */
                         pthread_mutex_lock(&n->mu);
                         u->up = false;
                         u->next_assoc = 0;
@@ -448,7 +446,7 @@ static void *hb_main(void *a)
     return NULL;
 }
 
-/* ---- lifecycle -------------------------------------------------------------------------------------------------------------------------------- */
+/* ---- lifecycle ---- */
 
 smf_n4 *smf_n4_new(const smf_n4_cfg *cfg, const smf_n4_hooks *hooks, g5c_registry *metrics, char *err, size_t cap)
 {
@@ -498,7 +496,7 @@ smf_n4 *smf_n4_new(const smf_n4_cfg *cfg, const smf_n4_hooks *hooks, g5c_registr
         goto fail;
     }
     n->port = ntohs(sa.sin_port);
-    if (cfg->gtpu_port != 0) { /* optional: only IPv6 sessions need it; a failure disables router advertisements, not the SMF */
+    if (cfg->gtpu_port != 0) { /* optional: only IPv6 sessions need it; a failure disables router advertisements */
         struct sockaddr_in ga = sa;
         n->gfd = socket(AF_INET, SOCK_DGRAM, 0);
         ga.sin_port = htons(cfg->gtpu_port);

@@ -7,9 +7,7 @@
 #include "g5c/multipart.h"
 #include "priv.h"
 
-/* The apiRoot of the UDM or PCF: the configured address, or the one the NRF gives (cached for its validity period). The answer of a discovery is copied
- * into a per-thread buffer, valid until the next call on the same thread; with no UDM / PCF known it is an address that refuses the connection, so the
- * caller reports the usual peer failure. */
+/* The apiRoot of the UDM or PCF: the configured address, or the one the NRF gives (cached for its validity period) */
 static const char *peer_root(smf *s, const char *type, const char *service)
 {
     static __thread char buf[256];
@@ -49,7 +47,7 @@ static g5c_json *snssai_json(uint8_t sst, bool has_sd, uint32_t sd)
     return j;
 }
 
-/* ---- UDM ----------------------------------------------------------------------------------------------------------------------------------- */
+/* ---- UDM ---- */
 
 int smf_udm_sm_data(smf *s, const char *supi, const g5c_json *plmn, uint8_t sst, bool has_sd, uint32_t sd, const char *dnn, g5c_json **out)
 {
@@ -133,7 +131,7 @@ int smf_udm_deregister(smf *s, const char *supi, uint8_t psi)
     return rc;
 }
 
-/* ---- PCF ----------------------------------------------------------------------------------------------------------------------------------- */
+/* ---- PCF ---- */
 
 int smf_pcf_create(smf *s, const smf_sess *ss, const g5c_json *cfg, const char *notif, const g5c_json *plmn, g5c_json **decision, char **resource)
 {
@@ -200,7 +198,7 @@ void smf_pcf_delete(smf *s, const char *resource)
     free(url);
 }
 
-/* ---- AMF ----------------------------------------------------------------------------------------------------------------------------------- */
+/* ---- AMF ---- */
 
 int smf_amf_n1n2(smf *s, const smf_sess *ss, const uint8_t *n1, size_t n1len, const char *n2_type, const uint8_t *n2, size_t n2len)
 {
@@ -282,7 +280,7 @@ void smf_amf_status_notify(smf *s, const char *uri, const char *status, const ch
     g5c_json_free(b);
 }
 
-/* ---- NRF discovery ------------------------------------------------------------------------------------------------------------------------- */
+/* ---- NRF discovery ---- */
 
 static char *root_of_profile(const g5c_json *p)
 {

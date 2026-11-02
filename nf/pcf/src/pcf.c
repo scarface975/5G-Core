@@ -82,11 +82,9 @@ size_t pcf_session_count(pcf *p)
     return n;
 }
 
-/* ---- policy store ---------------------------------------------------------------------------------------------------------- */
+/* ---- policy store ---- */
 
-/* The PCF's own per-subscriber policy document is held in the UDR as operator-specific policy data (TS 29.519
- * `policy-data/ues/{ueId}/operator-specific-data`: a map of OperatorSpecificDataContainer, each { dataType, value }).
- * The map key below is this PCF's; other keys of the map belong to other operators' functions and are not touched. */
+/* The PCF's own per-subscriber policy document is held in the UDR as operator-specific policy data */
 #define PCF_OSD_KEY "g5c-policy"
 
 static char *store_url(pcf *p, const char *supi)
@@ -94,7 +92,7 @@ static char *store_url(pcf *p, const char *supi)
     char *r, *root = NULL;
     if (p->udr_disc != NULL) {
         root = g5c_disc_root(p->udr_disc, "UDR", "nudr-dr", NULL);
-        if (root == NULL) /* no UDR registered at the NRF: an address that refuses the connection, so the caller sees the usual store error */
+        if (root == NULL) /* no UDR registered at the NRF */
             root = g5c_xstrdup("http://127.0.0.1:1");
     }
     r = g5c_xasprintf("%s/nudr-dr/v1/policy-data/ues/%s/operator-specific-data", root != NULL ? root : p->udr, supi);
@@ -164,7 +162,7 @@ int pcf_store_delete(pcf *p, const char *supi)
     return res;
 }
 
-/* ---- router -------------------------------------------------------------------------------------------------------------------- */
+/* ---- router ---- */
 
 g5c_router *pcf_router(pcf *p)
 {
@@ -177,7 +175,7 @@ g5c_router *pcf_router(pcf *p)
     return r;
 }
 
-/* ---- configuration -------------------------------------------------------------------------------------------------------------- */
+/* ---- configuration ---- */
 
 pcf *pcf_from_config(const g5c_json *cfg, g5c_nf *nf, char *err, size_t errcap)
 {

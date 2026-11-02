@@ -1,10 +1,6 @@
 #define _DEFAULT_SOURCE
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* The MonitoringEvent API (TS 29.122 5.3, procedures 4.4.2 as applied to 5GS by TS 29.522 4.4.2): an AF subscribes to loss of connectivity, UE
- * reachability or location reporting of one UE. The NEF resolves the external identity to a SUPI (Nudm_SDM id translation), finds the serving AMF
- * (Nudm_UECM, then the NRF) and subscribes there (Namf_EventExposure, TS 29.518 5.3); the AMF's reports come back to the NEF's callback endpoint
- * and are sent on to the AF as MonitoringNotification. A one-time request is answered with the report itself when the AMF has one. A group of UEs,
- * the other monitoring types and the subscription at the UDM (for a UE that is not registered yet) are not supported. */
+/* The MonitoringEvent API (TS 29.122 5.3, procedures 4.4.2 as applied to 5GS by TS 29.522 4.4.2) */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -47,7 +43,7 @@ static char *self_url(const g5c_req *req, const char *af, const char *id)
     return u;
 }
 
-/* ---- the AMF ------------------------------------------------------------------------------------------------------------ */
+/* ---- the AMF ---- */
 
 /* The root of the namf-evts service of the AMF instance `inst`, from its profile at the NRF; NULL when it cannot be found. */
 static char *amf_root_of(nef *n, const char *inst)
@@ -130,7 +126,7 @@ static char *dup_str(const char *s)
     return s != NULL ? g5c_xstrdup(s) : NULL;
 }
 
-/* ---- reports ---------------------------------------------------------------------------------------------------------- */
+/* ---- reports ---- */
 
 static int lost_reason(const char *r)
 {
@@ -203,7 +199,7 @@ static g5c_json *reports_of(const g5c_json *doc, const g5c_json *report_list)
     return arr;
 }
 
-/* ---- subscription at the AMF ------------------------------------------------------------------------------------------ */
+/* ---- subscription at the AMF ---- */
 
 static void amf_unsubscribe(nef *n, const char *amf_root, const char *amf_sub)
 {
@@ -240,7 +236,7 @@ static void amf_sub_free(amf_sub_t *a)
     g5c_json_free(a->immediate);
 }
 
-/* ---- subscription through the UDM (Nudm_EventExposure, `nef.events_via_udm`) ---------------------------------------------------------------------- */
+/* ---- subscription through the UDM (Nudm_EventExposure, `nef.events_via_udm`) ---- */
 
 /* The UDM's MonitoringReports (an array) as the AMF-shaped report list the rest of this file reads. */
 static g5c_json *udm_to_amf_reports(const g5c_json *arr)
@@ -459,7 +455,7 @@ static int amf_subscribe(nef *n, const char *id, const char *corr, const mtype_t
     return 0;
 }
 
-/* ---- the resource ---------------------------------------------------------------------------------------------------- */
+/* ---- the resource ---- */
 
 static void drop(nef *n, res_t *r)
 {
@@ -589,7 +585,7 @@ static const g5c_json *doc_for_reports(nef *n, const char *af, const char *id)
     r = res_find(n, API_ME, af, id);
     if (r != NULL)
         d = r->doc;
-    pthread_mutex_unlock(&n->mu); /* the document is only replaced by a PUT, which an AF cannot send before it has the answer to the POST */
+    pthread_mutex_unlock(&n->mu); /* the document is only replaced by a PUT, which an AF cannot send before it has the answer */
     return d;
 }
 
@@ -870,7 +866,7 @@ static void h_delete(void *ctx, const g5c_req *req, g5c_resp *resp)
     g5c_resp_status(resp, 204);
 }
 
-/* ---- from the AMF ------------------------------------------------------------------------------------------------------- */
+/* ---- from the AMF ---- */
 
 static res_t *find_by_id(nef *n, const char *id)
 {
@@ -941,7 +937,7 @@ static void h_amf_event(void *ctx, const g5c_req *req, g5c_resp *resp)
         events_common(ctx, g5c_req_param(req, "resId"), in, resp);
 }
 
-/* Nudm_EventExposure notification from the UDM: an array of MonitoringReports; the correlation identifier is in the path (the UDM does not carry it in the body) */
+/* Nudm_EventExposure notification from the UDM */
 static void h_udm_event(void *ctx, const g5c_req *req, g5c_resp *resp)
 {
     g5c_json *arr = g5c_req_json(req, resp), *in;

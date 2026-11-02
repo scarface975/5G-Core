@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* 5GSM relay: the AMF forwards session management messages between the UE and the SMF (TS 24.501 5.4.5, TS 23.502 4.3), keeps one SM context
- * reference per PDU session, and implements Namf_Communication_N1N2MessageTransfer (TS 29.518 5.2.2.3). */
+/* 5GSM relay: the AMF forwards session management messages between the UE and the SMF (TS 24.501 5.4.5, TS 23.502 4.3) */
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,7 +13,7 @@
 #define MT_PDU_MOD_REQ 0xc9
 #define MT_PDU_REL_REQ 0xd1
 
-/* ---- small helpers ------------------------------------------------------------------------------------------------------------------------- */
+/* ---- small helpers ---- */
 
 void amf_pdu_reset(amf_pdu *p)
 {
@@ -102,7 +101,7 @@ static void send_payload_not_forwarded(amf_conn *c, amf_ue *u, uint8_t ptype, co
     g5c_bytes_free(&prot);
 }
 
-/* ---- Nsmf_PDUSession client ---------------------------------------------------------------------------------------------------------------------- */
+/* ---- Nsmf_PDUSession client ---- */
 
 static void parse_smresp(amf_smresp *out)
 {
@@ -288,10 +287,9 @@ int amf_sm_deactivate_all(amf *a, amf_ue *u)
     return n;
 }
 
-/* ---- PDU session establishment ------------------------------------------------------------------------------------------------------------------ */
+/* ---- PDU session establishment ---- */
 
 static void sm_forward_result(amf_conn *c, amf_ue *u, uint8_t psi, amf_smresp *r);
-
 
 /* The counter of PDU session establishment requests by result and slice (backlog B-15: per-slice KPIs): snssai is "<sst>" or "<sst>-<sd as 6 hex>". */
 static void count_pdu(amf *a, const nas_snssai *sn, const char *result)
@@ -422,7 +420,7 @@ static void sm_establish(amf_conn *c, amf_ue *u, const nas_msg *ul, uint8_t psi,
     amf_smresp_free(&r);
 }
 
-/* ---- uplink NAS transport ------------------------------------------------------------------------------------------------------------------------ */
+/* ---- uplink NAS transport ---- */
 
 static void sm_forward(amf_conn *c, amf_ue *u, uint8_t psi, const uint8_t *n1, size_t n1l, uint8_t mt)
 {
@@ -487,7 +485,7 @@ int amf_ul_nas_transport(amf_conn *c, amf_ue *u, const nas_msg *m)
     return 0;
 }
 
-/* ---- results of SMF calls that carry N1 / N2 for the UE and the gNB --------------------------------------------------------------------------------- */
+/* ---- results of SMF calls that carry N1 / N2 for the UE and the gNB ---- */
 
 static g5c_json *tr_item(uint8_t psi, const char *nas_key, const uint8_t *nas, size_t nas_len, const nas_snssai *sn, const char *tr_key, const uint8_t *tr,
                          size_t tr_len)
@@ -541,7 +539,7 @@ static void sm_forward_result(amf_conn *c, amf_ue *u, uint8_t psi, amf_smresp *r
     g5c_bytes_free(&nas);
 }
 
-/* ---- reports from the gNB --------------------------------------------------------------------------------------------------------------------------- */
+/* ---- reports from the gNB ---- */
 
 static uint8_t *item_bytes(const g5c_json *it, const char *key, size_t *n)
 {
@@ -688,7 +686,7 @@ void amf_handle_ics_response(amf_conn *c, amf_ue *u, const g5c_json *msg)
     }
 }
 
-/* ---- PDU session status ------------------------------------------------------------------------------------------------------------------------------ */
+/* ---- PDU session status ---- */
 
 /* The UE says which sessions it holds: those the AMF has that the UE does not are released (TS 24.501 5.5.1.3.4, TS 23.502 4.2.2.2.2). */
 int amf_psi_status_reconcile(amf *a, amf_ue *u, uint16_t ue_status)
@@ -738,7 +736,7 @@ int amf_sm_activate(amf *a, amf_ue *u, uint16_t want, g5c_json **list, uint16_t 
     return n;
 }
 
-/* ---- Namf_Communication_N1N2MessageTransfer ----------------------------------------------------------------------------------------------------- */
+/* ---- Namf_Communication_N1N2MessageTransfer ---- */
 
 static bool in_parse(const g5c_req *req, g5c_resp *resp, g5c_json **j, g5c_mp *mp, bool *is_mp)
 {
@@ -838,8 +836,7 @@ static int deliver_now(amf_conn *c, amf_ue *u, uint8_t psi, const uint8_t *n1, s
     return rc;
 }
 
-/* Called when the UE became reachable. In the context setup (in_ics) only the PDU session setups travel with it (appended to *ics_list); the rest is
- * sent once the connection has its AS context. */
+/* Called when the UE became reachable */
 int amf_n1n2_deliver_pending(amf_conn *c, amf_ue *u, bool in_ics, g5c_json *pdu_list, g5c_json **ics_list_out)
 {
     amf_pend **pp = &u->pend;

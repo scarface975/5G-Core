@@ -24,7 +24,7 @@
 #define AMF_PPID_NGAP 60
 #define AMF_LOG "g5c_amf"
 
-/* ---- identities ------------------------------------------------------------------------------------------------------------------------- */
+/* ---- identities ---- */
 
 typedef struct {
     uint8_t plmn[3]; /* TS 24.008 encoding, the same octets NGAP carries */
@@ -37,7 +37,7 @@ typedef struct {
     uint8_t pointer; /* 6 bits */
 } amf_guami_id;
 
-/* ---- configuration ----------------------------------------------------------------------------------------------------------------------- */
+/* ---- configuration ---- */
 
 typedef struct {
     char *name;
@@ -72,7 +72,7 @@ typedef struct {
     bool allow_null_integrity; /* NIA0 for emergency-less UEs: off by default */
 } amf_cfg;
 
-/* ---- security context -------------------------------------------------------------------------------------------------------------------- */
+/* ---- security context ---- */
 
 typedef struct {
     bool valid;
@@ -90,7 +90,7 @@ typedef struct {
     bool nh_valid;
 } amf_sec;
 
-/* ---- timers ---------------------------------------------------------------------------------------------------------------------------- */
+/* ---- timers ---- */
 
 typedef struct {
     uint32_t gen;
@@ -108,7 +108,7 @@ enum { TT_CONN = 1, TT_UE = 2 };
 typedef struct amf_ue amf_ue;
 typedef struct amf_conn amf_conn;
 
-/* ---- UE context -------------------------------------------------------------------------------------------------------------------------- */
+/* ---- UE context ---- */
 
 typedef enum { MM_DEREGISTERED = 0, MM_REGISTERED = 1 } amf_mm;
 typedef enum { CM_IDLE = 0, CM_CONNECTED = 1 } amf_cm;
@@ -171,7 +171,7 @@ struct amf_ue {
     size_t ntai;
     uint8_t reg_type;
     char pcf_url[256];
-    char ausf_url[320]; /* the AUSF resource of the current authentication result, deleted with the registration (TS 29.509 5.2.2.2.5, 5.2.2.2.6) */
+    char ausf_url[320]; /* the AUSF resource of the current authentication result, deleted with the registration */
     bool uecm;          /* registered in the UDM */
     bool sdm_subscribed;
     char sdm_sub_id[40]; /* subscriptionId the UDM gave (deleted with the context) */
@@ -187,7 +187,7 @@ struct amf_ue {
     struct amf_ue *next_all, *prev_all;
 };
 
-/* ---- N2 association of one UE ("RAN UE") -------------------------------------------------------------------------------------------------- */
+/* ---- N2 association of one UE ("RAN UE") ---- */
 
 typedef struct amf_ev {
     struct amf_ev *next;
@@ -288,7 +288,7 @@ struct amf_conn {
 enum { REL_NONE = 0, REL_DELETE_UE = 1, REL_KEEP = 2, REL_REREGISTER = 3 };
 enum { HO_NONE = 0, HO_PREPARING, HO_PREPARED, HO_COMPLETING };
 
-/* ---- gNB ------------------------------------------------------------------------------------------------------------------------------- */
+/* ---- gNB ---- */
 
 typedef struct {
     bool used;
@@ -309,7 +309,7 @@ typedef struct {
     size_t rxlen;
 } amf_gnb;
 
-/* ---- hash maps ------------------------------------------------------------------------------------------------------------------------ */
+/* ---- hash maps ---- */
 
 typedef struct amf_map amf_map;
 amf_map *amap_new(void);
@@ -325,7 +325,7 @@ void *smap_get(const amf_smap *m, const char *key);
 void smap_put(amf_smap *m, const char *key, void *val);
 void smap_del(amf_smap *m, const char *key);
 
-/* ---- event exposure -------------------------------------------------------------------------------------------------------------------- */
+/* ---- event exposure ---- */
 
 typedef struct amf_evsub {
     struct amf_evsub *next;
@@ -340,7 +340,7 @@ typedef struct amf_evsub {
 } amf_evsub;
 enum { EVT_REG_STATE, EVT_CONNECTIVITY, EVT_LOCATION, EVT_REACHABILITY, EVT_LOSS, EVT_COUNT };
 
-/* ---- timers and tasks --------------------------------------------------------------------------------------------------------------------- */
+/* ---- timers and tasks ---- */
 
 typedef void (*amf_task_fn)(amf *a, void *arg);
 typedef struct amf_task {
@@ -357,7 +357,7 @@ typedef struct {
     uint32_t gen;
 } amf_tmr;
 
-/* ---- the AMF -------------------------------------------------------------------------------------------------------------------------- */
+/* ---- the AMF ---- */
 
 struct amf {
     amf_cfg cfg;
@@ -373,7 +373,7 @@ struct amf {
     amf_smap *ues_by_supi;
     amf_ue *ues;
     amf_conn *conns;
-    size_t nues, nconns, npreauth; /* npreauth: connections that have not (yet) passed authentication - the flood limit counts these only */
+    size_t nues, nconns, npreauth; /* npreauth: connections that have not (yet) passed authentication */
     uint64_t next_amf_id, next_uid;
     amf_gnb gnbs[AMF_MAX_GNB];
 
@@ -410,7 +410,7 @@ struct amf {
     atomic_uint_fast64_t st_registrations, st_auth_ok, st_auth_fail, st_dereg, st_service, st_paging, st_handover, st_pathswitch, st_release;
 };
 
-/* ---- util.c --------------------------------------------------------------------------------------------------------------------------- */
+/* ---- util.c ---- */
 
 void amf_count(amf *a, const char *name, const char *help, const char *lk, const char *lv);
 void amf_tai_to_json(const amf_tai *t, g5c_json *obj_plmn_parent, const char *key); /* {"plmnId":{mcc,mnc},"tac":"hex"} under key */
@@ -424,7 +424,7 @@ void amf_supi_digits(const char *supi, char *out, size_t cap);
 uint32_t amf_get_be32(const uint8_t *p);
 void amf_put_be32(uint8_t *p, uint32_t v);
 
-/* ---- config / lifecycle (amf.c) --------------------------------------------------------------------------------------------------- */
+/* ---- config / lifecycle (amf.c) ---- */
 
 void amf_post(amf *a, amf_task_fn fn, void *arg);
 void amf_timer_start(amf *a, unsigned ms, int target, int kind, uint64_t id, uint32_t gen);
@@ -452,7 +452,7 @@ void amf_conn_post_timer(amf_conn *c, int kind, uint32_t gen);
 void ngap_conn_timer(amf_conn *c, int kind, uint32_t gen);
 void amf_gauges(amf *a);
 
-/* ---- sctp.c ---------------------------------------------------------------------------------------------------------------------------- */
+/* ---- sctp.c ---- */
 
 int amf_sctp_start(amf *a, char *err, size_t cap);
 void amf_sctp_stop(amf *a);
@@ -460,7 +460,7 @@ int amf_gnb_send(amf *a, uint32_t gnb, uint32_t gen, uint16_t stream, const uint
 int amf_send_pdu(amf *a, uint32_t gnb, uint32_t gen, uint16_t stream, const g5c_json *pdu);
 void amf_gnb_drop(amf *a, uint32_t gnb);
 
-/* ---- ngap.c (builders and N2 procedures) -------------------------------------------------------------------------------------------- */
+/* ---- ngap.c (builders and N2 procedures) ---- */
 
 g5c_json *ng_pdu_new(const char *kind, int proc, const char *crit);
 g5c_json *ng_ie(g5c_json *pdu, int id, const char *crit, g5c_json *value);
@@ -491,7 +491,7 @@ int conn_send_pdu_release(amf_conn *c, g5c_json *list, const uint8_t *nas, size_
 void amf_page_ue(amf *a, amf_ue *u);
 g5c_json *ng_ue_sec_caps(const amf_ue *u);
 
-/* ---- sec.c ------------------------------------------------------------------------------------------------------------------------------- */
+/* ---- sec.c ---- */
 
 int sec_select_algs(const amf *a, const uint8_t *ue_cap, size_t len, uint8_t *int_alg, uint8_t *enc_alg);
 void sec_derive_nas_keys(amf_sec *s);
@@ -505,7 +505,7 @@ int sec_protect_dl(amf_sec *s, uint8_t sht, const uint8_t *plain, size_t len, g5
 int sec_open_ul(amf_sec *s, const nas_protected *p, g5c_bytes *plain, uint32_t *count_out, bool commit);
 void sec_clear(amf_sec *s);
 
-/* ---- sbi_out.c --------------------------------------------------------------------------------------------------------------------------- */
+/* ---- sbi_out.c ---- */
 
 #define AMF_EAP_MAX 1100 /* the EAP MTU (RFC 3748 3) with room */
 
@@ -532,7 +532,7 @@ int amf_nssf_registration(amf *a, const amf_ue *u, const amf_tai *tai, const nas
 int amf_nssf_pdu_session(amf *a, const nas_snssai *sn, const amf_tai *tai); /* 0 the slice is available (and the NSI is known), 1 the NSSF refused it, -1 no answer */
 char *amf_nf_root(amf *a, const char *nf_type, const char *service, const nas_snssai *s, const char *dnn); /* caller frees; NULL if none */
 int amf_ausf_start(amf *a, const char *id, const uint8_t *resync_rand, const uint8_t *auts, amf_authv *out, int *http);
-/* POST the EAP packet of the UE (NULL, 0: nothing came from the UE) to the eap-session resource; 0 and *out when the AUSF answered 200 with a usable body */
+/* POST the EAP packet of the UE (NULL, 0 */
 int amf_ausf_eap(amf *a, const char *url, const uint8_t *pkt, size_t n, amf_eapr *out, int *http);
 /* DELETE the resource of an authentication result at the AUSF; best effort */
 void amf_ausf_remove(amf *a, const char *url);
@@ -546,7 +546,7 @@ int amf_pcf_create(amf *a, amf_ue *u);
 void amf_pcf_delete(amf *a, amf_ue *u);
 bool amf_parse_bitrate(const char *s, uint64_t *out);
 
-/* ---- session.c (5GSM relay, SMF client, N1N2) ------------------------------------------------------------------------------------------ */
+/* ---- session.c (5GSM relay, SMF client, N1N2) ---- */
 
 typedef struct {
     int http; /* the HTTP status, or a negative g5c_sbi_err */
@@ -600,7 +600,7 @@ void amf_handle_pdu_notify(amf_conn *c, amf_ue *u, const g5c_json *msg);
 void amf_handle_ics_response(amf_conn *c, amf_ue *u, const g5c_json *msg);
 void amf_notify_n1n2_failure(amf *a, const char *uri, const char *cause);
 
-/* ---- gmm.c (5GMM procedures) --------------------------------------------------------------------------------------------------------- */
+/* ---- gmm.c (5GMM procedures) ---- */
 
 void gmm_initial_ue(amf_conn *c, const uint8_t *nas, size_t len, const g5c_json *msg);
 void gmm_uplink_nas(amf_conn *c, const uint8_t *nas, size_t len);
@@ -633,7 +633,7 @@ void conn_bind_ue(amf_conn *c, amf_ue *u);
 void conn_unbind_ue(amf_conn *c);
 void ue_detach_conn(amf_ue *u);
 
-/* ---- ho.c (path switch, N2 handover) ----------------------------------------------------------------------------------------------- */
+/* ---- ho.c (path switch, N2 handover) ---- */
 
 void ho_path_switch(amf_conn *c, const g5c_json *msg);
 void ho_required(amf_conn *c, amf_ue *u, const g5c_json *msg);
@@ -645,17 +645,17 @@ void ho_ran_status_transfer(amf_conn *c, amf_ue *u, const g5c_json *msg);
 void ho_timer(amf *a, amf_conn *c, int kind);
 void ho_abort(amf_conn *c, amf_ue *u, const char *cause);
 
-/* ---- events.c (Namf_EventExposure) ----------------------------------------------------------------------------------------------- */
+/* ---- events.c (Namf_EventExposure) ---- */
 
 void amf_events_routes(g5c_router *r, amf *a);
 void amf_events_free(amf *a);
 
-/* ---- callbacks.c (Namf_Communication callbacks: SMF status, UDM dereg, PCF, SDM) ---------------------------------------------- */
+/* ---- callbacks.c (Namf_Communication callbacks: SMF status, UDM dereg, PCF, SDM) ---- */
 
 void amf_callbacks_routes(g5c_router *r, amf *a);
 char *amf_cb_uri(amf *a, const char *path);
 
-/* ---- persist.c ------------------------------------------------------------------------------------------------------------------------- */
+/* ---- persist.c ---- */
 
 void amf_persist_request(amf *a);
 int amf_persist_restore(amf *a);

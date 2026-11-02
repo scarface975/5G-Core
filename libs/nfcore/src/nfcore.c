@@ -15,7 +15,7 @@
 #include <string.h>
 #include <time.h>
 
-/* ---- NRF client ----------------------------------------------------------------------------------- */
+/* ---- NRF client ---- */
 
 g5c_json *g5c_nrf_profile(const char *instance_id, const char *nf_type, const char *addr, uint16_t port,
                           const char *scheme, const char *mcc, const char *mnc, const g5c_svc *svcs, size_t nsvcs)
@@ -123,7 +123,7 @@ int g5c_nrf_deregister(g5c_client *c, const char *nrf_uri, const char *instance_
     return rc;
 }
 
-/* ---- keep registered -------------------------------------------------------------------------------- */
+/* ---- keep registered ---- */
 
 typedef struct {
     g5c_client *client;
@@ -199,7 +199,7 @@ static void *keeper_main(void *arg)
     return NULL;
 }
 
-/* ---- context ------------------------------------------------------------------------------------------ */
+/* ---- context ---- */
 
 g5c_nf *g5c_nf_new(g5c_common *common, char *err, size_t errcap)
 {
@@ -226,7 +226,7 @@ g5c_nf *g5c_nf_new(g5c_common *common, char *err, size_t errcap)
     nf->client = g5c_client_new(5000, tls);
     g5c_client_set_scp(nf->client, nf->common.scp_uri, nf->common.nrf_uri); /* the NRF is reached directly */
     nf->metrics = g5c_registry_new();
-    {   /* what runs: the version of the release and the function (a support bundle starts from this line) */
+    {   /* what runs: the version of the release and the function */
         g5c_label bi[] = {{"version", G5C_VERSION}, {"function", nf->common.name != NULL ? nf->common.name : ""}};
         g5c_gauge_set(g5c_gauge_get(nf->metrics, "g5c_build_info", "Version of the release that runs.", bi, 2), 1);
         G5C_LOGI("g5c_nfcore", "g5c %s: %s starting", G5C_VERSION, nf->common.name != NULL ? nf->common.name : "function");
@@ -246,7 +246,7 @@ void g5c_nf_free(g5c_nf *nf)
     free(nf);
 }
 
-/* ---- health, metrics, instrumentation ---------------------------------------------------------------------- */
+/* ---- health, metrics, instrumentation ---- */
 
 static void h_live(void *ctx, const g5c_req *req, g5c_resp *resp)
 {
@@ -278,8 +278,7 @@ static void h_metrics(void *ctx, const g5c_req *req, g5c_resp *resp)
     free(t);
 }
 
-/* GET /openapi.json: the routes this function serves as an OpenAPI 3.0 document (paths, methods, path parameters). The request and response schemas of the 3GPP services are in the pinned
- * specification files; this is the machine-readable list of what the running function really answers, for client generators and test tools. */
+/* GET /openapi.json: the routes this function serves as an OpenAPI 3.0 document (paths, methods, path parameters) */
 typedef struct {
     const g5c_nf *nf;
     const g5c_router *router;
@@ -421,7 +420,7 @@ g5c_nf_inst *g5c_nf_start(g5c_nf *nf, g5c_router *nf_routes, const g5c_nrf_reg *
     free(ua);
     r->nf = nf;
     r->router = nf_routes;
-    if (c->oauth2_acquire && c->nrf_uri != NULL && nf->oauth_client == NULL) { /* as a consumer: the NRF's access token goes with every request for a service of another function */
+    if (c->oauth2_acquire && c->nrf_uri != NULL && nf->oauth_client == NULL) { /* as a consumer: the NRF's access token goes with every request for a service of another */
         nf->oauth_client = g5c_oauth_client_new(nf->client, c->nrf_uri, reg->nf_type, nf->instance_id, nf->metrics);
         g5c_client_set_token_provider(nf->client, g5c_oauth_client_token, g5c_oauth_client_reject, nf->oauth_client);
     }
@@ -588,8 +587,7 @@ int g5c_nf_run(g5c_nf *nf, g5c_router *nf_routes, const g5c_nrf_reg *reg, char *
     return 0;
 }
 
-/* A secret from a command (`exec:/absolute/path arg arg`): the hook for a key-management service, a vault agent or an HSM client. The command is started directly (no shell, the path must
- * be absolute, arguments are separated by spaces), has 10 seconds, must exit 0, and what it writes to its standard output (up to 64 KiB) is the secret. */
+/* A secret from a command (`exec:/absolute/path arg arg`): the hook for a key-management service, a vault agent or an HSM client */
 static char *secret_from_command(const char *cmdline, char *err, size_t errcap)
 {
     char *dup = g5c_xstrdup(cmdline), *argv[16], *save = NULL, *tok, *out = NULL;

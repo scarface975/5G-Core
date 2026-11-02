@@ -19,7 +19,7 @@
 #include "g5c/nfcore.h"
 #include "g5c/sbi.h"
 
-/* ---- AKA / SQN (TS 33.501 6.1.3.2, TS 33.102 Annex C) ------------------------------------------------------ */
+/* ---- AKA / SQN (TS 33.501 6.1.3.2, TS 33.102 Annex C) ---- */
 
 #define UDM_SQN_STEP 32ULL /* SEQ advances by one; the 5-bit IND stays where resynchronisation put it */
 
@@ -33,8 +33,7 @@ bool udm_sqn_from_hex(const char *s, uint64_t *out); /* exactly 12 hex character
 /* 0 on success, -1 on crypto failure. */
 int udm_generate_av(const uint8_t k[16], const uint8_t opc[16], uint64_t sqn, const uint8_t amf[2],
                     const uint8_t rand[16], const char *snn, udm_heav *out);
-/* EAP-AKA' vector (TS 33.501 6.1.3.1 step 1-2): the AMF separation bit is the caller's (amf[0] bit 7 must be 1), CK' and IK' are derived with the serving network
- * name; xres is the Milenage RES (8 octets). */
+/* EAP-AKA' vector (TS 33.501 6.1.3.1 step 1-2) */
 typedef struct {
     uint8_t rand[16], autn[16], xres[8], ck_prime[16], ik_prime[16];
 } udm_hep;
@@ -43,7 +42,7 @@ int udm_generate_av_prime(const uint8_t k[16], const uint8_t opc[16], uint64_t s
 int udm_resync(const uint8_t k[16], const uint8_t opc[16], const uint8_t rand[16], const uint8_t auts[14],
                uint64_t *sqn_ms);
 
-/* ---- credential protection at rest ------------------------------------------------------------------------- */
+/* ---- credential protection at rest ---- */
 
 #define UDM_PROT_NONE "none"
 #define UDM_PROT_AES256GCM "aes-256-gcm-v1"
@@ -61,7 +60,7 @@ typedef enum {
 typedef struct {
     bool has_master;
     uint8_t master[32];
-    bool has_previous; /* the master key before a rotation: credentials stored under it still decrypt until /admin/v1/keys/rewrap has re-protected them */
+    bool has_previous; /* the master key before a rotation */
     uint8_t previous[32];
 } udm_keys;
 
@@ -69,7 +68,7 @@ void udm_keys_none(udm_keys *k);
 void udm_keys_with_master(udm_keys *k, const uint8_t master[32]);
 int udm_keys_from_hex(udm_keys *k, const char *hex64); /* surrounding whitespace ignored */
 int udm_keys_set_previous_hex(udm_keys *k, const char *hex64);
-/* Like udm_unprotect, but only with the current master key: *used_previous tells that the previous key was needed (the credential still has to be re-wrapped). */
+/* Like udm_unprotect, but only with the current master key */
 int udm_unprotect_ex(const udm_keys *k, const char *stored, const char *scheme, const char *supi, uint8_t *out, size_t cap, size_t *len, bool *used_previous);
 /* Protect `plain` for `supi`: *stored is a heap hex string, *scheme a static protectionParameterId. */
 int udm_protect(const udm_keys *k, const uint8_t *plain, size_t n, const char *supi, char **stored,
@@ -78,7 +77,7 @@ int udm_protect(const udm_keys *k, const uint8_t *plain, size_t n, const char *s
 int udm_unprotect(const udm_keys *k, const char *stored, const char *scheme, const char *supi, uint8_t *out,
                   size_t cap, size_t *len);
 
-/* ---- SUPI / SUCI resolution (TS 23.003 2.2B, TS 33.501 6.12) ------------------------------------------------- */
+/* ---- SUPI / SUCI resolution (TS 23.003 2.2B, TS 33.501 6.12) ---- */
 
 typedef struct {
     uint8_t id;
@@ -97,7 +96,7 @@ typedef enum {
 /* supi_out must hold at least 32 bytes ("imsi-" + up to 15 digits + NUL). */
 int udm_resolve(const char *id, const udm_hnkey *keys, size_t nkeys, char *supi_out, size_t cap);
 
-/* ---- util ----------------------------------------------------------------------------------------------------- */
+/* ---- util ---- */
 
 void udm_iso8601_utc(uint64_t secs, char out[21]);
 void udm_now_iso8601(char out[21]);
@@ -106,7 +105,7 @@ bool udm_plmn_from_query(const char *q, char *out, size_t cap);
 /* 5G:mnc<3 digits>.mcc<3 digits>.3gppnetwork.org */
 bool udm_valid_snn(const char *s);
 
-/* ---- UDR client (Nudr_DataRepository, TS 29.504/29.505) ---------------------------------------------------------- */
+/* ---- UDR client (Nudr_DataRepository, TS 29.504/29.505) ---- */
 
 typedef enum { UDR_OK = 0, UDR_NOT_FOUND, UDR_STATUS, UDR_TRANSPORT, UDR_MALFORMED } udr_kind;
 
@@ -118,9 +117,9 @@ typedef struct {
 
 typedef struct {
     g5c_client *client;
-    char *base;      /* <udr>/nudr-dr/v1/subscription-data, from the configuration (NULL when the UDR is discovered) */
+    char *base;      /* <udr>/nudr-dr/v1/subscription-data, from the configuration */
     g5c_disc *disc;  /* the NRF discovery client when the UDR address is not configured */
-    char *token;     /* bearer token for the UDR's provisioning extension (creating provisioned data, removing a subscriber) */
+    char *token;     /* bearer token for the UDR's provisioning extension */
 } udm_udr;
 
 void udm_udr_init(udm_udr *u, g5c_client *c, const char *base);
@@ -157,7 +156,7 @@ udr_result udm_udr_put_identity(const udm_udr *u, const char *supi, const g5c_js
 udr_result udm_udr_delete_subscriber(const udm_udr *u, const char *supi);
 udr_result udm_udr_list_subscribers(const udm_udr *u, g5c_json **out);
 
-/* ---- UDM state and router ------------------------------------------------------------------------------------------ */
+/* ---- UDM state and router ---- */
 
 typedef int (*udm_rand_fn)(void *ctx, uint8_t out[16]);
 
@@ -181,9 +180,9 @@ typedef struct udm {
     uint64_t next_sub;
     g5c_json *ee_subs; /* Nudm_EventExposure: id -> subscription (see ee.c) */
     uint64_t next_ee;
-    char *ee_amf_uri;  /* `ee.amf_uri`: the AMF to subscribe at for anyUE (or when the UE has no registration naming one) */
+    char *ee_amf_uri;  /* `ee.amf_uri`: the AMF to subscribe at for anyUE */
     char *ee_self_uri; /* where the AMF sends its notifications: `ee.notify_uri`, else this function's own address */
-    char *ee_state_file; /* `ee.state_file`: the subscriptions are written here after every change and read again at start (NULL: kept in memory only) */
+    char *ee_state_file; /* `ee.state_file`: the subscriptions are written here after every change */
     void **owned; /* route contexts, freed with the UDM */
     size_t nowned;
 } udm;
@@ -195,8 +194,7 @@ void udm_destroy(udm *u);
 /* Internal: hand a heap object to the UDM, to be freed with it (route contexts). */
 void udm_track(udm *u, void *owned);
 
-/* Per-subscriber lock: serialises the SQN read-modify-write for one SUPI within this instance (multi-instance
- * deployments need a compare-and-swap in the UDR, Phase 8). */
+/* Per-subscriber lock: serialises the SQN read-modify-write for one SUPI within this instance */
 typedef struct supi_lock udm_supi_lock;
 udm_supi_lock *udm_lock_supi(udm *u, const char *supi);
 void udm_unlock_supi(udm *u, udm_supi_lock *l);
@@ -213,10 +211,9 @@ void udm_ee_load(udm *u);                    /* reads `ee.state_file` (a missing
 void udm_sdm_notify_change(udm *u, const char *supi);
 int udm_admin_guard(void *ctx /* udm* */, const g5c_req *req, g5c_resp *resp);
 
-/* ---- configuration -------------------------------------------------------------------------------------------------- */
+/* ---- configuration ---- */
 
-/* Build the UDM from the parsed configuration DOM (sections: udr, hn_keys, master_key_file, admin_token_file) and the
- * NF context. Returns NULL with err on failure. The caller frees with udm_destroy + free. */
+/* Build the UDM from the parsed configuration DOM (sections: udr, hn_keys, master_key_file, admin_token_file) and the NF context */
 udm *udm_from_config(const g5c_json *cfg, g5c_nf *nf, char *err, size_t errcap);
 
 #endif

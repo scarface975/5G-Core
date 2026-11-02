@@ -7,7 +7,7 @@
 #define GTPU_PORT 2152
 #define MAX_PKT 9200
 
-/* ---- helpers ---------------------------------------------------------------------------------------------------------------------- */
+/* ---- helpers ---- */
 
 static bool bucket_take(upf_bucket *b, size_t bytes, double now)
 {
@@ -54,8 +54,7 @@ static uint8_t pdr_qfi(upf_session *s, const upf_pdr *p)
     return 1;
 }
 
-/* GTP-U G-PDU towards the far end of an Outer Header Creation. With a PDU Session Container (downlink, QFI) when the
- * destination is the access network. */
+/* GTP-U G-PDU towards the far end of an Outer Header Creation. With a PDU Session Container (downlink, QFI) when the destination is the access network. */
 static void tx_encap(upf *u, const upf_far *f, bool container, uint8_t qfi, const uint8_t *payload, size_t len)
 {
     uint8_t out[MAX_PKT + 16];
@@ -109,7 +108,7 @@ void dp_send_end_marker(upf *u, const upf_far *f)
     u->st.end_marker++;
 }
 
-/* ---- buffering ------------------------------------------------------------------------------------------------------------------- */
+/* ---- buffering ---- */
 
 void dp_drop_buffer(upf_session *s)
 {
@@ -169,7 +168,7 @@ void dp_buffer_expire(upf *u, double now)
     }
 }
 
-/* ---- the actions ---------------------------------------------------------------------------------------------------------------- */
+/* ---- the actions ---- */
 
 static void forward(upf *u, upf_session *s, const upf_pdr *p, const upf_far *f, bool ul, const uint8_t *pkt, size_t len, double now)
 {
@@ -237,7 +236,7 @@ static bool sdf_ok(const upf_session *s, const upf_pdr *p, const upf_flow *f, bo
     return false;
 }
 
-/* ---- downlink: from the data network -------------------------------------------------------------------------------------------- */
+/* ---- downlink: from the data network ---- */
 
 static void dl_dispatch(upf *u, const uint8_t *pkt, size_t len, double now)
 {
@@ -314,7 +313,7 @@ void dp_flush_buffer(upf *u, upf_session *s, double now)
     free(list);
 }
 
-/* ---- uplink: from the access network ---------------------------------------------------------------------------------------------- */
+/* ---- uplink: from the access network ---- */
 
 static void send_error_indication(upf *u, const upf_addr *to, uint32_t teid)
 {

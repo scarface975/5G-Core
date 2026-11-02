@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* Policy administration (/admin/v1, not part of the 3GPP API). Disabled unless an admin token is configured.
- * Changing a subscriber's policy re-evaluates every active session of that subscriber and notifies the SMF. */
+/* Policy administration (/admin/v1, not part of the 3GPP API). Disabled unless an admin token is configured */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

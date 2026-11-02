@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* 5G NAS security algorithms: 128-NEA2 (AES-CTR) and 128-NIA2 (AES-CMAC). SNOW 3G (NEA1/NIA1) is a separate,
- * licence-gated component (ADR-0012). */
+/* 5G NAS security algorithms: 128-NEA2 (AES-CTR) and 128-NIA2 (AES-CMAC). SNOW 3G (NEA1/NIA1) is a separate, licence-gated component (ADR-0012). */
 #include <string.h>
 
 #include <openssl/core_names.h>

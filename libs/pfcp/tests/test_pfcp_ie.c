@@ -169,7 +169,7 @@ static void test_field_values(void)
     size_t n = load(PFCPV_SESS_EST_REQ, buf, sizeof buf), bl;
     const uint8_t *b = body_of(buf, n, &bl, &h);
     pfcp_ie ie;
-    {   /* the UPF is asked to choose TEIDs: CH + CHID 5 on the access-side PDRs, plain CH on the CP-function one */
+    {   /* the UPF is asked to choose TEIDs */
         pfcp_fteid f;
         ie = nth_ie(b, bl, PFCP_IE_FTEID, 0);
         TK_ASSERT(pfcp_fteid_decode(&ie, &f) == 0 && f.ch && f.chid && f.choose_id == 5 && f.v4 && f.v6);
@@ -210,7 +210,7 @@ static void test_field_values(void)
         ie = nth_ie(b, bl, PFCP_IE_NETWORK_INSTANCE, 0);
         TK_ASSERT(pfcp_network_instance_decode(&ie, ni, sizeof ni) == 0 && strcmp(ni, "internet") == 0);
     }
-    {   /* the UPF's usage report in the deletion response: build the same Volume Measurement and compare bytes */
+    {   /* the UPF's usage report in the deletion response */
         uint8_t out[128], want[128];
         size_t pos = 0, wn;
         pfcp_volume_meas vm = {true, true, true, true, true, true, 252, 0, 252, 3, 0, 3};
