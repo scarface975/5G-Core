@@ -17,3 +17,6 @@ __pycache__/
 *.pyc
 *.whl
 release/
+
+# the golden captures are test fixtures (lab traffic, test identities): kept
+!tests/fixtures/golden/*.pcapng
