@@ -355,8 +355,11 @@ static int amf_subscribe(nef *n, const char *id, const char *corr, const mtype_t
     int st;
     *cause = "SYSTEM_FAILURE";
     memset(out, 0, sizeof *out);
-    if (n->cfg->events_via_udm)
-        return udm_subscribe(n, id, corr, mt, gpsi, immediate, out, cause, detail, dcap);
+    if (n->cfg->events_via_udm) {
+        int urc = udm_subscribe(n, id, corr, mt, gpsi, immediate, out, cause, detail, dcap);
+        free(enc); /* encoded above for the AMF path; the UDM path encodes the identity itself */
+        return urc;
+    }
     path = g5c_xasprintf("/nudm-sdm/v2/%s/id-translation-result", enc);
     free(enc);
     st = udm_call(n, path, &tr, detail, dcap);
