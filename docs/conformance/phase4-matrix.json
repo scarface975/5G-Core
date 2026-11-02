@@ -1,6 +1,6 @@
 {
  "title": "Conformance matrix, Phase 4 (SMF: Nsmf_PDUSession, 5GSM, N2 SM information, N4, modification, recovery, paging, persistence)",
- "note": "Same rules as the other matrices: every test reference, function and clause is checked by tools/check_matrix.py. verified = tests pass and a real peer or a capture confirms it (Open5GS AMF + UERANSIM against our SMF with our UDM, PCF and UPF, scenarios S1-S4 with OUR_SMF=1). The gap rows are what the phase leaves out; they are listed so nothing is hidden.",
+ "note": "Same rules as the other matrices: every test reference, function and clause is checked by tools/check/check_matrix.py. verified = tests pass and a real peer or a capture confirms it (Open5GS AMF + UERANSIM against our SMF with our UDM, PCF and UPF, scenarios S1-S4 with OUR_SMF=1). The gap rows are what the phase leaves out; they are listed so nothing is hidden.",
  "specs": {
   "TS 29.502": "29502-gh0.txt",
   "TS 29.518": "29518-gj0.txt",
@@ -648,7 +648,7 @@
    "tests": [
     {
      "ctest": "pfcp_differential_smf",
-     "file": "tools/pfcp_diff.py",
+     "file": "tools/diff/pfcp_diff.py",
      "fn": "smf_mode"
     }
    ],

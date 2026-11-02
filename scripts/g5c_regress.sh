@@ -2,7 +2,7 @@
 # Full regression for the C tree, layer by layer (strategy 4.1). Run inside WSL.
 #   scripts/g5c_regress.sh            everything except the oracle interop
 #   scripts/g5c_regress.sh --oracle   also runs Open5GS/UERANSIM scenarios S3 and S4 against our NFs (needs the oracle env)
-# Writes a one-line-per-layer summary to build/regress-summary.txt (consumed by tools/gen_dashboard.py).
+# Writes a one-line-per-layer summary to build/regress-summary.txt (consumed by tools/docs/gen_dashboard.py).
 set -uo pipefail
 here="$(cd "$(dirname "$0")/.." && pwd)"
 out="${G5C_C_BUILD:-$HOME/g5c-cbuild}"
@@ -51,7 +51,7 @@ for m in "asan:-DG5C_SANITIZE=ON" "tsan:-DG5C_TSAN=ON"; do
 done
 
 ctest --test-dir "$out/plain" -N > "$here/build/ctest-list.txt"
-if python3 "$here/tools/check_matrix.py" --ctest-list "$here/build/ctest-list.txt" >"$out/matrix.log" 2>&1; then note "conformance matrix: $(tail -2 "$out/matrix.log" | head -1)"; else note "conformance matrix: FAIL (see $out/matrix.log)"; rc=1; fi
+if python3 "$here/tools/check/check_matrix.py" --ctest-list "$here/build/ctest-list.txt" >"$out/matrix.log" 2>&1; then note "conformance matrix: $(tail -2 "$out/matrix.log" | head -1)"; else note "conformance matrix: FAIL (see $out/matrix.log)"; rc=1; fi
 soak="$(ctest --test-dir "$out/plain" -R soak_core -V 2>&1 | grep -E 'soak: [0-9]|soak: RSS' | sed -E 's/^[0-9]+: //')"; [ -n "$soak" ] && while read -r l; do note "$l"; done <<<"$soak"
 upfperf="$(ctest --test-dir "$out/plain" -R upf_io_bench_gate -V 2>&1 | grep -E '^[0-9]+: (uplink|downlink) ' | sed -E 's/^[0-9]+: //')"; [ -n "$upfperf" ] && while read -r l; do note "UPF $l"; done <<<"$upfperf"
 perf="$(ctest --test-dir "$out/plain" -R udm_perf_gate -V 2>&1 | grep -o 'generate-auth-data:.*vectors/s' | head -1)"; [ -n "$perf" ] && note "perf: $perf"
@@ -93,7 +93,7 @@ else
   note "secrets checks: FAIL (see $out/cluster-secrets.log)"; rc=1
 fi
 for f in cluster-load cluster-load-tls; do
-  if python3 "$here/tools/check_slo.py" "$out/$f.log" >"$out/slo-$f.log" 2>&1; then note "SLO ($f): $(tail -1 "$out/slo-$f.log")"; else note "SLO ($f): FAIL (see $out/slo-$f.log)"; rc=1; fi
+  if python3 "$here/tools/check/check_slo.py" "$out/$f.log" >"$out/slo-$f.log" 2>&1; then note "SLO ($f): $(tail -1 "$out/slo-$f.log")"; else note "SLO ($f): FAIL (see $out/slo-$f.log)"; rc=1; fi
 done
 if G5C_TLS=1 timeout 700 bash "$here/deploy/run/g5c-cluster.sh" ns upgrade 200 70 >"$out/cluster-upgrade.log" 2>&1 && grep -q "^upgrade: PASS" "$out/cluster-upgrade.log"; then
   note "upgrade and rollback under load (every function restarted one at a time, then with the previous binaries): $(grep -c "restarting" "$out/cluster-upgrade.log") restarts, clean wave passed"
@@ -110,7 +110,7 @@ if G5C_TLS=1 G5C_OAUTH2=0 timeout 600 bash "$here/deploy/run/g5c-cluster.sh" ns 
 else
   note "slices checks: FAIL (see $out/cluster-slices.log)"; rc=1
 fi
-if python3 "$here/tools/check_ops.py" >"$out/ops.log" 2>&1; then note "operations files (alert rules, Grafana dashboard): $(tail -1 "$out/ops.log")"; else note "operations files: FAIL (see $out/ops.log)"; rc=1; fi
+if python3 "$here/tools/check/check_ops.py" >"$out/ops.log" 2>&1; then note "operations files (alert rules, Grafana dashboard): $(tail -1 "$out/ops.log")"; else note "operations files: FAIL (see $out/ops.log)"; rc=1; fi
 
 if [ "${1:-}" = "--oracle" ]; then
   for s in s3 s4; do
@@ -284,7 +284,7 @@ if [ "${1:-}" = "--oracle" ]; then
     note "oracle EAP-AKA' scenarios: skipped (no patched UERANSIM, see $out/ueransim-eap-build.log)"
   fi
 fi
-if python3 "$here/tools/pfcp_diff.py" --smf >"$out/pfcp_diff_smf.log" 2>&1; then note "PFCP differential (Open5GS SMF vs ours, same UPF): $(tail -1 "$out/pfcp_diff_smf.log")"; else note "PFCP SMF differential: FAIL (see $out/pfcp_diff_smf.log)"; rc=1; fi
-if python3 "$here/tools/pfcp_diff.py" >"$out/pfcp_diff.log" 2>&1; then note "PFCP differential (Open5GS UPF vs ours, same SMF): $(tail -1 "$out/pfcp_diff.log")"; else note "PFCP differential: FAIL (see $out/pfcp_diff.log)"; rc=1; fi
+if python3 "$here/tools/diff/pfcp_diff.py" --smf >"$out/pfcp_diff_smf.log" 2>&1; then note "PFCP differential (Open5GS SMF vs ours, same UPF): $(tail -1 "$out/pfcp_diff_smf.log")"; else note "PFCP SMF differential: FAIL (see $out/pfcp_diff_smf.log)"; rc=1; fi
+if python3 "$here/tools/diff/pfcp_diff.py" >"$out/pfcp_diff.log" 2>&1; then note "PFCP differential (Open5GS UPF vs ours, same SMF): $(tail -1 "$out/pfcp_diff.log")"; else note "PFCP differential: FAIL (see $out/pfcp_diff.log)"; rc=1; fi
 echo "regression: $([ $rc = 0 ] && echo PASS || echo FAIL)" | tee -a "$summary"
 exit $rc

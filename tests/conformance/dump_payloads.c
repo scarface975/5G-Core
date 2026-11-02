@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* Dump the JSON our NFs really produce to $G5C_PAYLOAD_DIR, so tools/validate_openapi.py can check every payload against the official 3GPP OpenAPI */
+/* Dump the JSON our NFs really produce to $G5C_PAYLOAD_DIR, so tools/spec/validate_openapi.py can check every payload against the official 3GPP OpenAPI */
 #define _DEFAULT_SOURCE
 #include <pthread.h>
 #include <stdio.h>

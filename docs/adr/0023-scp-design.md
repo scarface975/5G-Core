@@ -4,7 +4,7 @@ Status: Accepted (2026-10-26)
 
 ## Decision
 - **Pinned source.** TS 29.500 (already pinned): 5.2.3.2 (custom headers), 5.2.7.4 (errors an SCP makes), 6.10 (indirect communication), 6.11 (late requests). Nothing is taken from
-  memory; the clauses cited in the matrix (`SCP-*`) are checked against the pinned text by `tools/check_matrix.py`.
+  memory; the clauses cited in the matrix (`SCP-*`) are checked against the pinned text by `tools/check/check_matrix.py`.
 - **A proxy of the SBI, not of any one service.** The SCP does not parse service bodies. Every request it receives is classified: `3gpp-Sbi-Target-apiRoot` present (Model C: the
   consumer chose the producer), `3gpp-Sbi-Discovery-*` present without it (Model D: the SCP discovers), or neither (400 MANDATORY_IE_MISSING). The request goes to the producer with
   the path and query kept (the `ck` parameter and the SCP's own prefix removed), the hop-by-hop headers dropped and `Via: 2.0 SCP-<name>` added.
@@ -35,7 +35,7 @@ Status: Accepted (2026-10-26)
 ## Interop facts that shaped it
 Open5GS's functions take an SCP as `client.scp` and `delegated.nrf.{nfm,disc}`; they send the Target-apiRoot even when they delegate and know the producer, and they discover through
 the SCP with `target-nf-type NRF` for registration. Open5GS's SCP puts the bare instance id in Producer-Id where TS 29.500 5.2.3.2.8 has `nfinst=<id>` (ours follows the specification),
-and answers 500 where we answer 400 / 504. Both are listed in the differential's allow-lists (`tools/scp_diff.py`). The oracle runs Open5GS's whole core and UERANSIM through our SCP in
+and answers 500 where we answer 400 / 504. Both are listed in the differential's allow-lists (`tools/diff/scp_diff.py`). The oracle runs Open5GS's whole core and UERANSIM through our SCP in
 Model C and in Model D with delegated registration.
 
 ## Gaps (matrix rows SCP-GAP-*)

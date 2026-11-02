@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""tools/perf_history.py: the numbers come out of a regression summary, a collapse is flagged, a normal swing is not, the chart renders."""
+"""tools/release/perf_history.py: the numbers come out of a regression summary, a collapse is flagged, a normal swing is not, the chart renders."""
 import importlib.util
 import sys
 from pathlib import Path
 
-SPEC = importlib.util.spec_from_file_location("ph", Path(__file__).resolve().parent.parent.parent / "tools" / "perf_history.py")
+SPEC = importlib.util.spec_from_file_location("ph", Path(__file__).resolve().parent.parent.parent / "tools" / "release" / "perf_history.py")
 ph = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(ph)
 

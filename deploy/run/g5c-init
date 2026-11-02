@@ -104,10 +104,10 @@ for nf in nrf scp bsf udr nssf nef udm ausf pcf upf smf amf; do bin/$nf {run}/co
 {"G5C_TLS_CA=" + str(run) + "/pki/ca.crt G5C_TLS_CERT=" + str(run) + "/pki/admin.crt G5C_TLS_KEY=" + str(run) + "/pki/admin.key " if not a.no_tls else ""}g5c-ctl --udm {"https" if not a.no_tls else "http"}://127.2.0.1:7773 --token-file {run}/keys/admin_token \\
   subscriber add --supi imsi-{mcc}{mnc}0000000001 --k <32 hex> --opc <32 hex> --slice 1 --dnn internet
 ```
-Bulk: `tools/g5c-subscribers import --format open5gs dump.json --apply ...`.
+Bulk: `tools/cli/g5c-subscribers import --format open5gs dump.json --apply ...`.
 
 ## Check
-`tools/g5c-kpi {"https" if not a.no_tls else "http"}://127.2.0.5:7777/metrics` (set `G5C_CURL_ARGS="--cacert {run}/pki/ca.crt --cert {run}/pki/admin.crt --key {run}/pki/admin.key"` with TLS) and `tools/g5c-diag` for a support bundle.
+`tools/cli/g5c-kpi {"https" if not a.no_tls else "http"}://127.2.0.5:7777/metrics` (set `G5C_CURL_ARGS="--cacert {run}/pki/ca.crt --cert {run}/pki/admin.crt --key {run}/pki/admin.key"` with TLS) and `tools/cli/g5c-diag` for a support bundle.
 
 ## Secrets
 `{run}/keys/` holds the admin token, the master keys and the home network key, all new and random. Back them up: losing `master.key` loses every stored subscriber credential.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""tools/g5c-ladder: ladders per UE and per N4 session from tshark rows, the red flags (no SMC, unanswered requests, malformed, retransmission, rejects), and a real capture when one is at hand."""
+"""tools/cli/g5c-ladder: ladders per UE and per N4 session from tshark rows, the red flags (no SMC, unanswered requests, malformed, retransmission, rejects), and a real capture when one is at hand."""
 import importlib.machinery
 import importlib.util
 import os
@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-loader = importlib.machinery.SourceFileLoader("g5c_ladder", str(ROOT / "tools" / "g5c-ladder"))
+loader = importlib.machinery.SourceFileLoader("g5c_ladder", str(ROOT / "tools" / "cli" / "g5c-ladder"))
 spec = importlib.util.spec_from_loader("g5c_ladder", loader)
 ld = importlib.util.module_from_spec(spec)
 loader.exec_module(ld)

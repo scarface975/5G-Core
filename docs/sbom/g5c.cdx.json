@@ -7,7 +7,7 @@
     "timestamp": "2026-10-29T08:40:23Z",
     "tools": [
       {
-        "name": "tools/gen_sbom.py"
+        "name": "tools/release/gen_sbom.py"
       }
     ],
     "component": {

@@ -1,8 +1,8 @@
 # Pinned 3GPP documents (Release 16)
 
 Everything we implement against, with the exact version downloaded from the official 3GPP archive and its SHA-256.
-The documents themselves live in `docs/specs/src/` (git-ignored, not redistributed); fetch with `tools/fetch_specs.ps1`,
-extract text with `tools/spec_text.py`, check integrity with `python tools/verify_pins.py`. Full hashes: `pinned.json`.
+The documents themselves live in `docs/specs/src/` (git-ignored, not redistributed); fetch with `tools/spec/fetch_specs.ps1`,
+extract text with `tools/spec/spec_text.py`, check integrity with `python tools/spec/verify_pins.py`. Full hashes: `pinned.json`.
 
 | Specification | Version | Release | File | SHA-256 (first 16) |
 |---|---|---|---|---|

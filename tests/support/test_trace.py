@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""tools/g5c-trace: text and JSON logs are joined by trace id across files, filtered by identity, and ordered in time."""
+"""tools/cli/g5c-trace: text and JSON logs are joined by trace id across files, filtered by identity, and ordered in time."""
 import json
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
-TOOL = Path(__file__).resolve().parent.parent.parent / "tools" / "g5c-trace"
+TOOL = Path(__file__).resolve().parent.parent.parent / "tools" / "cli" / "g5c-trace"
 T1, T2 = "0af7651916cd43dd8448eb211c80319c", "11111111111111111111111111111111"
 
 

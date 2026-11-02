@@ -3,10 +3,10 @@
 Status: Accepted (2026-10-23)
 
 ## Decision
-- **Pinned source.** TS 29.531 v16.11.0 (`docs/specs/src/29531-gb0.zip`, Release 16 is the ceiling, ADR-0017). Its two OpenAPI files are read by `tools/gen_nssf_api.py`, which writes
-  `nf/nssf/src/api_schemas.gen.c` and `api_ids.gen.h` (43 schemas); both are committed and `python3 tools/gen_nssf_api.py --check` fails when they are stale. Bodies are
-  validated by the shared schema validator (`libs/oaschema`, moved out of the UDR where it was born; `tools/oa_pool.py` is the shared flattening code of the generators). The one
-  defect of the published file that matters, the `{2-3}` repetition in the AMF Set pattern of NSSelection, is patched in `tools/validate_openapi.py` only (the spec is not edited).
+- **Pinned source.** TS 29.531 v16.11.0 (`docs/specs/src/29531-gb0.zip`, Release 16 is the ceiling, ADR-0017). Its two OpenAPI files are read by `tools/spec/gen_nssf_api.py`, which writes
+  `nf/nssf/src/api_schemas.gen.c` and `api_ids.gen.h` (43 schemas); both are committed and `python3 tools/spec/gen_nssf_api.py --check` fails when they are stale. Bodies are
+  validated by the shared schema validator (`libs/oaschema`, moved out of the UDR where it was born; `tools/spec/oa_pool.py` is the shared flattening code of the generators). The one
+  defect of the published file that matters, the `{2-3}` repetition in the AMF Set pattern of NSSelection, is patched in `tools/spec/validate_openapi.py` only (the spec is not edited).
 - **Services.** `nnssf-nsselection` v2 (GET `/network-slice-information` for the registration, PDU session, UE configuration update and PDN connection procedures; the
   query parameters are JSON-encoded as the specification says) and `nnssf-nssaiavailability` v1 (PUT/PATCH/DELETE of `/nssai-availability/{nfId}`, `/subscriptions`
   POST, `/subscriptions/{id}` PATCH/DELETE, OPTIONS). Supported features: ONSSAI, SUMOD, EANAN (availability), RSIPCE (selection); the answer carries the intersection.
@@ -27,7 +27,7 @@ Status: Accepted (2026-10-23)
   retries; subscriptions expire (never more than `max_lifetime_s`) and are bounded in number.
 - **Interop facts that shaped it.** Open5GS's NSSF implements the PDU session procedure only (the others answer 400) and Open5GS's AMF calls it only on the home-routed roaming path;
   the registration-time slice decision of Open5GS's AMF is local. So the oracle scenario with our NSSF proves registration and discovery, and the answers are proven by
-  `nssf_differential` (`tools/nssf_diff.py`, `deploy/oracle/nssf_diff.sh`: both NSSFs side by side in a private namespace behind Open5GS's NRF, nine requests compared plus three
+  `nssf_differential` (`tools/diff/nssf_diff.py`, `deploy/oracle/nssf_diff.sh`: both NSSFs side by side in a private namespace behind Open5GS's NRF, nine requests compared plus three
   that exist only in ours).
 
 ## Gaps (matrix rows NSSF-GAP-*)

@@ -1,6 +1,6 @@
 # Licence audit, automated part, release 0.9.0-rc1
 
-Made by `tools/licence_audit.py`. The manual part (patents, FRAND, export control, the owner's licence terms) is recorded in `patent-frand-review.md` and needs counsel.
+Made by `tools/release/licence_audit.py`. The manual part (patents, FRAND, export control, the owner's licence terms) is recorded in `patent-frand-review.md` and needs counsel.
 
 - **PASS**: SPDX identifier in every product source file (284 files)
 - **PASS**: no copyleft text or foreign copyright line in product files

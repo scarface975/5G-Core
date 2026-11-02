@@ -325,7 +325,7 @@
    "tests": [
     {
      "ctest": "ops_files_check",
-     "file": "tools/check_ops.py",
+     "file": "tools/check/check_ops.py",
      "fn": "-"
     }
    ],
@@ -499,7 +499,7 @@
      "fn": "-"
     }
    ],
-   "evidence": "docs/ops/slo.md; `tools/check_slo.py` runs on the 2000-UE logs in scripts/g5c_regress.sh. The 10 to 100 Gbit/s UPF target is not measured (needs a NIC)."
+   "evidence": "docs/ops/slo.md; `tools/check/check_slo.py` runs on the 2000-UE logs in scripts/g5c_regress.sh. The 10 to 100 Gbit/s UPF target is not measured (needs a NIC)."
   },
   {
    "id": "OPS-GAP",
@@ -545,16 +545,16 @@
    "tests": [
     {
      "ctest": "licence_audit",
-     "file": "tools/licence_audit.py",
+     "file": "tools/release/licence_audit.py",
      "fn": "main"
     },
     {
      "ctest": "api_docs_fresh",
-     "file": "tools/gen_api_docs.py",
+     "file": "tools/docs/gen_api_docs.py",
      "fn": "main"
     }
    ],
-   "evidence": "`tools/release.sh` runs the gates, builds the archives, verifies checksums and signatures and installs the archive into a staging root."
+   "evidence": "`tools/release/release.sh` runs the gates, builds the archives, verifies checksums and signatures and installs the archive into a staging root."
   },
   {
    "id": "REL-GAP",

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""tools/g5c-redact: identities, tokens and keys out, the shape of the log kept, the same value always the same replacement."""
+"""tools/cli/g5c-redact: identities, tokens and keys out, the shape of the log kept, the same value always the same replacement."""
 import subprocess
 import sys
 from pathlib import Path
 
-TOOL = Path(__file__).resolve().parent.parent.parent / "tools" / "g5c-redact"
+TOOL = Path(__file__).resolve().parent.parent.parent / "tools" / "cli" / "g5c-redact"
 
 
 def run(text, *args):

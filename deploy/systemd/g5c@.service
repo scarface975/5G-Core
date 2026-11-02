@@ -3,7 +3,7 @@
 # SIGHUP reloads the certificates (no restart), SIGUSR1 / SIGUSR2 raise / restore the log level.
 [Unit]
 Description=g5c 5G core network function %i
-Documentation=file:///usr/share/doc/g5c/install.md
+Documentation=file:///usr/share/doc/g5c/guides/install.md
 After=network-online.target
 Wants=network-online.target
 PartOf=g5c.target

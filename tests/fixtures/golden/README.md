@@ -12,4 +12,4 @@ NGAP PDUs extracted from them. They are behavioural references for comparison, n
 
 All S1-S3 use PLMN 001/01, SUPI imsi-001010000000001 and the test key K=465B5CE8..., OPc=E8ED289D... (public test values).
 Regenerate: `deploy/oracle/scenario.sh s1|s2|s3` (WSL), copy the newest pcap from `~/g5c-oracle/pcap/`, then
-`python3 tools/pcap_ngap_to_hex.py <pcap> > <name>_ngap_pdus.hex`.
+`python3 tools/gen/pcap_ngap_to_hex.py <pcap> > <name>_ngap_pdus.hex`.

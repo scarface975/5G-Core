@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Differential analysis of the UDR: Open5GS's UDR (the unmodified system binary, over a private MongoDB) and ours, side by side in a private network
-# namespace, the same requests to both (tools/udr_diff.py). Needs the Open5GS binaries and mongod, and our binaries installed (scripts/c_install.sh).
+# namespace, the same requests to both (tools/diff/udr_diff.py). Needs the Open5GS binaries and mongod, and our binaries installed (scripts/c_install.sh).
 # Exit status 77 (skipped) when user and network namespaces, Open5GS or mongod are not available.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -61,4 +61,4 @@ db.subscribers.insertOne({
     name:'internet', type:3, qos:{index:9, arp:{priority_level:8, pre_emption_capability:1, pre_emption_vulnerability:1}},
     ambr:{downlink:{value:1,unit:3}, uplink:{value:1,unit:3}}, pcc_rule:[]}]}]
 });" >/dev/null
-python3 "$ROOT/tools/udr_diff.py" http://127.0.0.20:7777 http://127.0.0.30:7777 "$(cat "$T/token")"
+python3 "$ROOT/tools/diff/udr_diff.py" http://127.0.0.20:7777 http://127.0.0.30:7777 "$(cat "$T/token")"

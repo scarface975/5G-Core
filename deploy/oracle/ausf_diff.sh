@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Differential analysis of the AUSF: Open5GS's AUSF (the unmodified system binary) and ours, side by side in a private network namespace behind the same UDM
-# (ours, with our UDR-lite; Open5GS's AUSF finds the UDM at Open5GS's NRF), the same requests to both (tools/ausf_diff.py).
+# (ours, with our UDR-lite; Open5GS's AUSF finds the UDM at Open5GS's NRF), the same requests to both (tools/diff/ausf_diff.py).
 # Needs the oracle templates (deploy/oracle/oracle.sh gen) and our binaries installed (scripts/c_install.sh).
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -43,4 +43,4 @@ sleep 1.5 # the UDM's registration at the NRF, and the AUSFs' discovery of it
 tok="$(cat "$ORACLE_HOME/keys/admin_token")"
 curl -s --http2-prior-knowledge -o /dev/null -w "provisioned: HTTP %{http_code}\n" -H "authorization: Bearer $tok" -H 'content-type: application/json' \
   -d '{"supi":"imsi-001010000000001","k":"465b5ce8b199b49faa5f0a2ee238a6bc","opc":"e8ed289deba952e4283b54e88e6183ca"}' http://127.1.0.1:7773/admin/v1/subscribers
-python3 "$ROOT/tools/ausf_diff.py" "$REF" http://127.1.0.111:7777
+python3 "$ROOT/tools/diff/ausf_diff.py" "$REF" http://127.1.0.111:7777

@@ -11,7 +11,7 @@ typedef struct {
     const char *snn, *identity, *autn, *ik, *ck, *ck_p, *ik_p, *k_encr, *k_aut, *k_re, *msk, *emsk;
 } vec_t;
 
-/* Appendix D of RFC 9048, extracted from the pinned text by tools/gen_eapaka_vectors.py */
+/* Appendix D of RFC 9048, extracted from the pinned text by tools/gen/gen_eapaka_vectors.py */
 static const vec_t VEC[] = {
 #include "eapaka_vectors.inc"
 };

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""tools/g5c-scenario: validation, step semantics (expect pass / fail / any, background loads, assertions on metrics, KPIs), stopping at the first failure, impairment always cleared."""
+"""tools/cli/g5c-scenario: validation, step semantics (expect pass / fail / any, background loads, assertions on metrics, KPIs), stopping at the first failure, impairment always cleared."""
 import importlib.machinery
 import importlib.util
 import sys
@@ -7,7 +7,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-loader = importlib.machinery.SourceFileLoader("g5c_scenario", str(ROOT / "tools" / "g5c-scenario"))
+loader = importlib.machinery.SourceFileLoader("g5c_scenario", str(ROOT / "tools" / "cli" / "g5c-scenario"))
 spec = importlib.util.spec_from_loader("g5c_scenario", loader)
 sc = importlib.util.module_from_spec(spec)
 loader.exec_module(sc)

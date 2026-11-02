@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""tools/g5c-api: token required, a run starts / reports / is stopped, one run at a time, bad input refused, OpenAPI served."""
+"""tools/cli/g5c-api: token required, a run starts / reports / is stopped, one run at a time, bad input refused, OpenAPI served."""
 import importlib.machinery
 import importlib.util
 import json
@@ -12,7 +12,7 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-loader = importlib.machinery.SourceFileLoader("g5c_api", str(ROOT / "tools" / "g5c-api"))
+loader = importlib.machinery.SourceFileLoader("g5c_api", str(ROOT / "tools" / "cli" / "g5c-api"))
 spec = importlib.util.spec_from_loader("g5c_api", loader)
 api = importlib.util.module_from_spec(spec)
 loader.exec_module(api)
@@ -90,7 +90,7 @@ def main():
             check("?since= at the end returns nothing new", call(base, "GET", "/v1/runs/%s?since=%d" % (v["id"], full["next"]))[1]["output"] == "")
             # a client generated from the API's own OpenAPI document talks to it
             import importlib.machinery as im, importlib.util as iu
-            sdk_tool = iu.module_from_spec(iu.spec_from_loader("sdk", im.SourceFileLoader("sdk", str(ROOT / "tools" / "g5c-sdk"))))
+            sdk_tool = iu.module_from_spec(iu.spec_from_loader("sdk", im.SourceFileLoader("sdk", str(ROOT / "tools" / "cli" / "g5c-sdk"))))
             sdk_tool.__spec__.loader.exec_module(sdk_tool)
             (d / "docs").mkdir()
             (d / "docs" / "automation.json").write_text(json.dumps(api.OPENAPI))

@@ -37,7 +37,7 @@
     },
     {
      "ctest": "nrf_differential",
-     "file": "tools/nrf_diff.py",
+     "file": "tools/diff/nrf_diff.py",
      "fn": "main"
     }
    ],
@@ -140,7 +140,7 @@
     },
     {
      "ctest": "nrf_differential",
-     "file": "tools/nrf_diff.py",
+     "file": "tools/diff/nrf_diff.py",
      "fn": "main"
     }
    ],
@@ -166,7 +166,7 @@
     },
     {
      "ctest": "nrf_differential",
-     "file": "tools/nrf_diff.py",
+     "file": "tools/diff/nrf_diff.py",
      "fn": "main"
     }
    ],
@@ -222,7 +222,7 @@
     },
     {
      "ctest": "nrf_differential",
-     "file": "tools/nrf_diff.py",
+     "file": "tools/diff/nrf_diff.py",
      "fn": "main"
     },
     {
@@ -467,11 +467,11 @@
     },
     {
      "ctest": "ausf_differential",
-     "file": "tools/ausf_diff.py",
+     "file": "tools/diff/ausf_diff.py",
      "fn": "main"
     }
    ],
-   "evidence": "Open5GS's AMF and UERANSIM register through our AUSF behind Open5GS's UDM and NRF (oracle S3, OUR_AUSF=1), and with every function ours (S3, S4, S5). The differential against Open5GS's AUSF gives the same status codes and attributes for the shared requests; the two documented differences (a second confirmation, the kseaf attribute of a failure) are in tools/ausf_diff.py."
+   "evidence": "Open5GS's AMF and UERANSIM register through our AUSF behind Open5GS's UDM and NRF (oracle S3, OUR_AUSF=1), and with every function ours (S3, S4, S5). The differential against Open5GS's AUSF gives the same status codes and attributes for the shared requests; the two documented differences (a second confirmation, the kseaf attribute of a failure) are in tools/diff/ausf_diff.py."
   },
   {
    "id": "AUSF-UEAU-02",
@@ -700,7 +700,7 @@
     },
     {
      "ctest": "ausf_differential",
-     "file": "tools/ausf_diff.py",
+     "file": "tools/diff/ausf_diff.py",
      "fn": "main"
     }
    ],
@@ -916,7 +916,7 @@
      "fn": "udr_payloads"
     }
    ],
-   "evidence": "tools/gen_udr_api.py --check proves that the committed tables are those of the pinned files; 19 UDR payloads validate against the OpenAPI."
+   "evidence": "tools/spec/gen_udr_api.py --check proves that the committed tables are those of the pinned files; 19 UDR payloads validate against the OpenAPI."
   },
   {
    "id": "UDR-DR-01",
@@ -934,7 +934,7 @@
     },
     {
      "ctest": "udr_differential",
-     "file": "tools/udr_diff.py",
+     "file": "tools/diff/udr_diff.py",
      "fn": "main"
     }
    ],
@@ -956,7 +956,7 @@
     },
     {
      "ctest": "udr_differential",
-     "file": "tools/udr_diff.py",
+     "file": "tools/diff/udr_diff.py",
      "fn": "main"
     }
    ],
@@ -1419,7 +1419,7 @@
    "tests": [
     {
      "ctest": "udr_differential",
-     "file": "tools/udr_diff.py",
+     "file": "tools/diff/udr_diff.py",
      "fn": "main"
     }
    ],
@@ -1542,7 +1542,7 @@
     },
     {
      "ctest": "nssf_differential",
-     "file": "tools/nssf_diff.py",
+     "file": "tools/diff/nssf_diff.py",
      "fn": "main"
     }
    ],
@@ -1621,7 +1621,7 @@
     },
     {
      "ctest": "nssf_differential",
-     "file": "tools/nssf_diff.py",
+     "file": "tools/diff/nssf_diff.py",
      "fn": "main"
     },
     {
@@ -1850,7 +1850,7 @@
    "tests": [
     {
      "ctest": "nssf_differential",
-     "file": "tools/nssf_diff.py",
+     "file": "tools/diff/nssf_diff.py",
      "fn": "main"
     }
    ],
@@ -2470,7 +2470,7 @@
     },
     {
      "ctest": "scp_differential",
-     "file": "tools/scp_diff.py",
+     "file": "tools/diff/scp_diff.py",
      "fn": "main"
     },
     {
@@ -2546,7 +2546,7 @@
     },
     {
      "ctest": "scp_differential",
-     "file": "tools/scp_diff.py",
+     "file": "tools/diff/scp_diff.py",
      "fn": "main"
     },
     {
@@ -2577,7 +2577,7 @@
     },
     {
      "ctest": "scp_differential",
-     "file": "tools/scp_diff.py",
+     "file": "tools/diff/scp_diff.py",
      "fn": "main"
     }
    ],
@@ -2625,7 +2625,7 @@
     },
     {
      "ctest": "scp_differential",
-     "file": "tools/scp_diff.py",
+     "file": "tools/diff/scp_diff.py",
      "fn": "main"
     }
    ],
@@ -2697,7 +2697,7 @@
     },
     {
      "ctest": "scp_differential",
-     "file": "tools/scp_diff.py",
+     "file": "tools/diff/scp_diff.py",
      "fn": "main"
     }
    ],
@@ -2724,7 +2724,7 @@
     },
     {
      "ctest": "scp_differential",
-     "file": "tools/scp_diff.py",
+     "file": "tools/diff/scp_diff.py",
      "fn": "main"
     }
    ],
@@ -2961,7 +2961,7 @@
     },
     {
      "ctest": "bsf_differential",
-     "file": "tools/bsf_diff.py",
+     "file": "tools/diff/bsf_diff.py",
      "fn": "main"
     },
     {
@@ -3077,7 +3077,7 @@
     },
     {
      "ctest": "bsf_differential",
-     "file": "tools/bsf_diff.py",
+     "file": "tools/diff/bsf_diff.py",
      "fn": "main"
     }
    ],
@@ -3102,7 +3102,7 @@
     },
     {
      "ctest": "bsf_differential",
-     "file": "tools/bsf_diff.py",
+     "file": "tools/diff/bsf_diff.py",
      "fn": "main"
     },
     {
@@ -3326,7 +3326,7 @@
    "tests": [
     {
      "ctest": "bsf_differential",
-     "file": "tools/bsf_diff.py",
+     "file": "tools/diff/bsf_diff.py",
      "fn": "main"
     }
    ],

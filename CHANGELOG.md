@@ -1,6 +1,6 @@
 # Changelog
 
-Newest first. Versions follow `MAJOR.MINOR.PATCH[-rcN]` (docs/release-process.md). The detailed engineering log is `docs/update.md`.
+Newest first. Versions follow `MAJOR.MINOR.PATCH[-rcN]` (docs/guides/release-process.md). The detailed engineering log is `docs/history/update.md`.
 
 ## 0.9.0-rc1 (release candidate)
 The first release candidate: all eleven functions of the strategy and the optional BSF, validated against Open5GS 2.8.0 and UERANSIM and against an OCUDU gNB with srsUE over ZeroMQ.
@@ -17,7 +17,7 @@ The first release candidate: all eleven functions of the strategy and the option
 - Audit lines for provisioning and policy changes; threat model (`docs/security/threat-model.md`).
 
 ### Operations (Phase 8)
-- `tools/g5c-subscribers`: bulk import of Open5GS, free5GC and CSV subscribers (validated like the UDM does, applied through `g5c-ctl`) and a key-less export.
+- `tools/cli/g5c-subscribers`: bulk import of Open5GS, free5GC and CSV subscribers (validated like the UDM does, applied through `g5c-ctl`) and a key-less export.
 - Nudm_EventExposure at the UDM (`/nudm-ee/v1`): loss of connectivity, CM state, location and reachability events for a UE, a GPSI or any UE, relayed from the AMF; `nef.events_via_udm` routes the NEF's monitoring events through it.
 - Operator tools and test helpers: `g5c-init`, scenarios (`g5c-scenario`, `g5c-api`, link impairment with `tc netem`), `g5c-dn`, `g5c-ladder`, `g5c-trace`, `g5c-dossier`, `g5c-sdk`, `perf_history.py` (see the admin guide).
 - Finishing the first versions: bulk subscriber endpoint (`POST /admin/v1/subscribers-bulk`, `g5c-ctl subscriber bulk`, `g5c-subscribers import --apply --bulk`); event exposure subscriptions kept in a state file
@@ -27,7 +27,7 @@ The first release candidate: all eleven functions of the strategy and the option
 - Usage monitoring (volume threshold, report, throttle) through the PCF, SMF and UPF; user plane traffic profiles in the load generator with a numeric check of the session AMBR on the UPF.
 - Failure injection in the AMF and the SMF (`amf.inject`, `smf.inject`); identity pinning of client certificates (`sbi.tls.allowed_peers`) and revocation lists (`sbi.tls.crl`, `g5c-pki.sh revoke`).
 - Trace ids over the SBI (`traceparent`) in every log line; `/openapi.json` on every function; an operator console at the UDM (`/console`).
-- KPIs from one definition file (`deploy/ops/kpis.json`): `tools/g5c-kpi` for lab runs and gates, generated Prometheus recording rules for dashboards.
+- KPIs from one definition file (`deploy/ops/kpis.json`): `tools/cli/g5c-kpi` for lab runs and gates, generated Prometheus recording rules for dashboards.
 - `G5C_TLS_KEYLOG=<file>` writes the TLS session secrets (NSS key log, mode 0600) so Wireshark can decrypt a capture of the SBI; off by default, a warning is printed when on, for debugging only.
 - Charging data records: one JSON line per PDU session with volumes and duration measured by the UPF (`smf.cdr.file`).
 - Prometheus alert rules, Grafana dashboard, runbooks, SLOs with regression gates (`docs/ops`).
@@ -36,8 +36,8 @@ The first release candidate: all eleven functions of the strategy and the option
 
 ### Release engineering (Phase 9)
 - systemd units, installer, administrator / installation / upgrade guides, generated API reference.
-- Diagnostics bundle (`tools/g5c-diag`), log and configuration redaction (`tools/g5c-redact`), capture helper (`tools/g5c-capture`).
-- Signed release archives, SBOM, automated licence audit, NOTICE, release manifest (`tools/release.sh`).
+- Diagnostics bundle (`tools/cli/g5c-diag`), log and configuration redaction (`tools/cli/g5c-redact`), capture helper (`tools/cli/g5c-capture`).
+- Signed release archives, SBOM, automated licence audit, NOTICE, release manifest (`tools/release/release.sh`).
 
 ### Fixed during the release candidate
 - AMF: a de-registered UE context stayed for ever when the gNB closed its association right behind the request (found by the small-load test, one run in eight).

@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* UDR internals: the generated API tables (tools/gen_udr_api.py), the schema validator and the storage interface. */
+/* UDR internals: the generated API tables (tools/spec/gen_udr_api.py), the schema validator and the storage interface. */
 #ifndef G5C_UDR_API_H
 #define G5C_UDR_API_H
 

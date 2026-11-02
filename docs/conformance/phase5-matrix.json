@@ -1,6 +1,6 @@
 {
  "title": "Conformance matrix, Phase 5 (AMF: NGAP / N2, 5GMM / N1, NAS security, mobility, Namf services, persistence)",
- "note": "Same rules as the other matrices: every test reference, function and clause is checked by tools/check_matrix.py. verified = tests pass and a real peer confirms it (UERANSIM + Open5GS's AUSF / NRF with our AMF, SMF, UPF, UDM and PCF in scenarios S1-S4 with OUR_AMF=1). The scripted gNB and UE of the end-to-end suite derive every key independently of the AMF and run over real SCTP. The gap rows are what the phase leaves out.",
+ "note": "Same rules as the other matrices: every test reference, function and clause is checked by tools/check/check_matrix.py. verified = tests pass and a real peer confirms it (UERANSIM + Open5GS's AUSF / NRF with our AMF, SMF, UPF, UDM and PCF in scenarios S1-S4 with OUR_AMF=1). The scripted gNB and UE of the end-to-end suite derive every key independently of the AMF and run over real SCTP. The gap rows are what the phase leaves out.",
  "specs": {
   "TS 24.501": "24501-gf0.txt",
   "TS 38.413": "38413-gi0.txt",

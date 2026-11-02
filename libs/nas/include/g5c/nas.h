@@ -2,7 +2,7 @@
 /* 5GS NAS (3GPP TS 24.501, Rel-16) codec.
  *
  *  - Table-driven framing for all 5GMM and 5GSM messages: NAS_MESSAGES is generated from the spec's message-content
- *    tables (tools/gen_nas_defs.py), so IEIs, formats (V/LV/LV-E/T/TV/TLV/TLV-E), presence and order come straight
+ *    tables (tools/spec/gen_nas_defs.py), so IEIs, formats (V/LV/LV-E/T/TV/TLV/TLV-E), presence and order come straight
  *    from TS 24.501 clause 8.
  *  - typed accessors for the IEs the core needs (clause 9.11).
  *  - the security-protected envelope, integrity and ciphering (TS 24.501 4.4, TS 33.501 6.4).

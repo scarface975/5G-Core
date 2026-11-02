@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# The diagnostics bundle of a g5c core: what a support engineer needs, with the subscriber and key material taken out.
+#
+#   g5c-diag [--run DIR] [--lines N] [--out FILE] [--keep-ips]
+#
+#   --run DIR     the run directory of the cluster (default $G5C_RUN, else ~/g5c-run, else ~/g5c-demo-run)
+#   --lines N     the last N lines of every log (default 2000)
+#   --out FILE    the bundle (default ./g5c-diag-<host>-<date>.tar.gz)
+#   --keep-ips    do not replace IP addresses
+#
+# In the bundle: the version of every function and the host (OS, kernel, CPU, memory, limits), the processes of the functions, one /metrics snapshot of every function, the certificates'
+# expiry, the configurations with every value that looks like a secret removed, the last lines of every log, and the reported audit lines (g5c_audit). Everything passes through tools/cli/g5c-redact
+# (IMSI / SUPI, MSISDN, IMEI, GUTI, tokens, keys, addresses). NEVER in the bundle: the keys directory, private keys of the PKI, the state files (they hold sessions and credentials).
+# A capture of the signalling is a separate step (tools/cli/g5c-capture): it holds identities that cannot be redacted inside a pcap, so it is only added with --with-capture FILE.
+set -uo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+RUN="${G5C_RUN:-}"; LINES=2000; OUT=""; KEEP=""; CAP=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --run) RUN="$2"; shift 2;; --lines) LINES="$2"; shift 2;; --out) OUT="$2"; shift 2;; --keep-ips) KEEP="--keep-ips"; shift;;
+    --with-capture) CAP="$2"; shift 2;; -h|--help) sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
+    *) echo "unknown argument $1"; exit 2;;
+  esac
+done
+[ -n "$RUN" ] || for d in "$HOME/g5c-run" "$HOME/g5c-demo-run"; do [ -d "$d/conf" ] && { RUN="$d"; break; }; done
+[ -d "${RUN:-/nonexistent}/conf" ] || { echo "no run directory with a conf/ (use --run)"; exit 1; }
+BIN="${G5C_BIN_DIR:-$HOME/.cache/g5c-bin/bin}"
+OUT="${OUT:-$PWD/g5c-diag-$(hostname)-$(date -u +%Y%m%dT%H%M%SZ).tar.gz}"
+W="$(mktemp -d)"; trap 'rm -rf "$W"' EXIT
+B="$W/g5c-diag"; mkdir -p "$B"/{conf,log,metrics}
+red() { python3 "$HERE/g5c-redact" $KEEP; }
+
+{
+  echo "bundle made: $(date -u +%FT%TZ) by tools/cli/g5c-diag"
+  echo "release: $(cat "$HERE/../../VERSION" 2>/dev/null || echo unknown)"
+  echo "run directory: $RUN"
+  echo; echo "--- host"; uname -a; grep -m1 'model name' /proc/cpuinfo; grep -E 'MemTotal|MemAvailable' /proc/meminfo; ulimit -a 2>/dev/null | grep -E 'open files|processes'
+  command -v lsb_release >/dev/null && lsb_release -ds
+  echo; echo "--- functions that run"
+  ps -eo pid,etimes,rss,args 2>/dev/null | grep -E "(^| )[0-9]+ +[0-9]+ +[0-9]+ .*/(nrf|scp|bsf|udr|nssf|nef|udm|ausf|pcf|smf|amf|upf) " | grep -v grep | sed -E "s#$HOME#~#g"
+  echo; echo "--- binaries"; ls -l "$BIN" 2>/dev/null | sed -E "s#$HOME#~#g"
+} 2>&1 | red > "$B/summary.txt"
+
+# configurations: the values of keys that look like secrets are replaced; paths of key files stay (they say where, not what)
+for f in "$RUN"/conf/*.yaml; do
+  [ -f "$f" ] || continue
+  sed -E "s#((token|password|secret|master_key|private_key|key)[a-z_]*: *)['\"]?[0-9a-fA-F]{16,}['\"]?#\1<redacted>#I" "$f" | red > "$B/conf/$(basename "$f")"
+done
+# logs: the last lines
+for f in "$RUN"/log/*.log; do
+  [ -f "$f" ] || continue
+  tail -n "$LINES" "$f" | red > "$B/log/$(basename "$f")"
+done
+grep -h g5c_audit "$RUN"/log/*.log 2>/dev/null | tail -n 500 | red > "$B/audit.txt"
+# metrics: one scrape of every function (https with the operator certificate when the cluster has a PKI, else cleartext HTTP/2)
+CURL="--http2-prior-knowledge"; SCH=http
+if [ -f "$RUN/pki/ca.crt" ] && [ -f "$RUN/pki/admin.crt" ]; then CURL="--cacert $RUN/pki/ca.crt --cert $RUN/pki/admin.crt --key $RUN/pki/admin.key"; SCH=https; fi
+for f in "$RUN"/conf/*.yaml; do
+  nf="$(basename "$f" .yaml)"
+  hp="$(sed -nE 's/^sbi: *\{ *address: *([0-9.]+), *port: *([0-9]+).*/\1:\2/p' "$f" | head -1)"
+  [ -n "$hp" ] || continue
+  # shellcheck disable=SC2086
+  curl -s --max-time 3 $CURL "$SCH://$hp/metrics" 2>/dev/null | red > "$B/metrics/$nf.txt"
+done
+# certificates: expiry only
+[ -d "$RUN/pki" ] && bash "$HERE/../../deploy/run/g5c-pki.sh" status "$RUN/pki" > "$B/certificates.txt" 2>&1
+[ -n "$CAP" ] && [ -f "$CAP" ] && { mkdir -p "$B/capture"; cp "$CAP" "$B/capture/"; echo "capture $(basename "$CAP") added as it is: it holds identities" >> "$B/summary.txt"; }
+tar -C "$W" -czf "$OUT" g5c-diag
+echo "diagnostics bundle: $OUT ($(du -h "$OUT" | cut -f1); $(find "$B" -type f | wc -l) files)"

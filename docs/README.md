@@ -8,35 +8,28 @@ See the licensing policy in the strategy PDF, section 2.
 ## Where things are
 | Path | Purpose |
 |------|---------|
-| `strategy/5G_Core_Phase_Strategy.pdf` | Phase-wise plan (phases 0-9), licensing policy, validation strategy, risks |
-| `update.md` | **Append-only, newest-first build/progress log.** Update it every session or milestone |
-| `adr/` | Architecture decision records, `NNNN-title.md` (language, licensing, spec baseline, ...) |
-| `specs/` | Spec index: 3GPP clause -> module -> test traceability |
+| `guides/` | install, upgrade, admin guide, testing, release process, pilot plan |
+| `history/update.md` | Append-only, newest-first build log. Update it every session or milestone |
+| `adr/` | Architecture decision records, `NNNN-title.md` (language, licensing, spec baseline, per-NF design) |
+| `specs/` | Pinned 3GPP documents and the clause -> module -> test traceability |
+| `conformance/` | Per-phase matrices: spec clause, function, proving test (checked by `tools/check/check_matrix.py`) |
+| `api/` | Generated SBI reference of every NF |
+| `ops/` | Runbooks and service level objectives |
+| `security/` | Threat model, key-handling note, lawful-intercept design |
+| `legal/` | Third-party licences, SNOW 3G licensing, release audit |
+| `sbom/`, `perf/` | Software bill of materials, performance history |
+| `strategy/` | Phase plan (PDF), vendor comparison and feature opportunity sheets |
+| `demo/` | Host and radio-simulator demos |
 
-## Repository layout
-```
-libs/    shared C libraries: base (bytes, JSON, YAML, logging, metrics), config, sbi, nfcore, nas, ngap, pfcp, gtpu,
-         crypto, testkit
-nf/      amf, smf, upf, pcf, udm, nrf, ausf, udr, nssf, nef, scp, bsf   (NFs never import each other; share code only via libs/)
-nf/udr/  the UDR (generated API tables, storage interface with memory / file / PostgreSQL backends)
-nf/nssf/ the NSSF (Nnssf_NSSelection, Nnssf_NSSAIAvailability; slice policy in configuration)
-nf/nef/  the NEF (northbound APIs for application functions: traffic influence, monitoring events, AS session with QoS)
-nf/scp/  the SCP (indirect communication between the functions: delegated discovery, reselection, TS 29.500 6.10)
-nf/bsf/  the BSF (binding support: which PCF holds the PDU session of a UE address, TS 29.521)
-tests/   conformance (golden traces, payload dump), fixtures (golden pcaps and PDUs, fuzz seeds)
-fuzz/    libFuzzer targets and the gcc replay driver
-deploy/  docker, compose (UERANSIM + Open5GS oracle), k8s
-configs/ sample per-NF configuration
-tools/ scripts/   spec extractors + code generators (ASN.1, NAS tables, NGAP schema, test vectors), pcap helpers, build/test/lint scripts
-```
+The repository layout (code, tools, deploy) is described in the [top-level README](../README.md).
 
 ## Conventions
 - Every protocol-logic change cites the governing 3GPP clause (TS number + section).
 - Dependencies: MIT / Apache-2.0 / BSD / ISC / MPL-2.0 only. No GPL/AGPL/SSPL.
-- Decisions go in `adr/`; progress goes in `update.md`.
+- Decisions go in `adr/`; progress goes in `history/update.md`.
 - Definition of done: see strategy PDF, section 6.
 
-## Phases (status in update.md)
+## Phases (status in history/update.md)
 0 Foundations - 1 UDM - 2 PCF - 3 UPF - 4 SMF - 5 AMF - 6 Integration - 7 Remaining NFs - 8 Hardening - 9 Release
 
 ## Build / run

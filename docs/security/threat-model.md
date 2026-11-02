@@ -1,7 +1,7 @@
 # Threat model of the g5c core (release 0.9.0-rc1)
 
 STRIDE over the interfaces, with what the code does about each and what is left. It complements `udm-key-handling-threat-note.md`. An external penetration test is planned in
-`docs/pilot-plan.md`; this document is the engineering view that the test is briefed with.
+`docs/guides/pilot-plan.md`; this document is the engineering view that the test is briefed with.
 
 ## Assets
 Subscriber credentials (K, OPc, home network private keys), session keys (KAUSF, KSEAF, KAMF, NAS keys), subscriber identities and locations, the access-token signing key of the NRF, the CA key, admin tokens,
@@ -29,7 +29,7 @@ the availability of the signalling and the user plane, and the integrity of poli
 | Denial of service: user plane | UPF | session limit (`max_sessions`), QER rate enforcement, drop counters | `upf_*` tests | no NIC offload; a flood saturates one core |
 | Elevation of privilege | host | non-root service user, no capabilities except the UPF's CAP_NET_ADMIN, read-only system, no new privileges, memory W^X (`deploy/systemd/g5c@.service`) | `systemd-analyze verify` of the units | containers are unbuilt: not assessed |
 | Malformed input | NGAP, NAS, PFCP, GTP-U, SBI bodies | table-driven decoders with bounds checks; JSON schema validation of every SBI body (payloads against the pinned OpenAPI); fuzz replay under ASan / UBSan on every build; no banned libc functions (lint) | `fuzz_replay_*`, `payload validation 87/87`, `c_lint.sh` | no coverage-guided fuzzing in CI (needs clang); no long fuzz campaign |
-| Supply chain | build | dependencies pinned in the SBOM, licence audit automated, release archive checksummed and signed | `licence_audit.py`, `tools/release.sh` | no reproducible build; no scan against a vulnerability database in this environment (run one at release: `docs/release-process.md`) |
+| Supply chain | build | dependencies pinned in the SBOM, licence audit automated, release archive checksummed and signed | `licence_audit.py`, `tools/release/release.sh` | no reproducible build; no scan against a vulnerability database in this environment (run one at release: `docs/guides/release-process.md`) |
 
 ## Abuse cases that drove tests
 A request without a token, with an expired token, a forged key id, another audience (`nrf_oauth2`); a foreign CA's certificate, no client certificate, cleartext to a TLS port (`cluster_tls`); a certificate

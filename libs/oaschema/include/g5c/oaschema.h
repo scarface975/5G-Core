@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* Validation of JSON bodies against the schemas of the pinned 3GPP OpenAPI files, from a pool that tools/oa_pool.py flattened */
+/* Validation of JSON bodies against the schemas of the pinned 3GPP OpenAPI files, from a pool that tools/spec/oa_pool.py flattened */
 #ifndef G5C_OASCHEMA_H
 #define G5C_OASCHEMA_H
 

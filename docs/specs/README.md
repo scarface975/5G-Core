@@ -1,6 +1,6 @@
 # Spec index and traceability
 
-Pinned document versions: [PINNED.md](PINNED.md) (24 Release 16 documents, SHA-256 in `pinned.json`; `python tools/verify_pins.py`).
+Pinned document versions: [PINNED.md](PINNED.md) (24 Release 16 documents, SHA-256 in `pinned.json`; `python tools/spec/verify_pins.py`).
 Schema conformance: `scripts/validate_payloads.ps1` validates the JSON our NFs emit against the official OpenAPI files embedded in the specs.
 
 

@@ -1,6 +1,6 @@
 # Service level objectives and capacity
 
-Measured on one host (WSL2, 8 vCPU, loopback, every function a separate process, a scripted gNB / UE load generator, no radio). They are what the regression gates (`tools/check_slo.py`, the
+Measured on one host (WSL2, 8 vCPU, loopback, every function a separate process, a scripted gNB / UE load generator, no radio). They are what the regression gates (`tools/check/check_slo.py`, the
 performance gates of the UPF and the UDM) hold the code to; they are not a promise for other hardware. A shared host swings by a factor of three between runs, so the objectives sit well
 below the best measurements.
 

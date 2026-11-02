@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "note": "One definition of the core's service KPIs. tools/g5c-kpi computes them from /metrics (a lab run, a diagnostics bundle or a live function) and generates the Prometheus recording rules (prometheus-kpi-rules.yml) from the same text, so the lab and the production numbers are the same arithmetic. 'ref' names the closest TS 28.552 / 28.554 measurement family and is for orientation (verify the exact clause before quoting it in a report). A KPI with `by` gets one row per value of that label (the PDU session counter carries the slice).",
+  "note": "One definition of the core's service KPIs. tools/cli/g5c-kpi computes them from /metrics (a lab run, a diagnostics bundle or a live function) and generates the Prometheus recording rules (prometheus-kpi-rules.yml) from the same text, so the lab and the production numbers are the same arithmetic. 'ref' names the closest TS 28.552 / 28.554 measurement family and is for orientation (verify the exact clause before quoting it in a report). A KPI with `by` gets one row per value of that label (the PDU session counter carries the slice).",
   "kpis": [
     {"id": "registration_attempts", "name": "Registration requests", "kind": "sum", "unit": "count", "ref": "TS 28.552 RM.RegInitReq family",
      "of": [{"metric": "g5c_amf_registrations_total"}]},

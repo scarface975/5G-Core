@@ -22,7 +22,7 @@ def main():
         print(("PASS  " if cond else "FAIL  ") + name + ("" if cond else "  -> " + repr(got)))
         ok = ok and cond
 
-    p = subprocess.run([sys.executable, str(ROOT / "tools" / "gen_console.py"), "--check"], capture_output=True, text=True)
+    p = subprocess.run([sys.executable, str(ROOT / "tools" / "gen" / "gen_console.py"), "--check"], capture_output=True, text=True)
     check("the embedded copy is current", p.returncode == 0, p.stdout + p.stderr)
     html = PAGE.read_text(encoding="utf-8")
     script = re.findall(r"<script>(.*?)</script>", html, re.S)

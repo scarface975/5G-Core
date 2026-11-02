@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""tools/g5c-dn: DNS, HTTP, echo and RADIUS answer correctly over real sockets."""
+"""tools/cli/g5c-dn: DNS, HTTP, echo and RADIUS answer correctly over real sockets."""
 import hashlib
 import importlib.machinery
 import importlib.util
@@ -9,7 +9,7 @@ import sys
 import urllib.request
 from pathlib import Path
 
-path = str(Path(__file__).resolve().parent.parent.parent / "tools" / "g5c-dn")
+path = str(Path(__file__).resolve().parent.parent.parent / "tools" / "cli" / "g5c-dn")
 loader = importlib.machinery.SourceFileLoader("g5c_dn", path)
 spec = importlib.util.spec_from_loader("g5c_dn", loader)
 dn = importlib.util.module_from_spec(spec)

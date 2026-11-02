@@ -1,0 +1,286 @@
+#!/usr/bin/env python3
+"""g5c-kpi: service KPIs of the core from its Prometheus metrics, from one definition file (deploy/ops/kpis.json).
+
+  g5c-kpi [--defs FILE] [--json] [--check] SRC...                    KPIs from the counters as they stand (totals since start)
+  g5c-kpi [--defs FILE] --interval SECONDS URL...                    two samples SECONDS apart: the KPIs of that period (counters as deltas, rates per second)
+  g5c-kpi [--defs FILE] --baseline SRC... --elapsed SECONDS SRC...   the period between two saved samples
+  g5c-kpi --rules [--check-rules FILE]                               the Prometheus recording rules for the same KPIs (so a dashboard and a lab report agree)
+
+SRC is a metrics file, a directory of them (the metrics/ folder of a g5c-diag bundle), or an http(s) URL of a function's /metrics (fetched with `curl --http2-prior-knowledge`; for TLS
+put the curl options in G5C_CURL_ARGS, e.g. "--cacert ca.crt --cert admin.crt --key admin.key"). With --check the exit code is 1 when a KPI misses its target (a KPI with too little traffic
+to judge, below the target's min_den, is skipped): the same numbers can gate a lab run."""
+import argparse
+import json
+import math
+import os
+import re
+import shlex
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+DEFAULT_DEFS = Path(__file__).resolve().parent.parent.parent / "deploy" / "ops" / "kpis.json"
+LINE = re.compile(r'^([a-zA-Z_:][a-zA-Z0-9_:]*)(?:\{(.*)\})?\s+(\S+)')
+LABEL = re.compile(r'([a-zA-Z_][a-zA-Z0-9_]*)="((?:[^"\\]|\\.)*)"')
+
+
+def parse_exposition(text):
+    """-> list of (name, labels dict, value). Comment lines and NaN/Inf samples are skipped."""
+    out = []
+    for line in text.splitlines():
+        if not line or line.startswith("#"):
+            continue
+        m = LINE.match(line)
+        if not m:
+            continue
+        try:
+            v = float(m.group(3))
+        except ValueError:
+            continue
+        if math.isnan(v) or math.isinf(v):
+            continue
+        out.append((m.group(1), dict(LABEL.findall(m.group(2) or "")), v))
+    return out
+
+
+def load_source(src):
+    if re.match(r"^https?://", src):
+        args = ["curl", "-s", "--max-time", "10", "--http2-prior-knowledge"] + shlex.split(os.environ.get("G5C_CURL_ARGS", ""))
+        p = subprocess.run(args + [src], capture_output=True, text=True)
+        if p.returncode != 0:
+            raise SystemExit("g5c-kpi: cannot read %s (curl exit %d)" % (src, p.returncode))
+        return parse_exposition(p.stdout)
+    path = Path(src)
+    files = sorted(path.glob("*")) if path.is_dir() else [path]
+    samples = []
+    for f in files:
+        if f.is_file():
+            samples += parse_exposition(f.read_text(errors="replace"))
+    return samples
+
+
+def load_all(srcs):
+    s = []
+    for src in srcs:
+        s += load_source(src)
+    return s
+
+
+def matches(sel, name, labels):
+    if name != sel["metric"]:
+        return False
+    for k, v in (sel.get("labels") or {}).items():
+        if labels.get(k) != v:
+            return False
+    for k, rx in (sel.get("labels_re") or {}).items():
+        if re.fullmatch(rx, labels.get(k, "")) is None:
+            return False
+    return True
+
+
+def total(samples, sels):
+    return sum(v for (n, l, v) in samples if any(matches(s, n, l) for s in sels))
+
+
+def diff(cur, base):
+    """Per-series delta; a series that went down (restart) counts from zero."""
+    key = lambda n, l: (n, tuple(sorted(l.items())))
+    b = {key(n, l): v for (n, l, v) in base}
+    out = []
+    for (n, l, v) in cur:
+        prev = b.get(key(n, l), 0.0)
+        out.append((n, l, v - prev if v >= prev else v))
+    return out
+
+
+def quantile(samples, hist, q):
+    """histogram_quantile over the cumulative _bucket series summed across label sets."""
+    buckets = {}
+    for (n, l, v) in samples:
+        if n == hist + "_bucket" and "le" in l:
+            le = math.inf if l["le"] in ("+Inf", "Inf") else float(l["le"])
+            buckets[le] = buckets.get(le, 0.0) + v
+    if not buckets:
+        return None, 0.0
+    les = sorted(buckets)
+    count = buckets[les[-1]]
+    if count <= 0:
+        return None, 0.0
+    rank = q * count
+    prev_le, prev_c = 0.0, 0.0
+    for le in les:
+        c = buckets[le]
+        if c >= rank:
+            if math.isinf(le):
+                return prev_le, count
+            if c == prev_c:
+                return le, count
+            return prev_le + (le - prev_le) * (rank - prev_c) / (c - prev_c), count
+        prev_le, prev_c = le, c
+    return prev_le, count
+
+
+def label_values(samples, k, label):
+    """The values the label takes in the series the KPI reads (sorted)."""
+    names = {s["metric"] for key in ("of", "num", "den", "den_add") for s in k.get(key, [])}
+    return sorted({l[label] for (n, l, _) in samples if n in names and label in l})
+
+
+def with_label(sels, label, value):
+    return [dict(s, labels=dict(s.get("labels") or {}, **{label: value})) for s in sels]
+
+
+def compute(defs, samples, elapsed=None):
+    """One row per KPI; a KPI with `by: <label>` has one row per value of the label (id "<id>{label=value}") instead, computed from the series that carry it."""
+    rows = []
+    expanded = []
+    for k in defs["kpis"]:
+        label = k.get("by")
+        if not label:
+            expanded.append(k)
+            continue
+        for v in label_values(samples, k, label):
+            g = dict(k, id="%s{%s=%s}" % (k["id"], label, v), name="%s, %s %s" % (k["name"], label, v))
+            g.pop("by")
+            for key in ("of", "num", "den", "den_add"):
+                if key in g:
+                    g[key] = with_label(g[key], label, v)
+            expanded.append(g)
+    for k in expanded:
+        kind, value, den = k["kind"], None, None
+        if kind in ("sum", "gauge"):
+            value = total(samples, k["of"])
+        elif kind == "ratio":
+            num = total(samples, k["num"])
+            den = total(samples, k["den"]) + total(samples, k.get("den_add", []))
+            value = (100.0 * num / den if k["unit"] == "percent" else num / den) if den > 0 else None
+        elif kind == "rate":
+            if elapsed:
+                value = total(samples, k["of"]) * k.get("scale", 1) / elapsed
+        elif kind == "quantile":
+            value, den = quantile(samples, k["histogram"], k["q"])
+        t = k.get("target")
+        status = ""
+        if t is not None:
+            if value is None or (den is not None and den < t.get("min_den", 0)):
+                status = "n/a"
+            else:
+                ok = value >= t["value"] if t["op"] == ">=" else value <= t["value"]
+                status = "ok" if ok else "MISS"
+        rows.append({"id": k["id"], "name": k["name"], "unit": k["unit"], "value": value, "basis": den, "target": t, "status": status})
+    return rows
+
+
+def fmt(v, unit):
+    if v is None:
+        return "-"
+    if unit == "percent":
+        return "%.2f %%" % v
+    if unit == "seconds":
+        return "%.4f s" % v
+    if unit == "bit/s":
+        for lim, name in ((1e9, "Gbit/s"), (1e6, "Mbit/s"), (1e3, "kbit/s")):
+            if v >= lim:
+                return "%.2f %s" % (v / lim, name)
+        return "%.0f bit/s" % v
+    return "%.0f" % v
+
+
+def sel_expr(sel, fn, window):
+    lab = [('%s="%s"' % (k, v)) for k, v in (sel.get("labels") or {}).items()] + [('%s=~"%s"' % (k, v)) for k, v in (sel.get("labels_re") or {}).items()]
+    m = sel["metric"] + ("{%s}" % ",".join(lab) if lab else "")
+    return "sum(%s(%s[%s]))" % (fn, m, window) if fn else "sum(%s)" % m
+
+
+def rules_text(defs, window="5m"):
+    """Prometheus recording rules for the KPIs, deterministic text (a test compares it with the committed file)."""
+    out = ["# Generated by `tools/cli/g5c-kpi --rules` from deploy/ops/kpis.json. Do not edit: change the definitions and regenerate.", "groups:", "  - name: g5c-kpi", "    interval: 30s", "    rules:"]
+    for k in defs["kpis"]:
+        kind = k["kind"]
+        if k.get("by"):  # per value of a label: the same expression, summed by that label
+            by = k["by"]
+            if kind == "ratio":
+                num = " + ".join(sel_expr(s, "increase", window).replace("sum(", "sum by (%s) (" % by, 1) for s in k["num"])
+                den = " + ".join(sel_expr(s, "increase", window).replace("sum(", "sum by (%s) (" % by, 1) for s in k["den"] + k.get("den_add", []))
+                expr = "%s(%s) / clamp_min(%s, 1)" % ("100 * " if k["unit"] == "percent" else "", num, den)
+            else:
+                expr = " + ".join(sel_expr(s, "increase" if kind == "sum" else None, window).replace("sum(", "sum by (%s) (" % by, 1) for s in k["of"])
+            out.append("      - record: g5c_kpi_%s_by_%s" % (k["id"], by))
+            out.append("        expr: %s" % expr)
+            out.append("        labels: {unit: \"%s\", window: \"%s\"}" % (k["unit"], window))
+            continue
+        if kind == "sum":
+            expr = " + ".join(sel_expr(s, "increase", window) for s in k["of"])
+        elif kind == "gauge":
+            expr = " + ".join(sel_expr(s, None, window) for s in k["of"])
+        elif kind == "rate":
+            expr = "(%s) * %s" % (" + ".join(sel_expr(s, "rate", window) for s in k["of"]), k.get("scale", 1)) if k.get("scale", 1) != 1 else " + ".join(sel_expr(s, "rate", window) for s in k["of"])
+        elif kind == "ratio":
+            num = " + ".join(sel_expr(s, "increase", window) for s in k["num"])
+            den = " + ".join(sel_expr(s, "increase", window) for s in k["den"] + k.get("den_add", []))
+            expr = "%s(%s) / clamp_min(%s, 1)" % ("100 * " if k["unit"] == "percent" else "", num, den)
+        else:
+            expr = 'histogram_quantile(%s, sum by (le) (rate(%s_bucket[%s])))' % (k["q"], k["histogram"], window)
+        out.append("      - record: g5c_kpi_%s" % k["id"])
+        out.append("        expr: %s" % expr)
+        out.append("        labels: {unit: \"%s\", window: \"%s\"}" % (k["unit"], window))
+    return "\n".join(out) + "\n"
+
+
+def main():
+    ap = argparse.ArgumentParser(description="service KPIs from Prometheus metrics")
+    ap.add_argument("srcs", nargs="*")
+    ap.add_argument("--defs", default=str(DEFAULT_DEFS))
+    ap.add_argument("--json", action="store_true")
+    ap.add_argument("--check", action="store_true", help="exit 1 when a KPI misses its target")
+    ap.add_argument("--interval", type=float, help="seconds between two samples of the URLs")
+    ap.add_argument("--baseline", nargs="+", help="earlier sample(s) of the same sources")
+    ap.add_argument("--elapsed", type=float, help="seconds between the baseline and the sample")
+    ap.add_argument("--rules", action="store_true", help="print the Prometheus recording rules")
+    ap.add_argument("--check-rules", metavar="FILE", help="exit 1 when FILE differs from the generated rules")
+    a = ap.parse_args()
+    defs = json.load(open(a.defs))
+    if a.rules or a.check_rules:
+        text = rules_text(defs)
+        if a.check_rules:
+            if Path(a.check_rules).read_text() != text:
+                print("kpi rules: %s differs from the definitions (run: tools/cli/g5c-kpi --rules > %s)" % (a.check_rules, a.check_rules), file=sys.stderr)
+                return 1
+            print("kpi rules: up to date")
+            return 0
+        sys.stdout.write(text)
+        return 0
+    if not a.srcs:
+        ap.error("give at least one metrics source")
+    elapsed = None
+    if a.interval:
+        first = load_all(a.srcs)
+        time.sleep(a.interval)
+        samples, elapsed = diff(load_all(a.srcs), first), a.interval
+        # gauges are not deltas: take them from the second sample
+        gauge_names = {s["metric"] for k in defs["kpis"] if k["kind"] == "gauge" for s in k["of"]}
+        cur = load_all(a.srcs)
+        samples = [x for x in samples if x[0] not in gauge_names] + [x for x in cur if x[0] in gauge_names]
+    elif a.baseline:
+        cur = load_all(a.srcs)
+        samples, elapsed = diff(cur, load_all(a.baseline)), a.elapsed
+        gauge_names = {s["metric"] for k in defs["kpis"] if k["kind"] == "gauge" for s in k["of"]}
+        samples = [x for x in samples if x[0] not in gauge_names] + [x for x in cur if x[0] in gauge_names]
+    else:
+        samples = load_all(a.srcs)
+    rows = compute(defs, samples, elapsed)
+    if a.json:
+        json.dump(rows, sys.stdout, indent=1)
+        print()
+    else:
+        w = max(len(r["name"]) for r in rows)
+        for r in rows:
+            t = r["target"]
+            tgt = "  (target %s %s)" % (t["op"], fmt(t["value"], r["unit"])) if t else ""
+            print("%-*s  %14s  %s%s" % (w, r["name"], fmt(r["value"], r["unit"]), r["status"], tgt))
+    return 1 if a.check and any(r["status"] == "MISS" for r in rows) else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -30,4 +30,4 @@ are Phase 7 (ADR-0006), so Phase 1 ships deliberately small stand-ins that speak
 
 ## Consequences
 UDM can be tested end to end today, and later phases swap shims for real NFs behind unchanged APIs. Known gaps are
-listed in `docs/update.md` (SDM change notifications, EAP-AKA', OAuth2 token validation, NRF discovery of the UDR).
+listed in `docs/history/update.md` (SDM change notifications, EAP-AKA', OAuth2 token validation, NRF discovery of the UDR).

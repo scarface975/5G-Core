@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
 /* The Unified Data Repository: Nudr_DataRepository (3GPP TS 29.504 / 29.505 / 29.519) over a storage interface.
  *
- * The API is table-driven from the pinned OpenAPI files (tools/gen_udr_api.py): every operation of the subscription-,
+ * The API is table-driven from the pinned OpenAPI files (tools/spec/gen_udr_api.py): every operation of the subscription-,
  * policy-, application- and exposure-data APIs is served, bodies are validated against the 3GPP schemas, ETag / If-Match
  * / If-None-Match / Last-Modified / `fields` work on every resource, and subscriptions send DataChangeNotify. Data lives
  * behind `udr_db` (ADR-0004, ADR-0020): memory with a journal for development and tests, PostgreSQL for production.

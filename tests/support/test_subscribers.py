@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""tools/g5c-subscribers: Open5GS, free5GC and CSV subscribers become UDM admin documents that pass the UDM's own checks; bad records are reported, not sent."""
+"""tools/cli/g5c-subscribers: Open5GS, free5GC and CSV subscribers become UDM admin documents that pass the UDM's own checks; bad records are reported, not sent."""
 import json
 import subprocess
 import sys
 from pathlib import Path
 
-TOOL = Path(__file__).resolve().parent.parent.parent / "tools" / "g5c-subscribers"
+TOOL = Path(__file__).resolve().parent.parent.parent / "tools" / "cli" / "g5c-subscribers"
 K, OPC, OP = "465b5ce8b199b49faa5f0a2ee238a6bc", "e8ed289deba952e4283b54e88e6183ca", "11111111111111111111111111111111"
 
 

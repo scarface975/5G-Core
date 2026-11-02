@@ -5,8 +5,8 @@ typed IE enums, a vendored rasn with two APER fixes) is replaced by the design b
 
 ## Decision
 1. Source of truth: the normative ASN.1 of TS 38.413 v16.18.0, extracted from the 3GPP .docx by
-   `tools/extract_asn1.py` into `docs/specs/asn1/` (six modules).
-2. `tools/gen_ngap_c.py` parses those modules (the ASN.1 subset NGAP uses: INTEGER/ENUMERATED/BIT STRING/OCTET STRING
+   `tools/spec/extract_asn1.py` into `docs/specs/asn1/` (six modules).
+2. `tools/spec/gen_ngap_c.py` parses those modules (the ASN.1 subset NGAP uses: INTEGER/ENUMERATED/BIT STRING/OCTET STRING
    including CONTAINING, character strings, SEQUENCE with extension additions, SEQUENCE OF, CHOICE, and the parameterised
    protocol containers resolved against the `NGAP-PROTOCOL-IES` / `-EXTENSION` / `-PRIVATE-IES` object sets and the
    `NGAP-ELEMENTARY-PROCEDURE` objects) and emits `libs/ngap/src/schema.c` (about 1,900 type nodes, 426 IE sets, 66

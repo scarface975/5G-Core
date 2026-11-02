@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""tools/g5c-dossier: rows get the verdict of their tests, a gap stays a gap, the three report formats are written, the dossier has a manifest that matches its files."""
+"""tools/release/g5c-dossier: rows get the verdict of their tests, a gap stays a gap, the three report formats are written, the dossier has a manifest that matches its files."""
 import hashlib
 import subprocess
 import sys
@@ -8,7 +8,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-TOOL = ROOT / "tools" / "g5c-dossier"
+TOOL = ROOT / "tools" / "release" / "g5c-dossier"
 JUNIT = """<testsuite name="x" tests="3"><testcase name="crypto_milenage"/><testcase name="nrf_oauth2"><failure message="boom"/></testcase><testcase name="udm_unit_and_services"/></testsuite>"""
 
 

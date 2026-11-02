@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Installs a built or packaged g5c release on a host (see docs/install.md).
+# Installs a built or packaged g5c release on a host (see docs/guides/install.md).
 #
 #   deploy/install.sh [--bin DIR] [--prefix /usr/local] [--no-user]
 #
@@ -7,7 +7,7 @@
 #   DESTDIR=...  install into a staging root instead of the host (what the tests do; no user is created, no service is touched)
 #
 # What it does: the functions into <prefix>/bin, the service units into /etc/systemd/system (or DESTDIR), the system user g5c, /etc/g5c (0750, keys/ 0700), /var/lib/g5c, a PKI under
-# /etc/g5c/pki when none is there, example configurations into /etc/g5c/examples (never over a configuration that exists). Idempotent: run it again for an upgrade (see docs/upgrade.md).
+# /etc/g5c/pki when none is there, example configurations into /etc/g5c/examples (never over a configuration that exists). Idempotent: run it again for an upgrade (see docs/guides/upgrade.md).
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
@@ -26,7 +26,7 @@ install -m 0644 "$HERE/systemd/g5c@.service" "$HERE/systemd/g5c.target" "$D/etc/
 install -m 0644 "$HERE/systemd/g5c@upf.service.d/override.conf" "$D/etc/systemd/system/g5c@upf.service.d/override.conf"
 install -d -m 0750 "$D/etc/g5c" "$D/etc/g5c/examples"; install -d -m 0700 "$D/etc/g5c/keys"; install -d -m 0750 "$D/var/lib/g5c"
 for c in "$ROOT"/configs/*.yaml; do [ -f "$c" ] && install -m 0640 "$c" "$D/etc/g5c/examples/$(basename "$c")"; done
-for d in install.md upgrade.md admin-guide.md ops/runbooks.md ops/slo.md api/README.md; do
+for d in guides/install.md guides/upgrade.md guides/admin-guide.md ops/runbooks.md ops/slo.md api/README.md; do
   [ -f "$ROOT/docs/$d" ] && install -D -m 0644 "$ROOT/docs/$d" "$D/usr/share/doc/g5c/$d"
 done
 [ -f "$ROOT/VERSION" ] && install -m 0644 "$ROOT/VERSION" "$D/usr/share/doc/g5c/VERSION"

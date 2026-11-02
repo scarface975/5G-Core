@@ -19,7 +19,7 @@
  *                      deploy/run/g5c-cluster.sh kills and restarts network functions)
  *   G5C_LOAD_CHECK_MEM 0: do not assert that RSS stops growing between waves (sanitizer builds)
  *   G5C_LOAD_TRAFFIC_MBPS  user plane (backlog B-02): once every UE has its session, each UE sends uplink GTP-U at this rate (Mbit/s, may be fractional) for G5C_LOAD_TRAFFIC_MS
- *   G5C_LOAD_ECHO      an echo server behind the UPF (tools/g5c-dn --echo 7 on the data network gateway): the uplink packets are addressed to it and come back as downlink through
+ *   G5C_LOAD_ECHO      an echo server behind the UPF (tools/cli/g5c-dn --echo 7 on the data network gateway): the uplink packets are addressed to it and come back as downlink through
  *                      the UPF to the gNB's N3 socket, which gives loss, round-trip time and jitter and the downlink rate (at most 2 gNBs: each owns an N3 address).
  *                      G5C_LOAD_EXPECT_DL_MBPS: the per-UE downlink rate the session AMBR allows (judged like G5C_LOAD_EXPECT_MBPS); G5C_LOAD_ECHO_MAX_LOSS_PCT: fail above this loss
  *                      (default traffic: each UE sends at G5C_LOAD_TRAFFIC_MBPS)  G5C_LOAD_TRAFFIC_SIZE octets (default 1000). Remote mode only: the UPF's counters say what was forwarded and what its rate limiter

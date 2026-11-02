@@ -1,6 +1,6 @@
 {
   "title": "Conformance matrix, Phases 0-2 (platform, UDM with udr-lite and the AUSF (first as a shim, now the full function), PCF)",
-  "note": "Procedure -> clause -> test -> status. Every test reference is checked by tools/check_matrix.py (the ctest name exists, the function exists in the file, the clause exists in the pinned specification text). Status: verified = tests pass and a real peer or published vector confirms it; tested = tests pass, no external reference available; partial = part of the clause is implemented; gap = in scope but not implemented; out-of-scope = deliberately not built, with the phase that will.",
+  "note": "Procedure -> clause -> test -> status. Every test reference is checked by tools/check/check_matrix.py (the ctest name exists, the function exists in the file, the clause exists in the pinned specification text). Status: verified = tests pass and a real peer or published vector confirms it; tested = tests pass, no external reference available; partial = part of the clause is implemented; gap = in scope but not implemented; out-of-scope = deliberately not built, with the phase that will.",
   "specs": {
     "TS 29.503": "29503-gi0.txt",
     "TS 29.504": "29504-ge0.txt",

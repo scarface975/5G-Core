@@ -14,16 +14,16 @@ Status: Accepted (2026-10-14). Amends ADR-0003 ("Release 17 and 18 are scheduled
 
 ## Gate for every Release 17 feature
 1. **Spec text pinned first.** The Release 17 version of each specification the feature touches is added to `docs/specs/PINNED.md` / `pinned.json`
-   (official 3GPP archive, SHA-256), and the ASN.1 and OpenAPI inputs of the generators (`tools/extract_asn1.py`, `tools/extract_openapi.py`,
-   `tools/gen_nas_defs.py`) are regenerated from it. Bit layouts are read from that text, never from memory (the lesson of the UP Function Features bug).
+   (official 3GPP archive, SHA-256), and the ASN.1 and OpenAPI inputs of the generators (`tools/spec/extract_asn1.py`, `tools/spec/extract_openapi.py`,
+   `tools/spec/gen_nas_defs.py`) are regenerated from it. Bit layouts are read from that text, never from memory (the lesson of the UP Function Features bug).
 2. **Delta analysis** per network function: the clauses that changed between the pinned Release 16 text and the Release 17 text, recorded in
    `docs/conformance/release17-delta.md`, each row either "implemented", "not applicable to a core function", or "out of scope" with the reason.
-3. **Matrix row** per behaviour (`docs/conformance/`), checked by `tools/check_matrix.py`: clause, test, status. `verified` needs an independent peer
+3. **Matrix row** per behaviour (`docs/conformance/`), checked by `tools/check/check_matrix.py`: clause, test, status. `verified` needs an independent peer
    that implements the feature; with none, the row stays `tested` and says so (ADR-0003 criterion b is kept, not waived).
 4. **Negotiation and fallback tests**: the same registration / session flow with a Release 16 peer must be byte-for-byte what the Release 16 profile
    produces; a Release 17 IE must be ignored or rejected as the Release 16 specification says when the capability is off.
-5. **Differential analysis** against an open implementation that has the feature, where one exists (the method of `tools/amf_diff.py`,
-   `tools/pfcp_diff.py`).
+5. **Differential analysis** against an open implementation that has the feature, where one exists (the method of `tools/diff/amf_diff.py`,
+   `tools/diff/pfcp_diff.py`).
 
 ## Candidate increments (to be confirmed or discarded by the delta analysis; no behaviour is implemented from this list alone)
 | Area | Network functions affected | Note |

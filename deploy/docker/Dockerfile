@@ -1,5 +1,5 @@
 # Multi-stage build of the C network functions. UNVERIFIED on this project's host: the Docker daemon was not available when
-# this file was written (see docs/update.md); `docker build` it before relying on it.
+# this file was written (see docs/history/update.md); `docker build` it before relying on it.
 FROM ubuntu:24.04 AS build
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential cmake pkg-config libssl-dev libnghttp2-dev libuv1-dev libpq-dev ca-certificates \

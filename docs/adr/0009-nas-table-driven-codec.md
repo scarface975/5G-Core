@@ -3,8 +3,8 @@
 Status: Accepted (2026-09-30)
 
 ## Decision
-`tools/extract_nas_tables.py` pulls the message-content tables of TS 24.501 v16.15.0 (clause 8) into
-`docs/specs/nas/messages.json`; `tools/gen_nas_defs.py` turns them into static `nas_msgdef`/`nas_iedef` tables
+`tools/spec/extract_nas_tables.py` pulls the message-content tables of TS 24.501 v16.15.0 (clause 8) into
+`docs/specs/nas/messages.json`; `tools/spec/gen_nas_defs.py` turns them into static `nas_msgdef`/`nas_iedef` tables
 (`libs/nas/src/defs.c`: IEIs, formats V/LV/LV-E/T/TV/TLV/TLV-E, presence, order) for all 32 5GMM and 16 5GSM
 messages. One generic encoder/decoder handles every message, including half-octet packing; unknown optional IEs are
 preserved. Typed views (`nasie.c`) and the security envelope (`security.c`: SHT 1-4, NIA2/NEA2, NIA0/NEA0) are

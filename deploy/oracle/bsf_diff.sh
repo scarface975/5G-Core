@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Differential analysis of the BSF: Open5GS's BSF (the unmodified system binary, registered at Open5GS's NRF) and ours, side by side in a private network namespace, the
-# same Nbsf_Management requests to both (tools/bsf_diff.py). Needs the Open5GS binaries and our binaries installed (scripts/c_install.sh). Exit status 77 (skipped)
+# same Nbsf_Management requests to both (tools/diff/bsf_diff.py). Needs the Open5GS binaries and our binaries installed (scripts/c_install.sh). Exit status 77 (skipped)
 # when user and network namespaces or Open5GS are not available.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -46,4 +46,4 @@ for _ in $(seq 1 60); do
   curl -s -o /dev/null --http2-prior-knowledge http://127.0.0.15:7777/nbsf-management/v1/x && curl -s -o /dev/null --http2-prior-knowledge http://127.0.0.31:7777/nbsf-management/v1/x && break
   sleep 0.2
 done
-python3 "$ROOT/tools/bsf_diff.py" http://127.0.0.15:7777 http://127.0.0.31:7777
+python3 "$ROOT/tools/diff/bsf_diff.py" http://127.0.0.15:7777 http://127.0.0.31:7777

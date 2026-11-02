@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Differential analysis of the SCP: Open5GS's SCP (the unmodified system binary, with Open5GS's NRF) and ours, side by side in a private network namespace in front of
-# the same NRF and the same producer (our NSSF, registered at the NRF), the same requests to both (tools/scp_diff.py). Needs the Open5GS binaries and our binaries
+# the same NRF and the same producer (our NSSF, registered at the NRF), the same requests to both (tools/diff/scp_diff.py). Needs the Open5GS binaries and our binaries
 # installed (scripts/c_install.sh). Exit status 77 (skipped) when user and network namespaces or Open5GS are not available.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -60,4 +60,4 @@ for _ in $(seq 1 60); do
 done
 sleep 1 # the NSSF registers at the NRF
 PID="$(curl -s --http2-prior-knowledge 'http://127.0.0.10:7777/nnrf-disc/v1/nf-instances?target-nf-type=NSSF&requester-nf-type=AMF' | python3 -c 'import json,sys; print(json.load(sys.stdin)["nfInstances"][0]["nfInstanceId"])')"
-python3 "$ROOT/tools/scp_diff.py" http://127.0.0.200:7777 http://127.0.0.201:7777 http://127.0.0.30:7777 "$PID"
+python3 "$ROOT/tools/diff/scp_diff.py" http://127.0.0.200:7777 http://127.0.0.201:7777 http://127.0.0.30:7777 "$PID"

@@ -3,10 +3,10 @@
 Status: Accepted (2026-10-22)
 
 ## Decision
-- **One generic engine, driven by the pinned OpenAPI files.** `tools/gen_udr_api.py` reads the four published API files of TS 29.505 (subscription data) and TS 29.519
+- **One generic engine, driven by the pinned OpenAPI files.** `tools/spec/gen_udr_api.py` reads the four published API files of TS 29.505 (subscription data) and TS 29.519
   (policy, exposure and application data) and writes `nf/udr/src/api_routes.gen.c` (one row per operation: method, path template, operation id, request and response
   schema, status codes, content types, `fields` support, storage key, whether the path is a collection) and `api_schemas.gen.c` (the schemas those operations reach,
-  flattened to a compact JSON document). 176 operations and 444 schemas; both files are committed and `python tools/gen_udr_api.py --check` fails when they are stale.
+  flattened to a compact JSON document). 176 operations and 444 schemas; both files are committed and `python tools/spec/gen_udr_api.py --check` fails when they are stale.
   Nothing about a resource is typed from memory. The engine registers every operation under `/nudr-dr/v1` and `/nudr-dr/v2` (TS 29.504 6.1.1 says v2; the 5G core
   consumers, ours and Open5GS's, use v1) and serves it the same way whatever the resource is.
 - **Addressing.** A resource is its URI. The storage key is the path without the subscriber and without the serving PLMN (a repository holds the subscription of one PLMN),

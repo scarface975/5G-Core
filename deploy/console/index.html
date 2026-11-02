@@ -127,7 +127,7 @@ function viewImport() {
     say(ok + " imported, " + bad.length + " failed", bad.length === 0);
   };
   $("view").replaceChildren(el("div", { className: "card" }, el("div", { className: "row" }, file), ta, el("div", { className: "row" }, go), out,
-    el("p", { textContent: "Records are checked by the UDM. For Open5GS and free5GC dumps convert first with tools/g5c-subscribers." })));
+    el("p", { textContent: "Records are checked by the UDM. For Open5GS and free5GC dumps convert first with tools/cli/g5c-subscribers." })));
 }
 
 async function viewHealth() {

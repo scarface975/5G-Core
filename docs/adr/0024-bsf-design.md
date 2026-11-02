@@ -11,7 +11,7 @@ or SCP (checked against the 2021 Callbox data sheets only; the current product d
 built (2026-10-26): with several PCFs in the demo, or an NEF in front of them, it is what makes the right PCF reachable.
 
 ## Decision
-- **Pinned source.** TS 29.521 v16.11.0 (downloaded with the owner's permission, pinned in `docs/specs/pinned.json`, SHA-256 checked by `tools/verify_pins.py`). `tools/gen_bsf_api.py` writes
+- **Pinned source.** TS 29.521 v16.11.0 (downloaded with the owner's permission, pinned in `docs/specs/pinned.json`, SHA-256 checked by `tools/spec/verify_pins.py`). `tools/spec/gen_bsf_api.py` writes
   `nf/bsf/src/api_schemas.gen.c` and `api_ids.gen.h` from `TS29521_Nbsf_Management.yaml`; bodies are validated by the shared `libs/oaschema` (`--check` fails when the committed tables are stale).
 - **Nbsf_Management** (`/nbsf-management/v1/pcfBindings`): POST registers (201 with Location and the PcfBinding with the negotiated features), GET discovers (200 with the binding, 204 when nothing
   matches, 400 MULTIPLE_BINDING_INFO_FOUND when more than one does), DELETE deregisters (204 / 404), PATCH updates with a merge patch (BindingUpdate). The query parameter and body errors use the causes
@@ -39,7 +39,7 @@ built (2026-10-26): with several PCFs in the demo, or an NEF in front of them, i
 ## Interop facts that shaped it
 Open5GS's PCF registers `{supi, ipv4Addr, dnn, snssai, pcfIpEndPoints [{ipv4Address, port}]}` (no transport, no suppFeat) and deletes the binding at the release; our BSF accepts it and Open5GS's PCF
 completes the sessions (oracle S8 with our BSF). Our PCF registers at Open5GS's BSF and Open5GS's BSF finds the binding by the UE address and drops it on DELETE (S8 with our PCF).
-Open5GS's BSF is partial, and `tools/bsf_diff.py` lists every difference with the clause that says what ours does: it ignores `dnn`, `snssai` and the other narrowing parameters, answers 404 where the
+Open5GS's BSF is partial, and `tools/diff/bsf_diff.py` lists every difference with the clause that says what ours does: it ignores `dnn`, `snssai` and the other narrowing parameters, answers 404 where the
 specification says 204, takes the first of several matches, ignores an unknown query parameter, takes the first of two UE addresses, leaves `ipv4Addr` and `supi` out of the discovery answer, refuses a plain
 IPv6 prefix such as `2001:db8:1:2::/64` ("Invalid IPv6 prefix"), cannot register a MAC address, has no PATCH, and **its `open5gs-bsfd` aborts on a registration that carries only the Diameter host and realm
 of the PCF**. Its profile at the NRF lists `allowedNfTypes` SCP, PCF and AF, so Open5GS's NRF does not discover it for an NEF although TS 29.521 4.1.2 names the NEF as a consumer: with Open5GS's BSF our

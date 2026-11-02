@@ -45,7 +45,7 @@ admin API, as handled by `nf/udm`, `shims/udr-lite` and `shims/ausf-lite`. Writt
 | T6 | Replay of authentication vectors / SQN manipulation | SQN +32, atomic persistence, AUTS MAC check | Mitigated for the shim; HA/concurrency semantics belong to the real UDR (Phase 7) |
 | T7 | Parser attacks on SBI JSON / SUCI | Own JSON DOM with depth/size limits, strict UTF-8, sanitizer and fuzz coverage | Mitigated; coverage-guided fuzzing runs in CI only (clang) |
 | T8 | Key leakage through logs, metrics or error bodies | Review; `ctl_cli` greps admin responses for key hex | **Partial**: no automated log scan; add one when logging grows |
-| T9 | Supply chain (OpenSSL, nghttp2, libuv) | Allow-list in `docs/legal/THIRD_PARTY.md`, SBOM from `tools/gen_sbom.py` | Mitigated for licensing; vulnerability scanning of the SBOM is still to be wired into CI |
+| T9 | Supply chain (OpenSSL, nghttp2, libuv) | Allow-list in `docs/legal/THIRD_PARTY.md`, SBOM from `tools/release/gen_sbom.py` | Mitigated for licensing; vulnerability scanning of the SBOM is still to be wired into CI |
 
 ## Residual risk to carry forward
 

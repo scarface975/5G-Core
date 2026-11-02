@@ -1,0 +1,252 @@
+#!/usr/bin/env python3
+"""g5c-ladder: a capture of the core's signalling as one call-flow ladder per UE and per N4 session, with red flags (backlog C-01).
+
+  g5c-ladder CAPTURE.pcap[ng] [--html OUT.html] [--ue N] [--tsv]         needs tshark; text ladders on the terminal, or one HTML page
+  g5c-ladder --from-tsv ROWS.tsv ...                                      the rows of `g5c-ladder --tsv` (no tshark needed): for CI, or to look at somebody else's capture
+
+What is read: NGAP (grouped by the RAN UE NGAP ID of each gNB), the NAS message names that are visible (messages after the Security Mode Command are ciphered: they show as the NGAP transport only),
+PFCP (grouped by the SEID), and a count of the encrypted SBI frames (set G5C_TLS_KEYLOG on the functions, backlog C-02, and give Wireshark the key log to see inside them).
+Red flags: a Registration without Authentication or Security Mode Command before the Initial Context Setup; a request nobody answered (Initial Context Setup, PDU Session Resource Setup, PFCP
+requests); an NGAP Error Indication, a reject or a failure; PFCP or NGAP messages Wireshark calls malformed; SCTP retransmissions; a Registration request that never got a response.
+Each flag names the specification row of the conformance matrix that covers the step, when there is one."""
+import argparse
+import html
+import json
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent.parent
+FIELDS = ["frame.number", "frame.time_relative", "ip.src", "ip.dst", "_ws.col.Protocol", "_ws.col.Info", "ngap.RAN_UE_NGAP_ID", "ngap.AMF_UE_NGAP_ID", "pfcp.seid", "sctp.retransmission", "pfcp.seqno"]
+COLS = ["n", "t", "src", "dst", "proto", "info", "ran", "amf", "seid", "retx", "seq"]
+NOISE = re.compile(r"^(SACK|DATA|HEARTBEAT|HEARTBEAT_ACK|INIT|INIT_ACK|COOKIE_ECHO|COOKIE_ACK)\b.*$")
+# a phrase in the ladder -> words to look for in the matrix rows that cover it
+SPEC_HINTS = [("Security mode command", "security mode"), ("Authentication", "authentication"), ("Registration", "registration"), ("PDUSessionResource", "pdu session"), ("PDU session", "pdu session"),
+              ("InitialContextSetup", "initial context"), ("Session Establishment", "session establishment"), ("Session Deletion", "session deletion"), ("Session Modification", "session modification"),
+              ("Path", "path switch"), ("Handover", "handover"), ("Paging", "paging"), ("UEContextRelease", "context release")]
+
+
+def run_tshark(path):
+    cmd = ["tshark", "-r", path, "-T", "fields", "-E", "separator=/t", "-E", "occurrence=f"]
+    for f in FIELDS:
+        cmd += ["-e", f]
+    p = subprocess.run(cmd, capture_output=True, text=True)
+    if p.returncode != 0:
+        raise SystemExit("g5c-ladder: tshark failed: %s" % p.stderr.strip()[-200:])
+    return p.stdout
+
+
+def parse_rows(text):
+    rows = []
+    for line in text.splitlines():
+        parts = line.split("\t")
+        if len(parts) < 6 or not parts[0].isdigit():
+            continue
+        parts += [""] * (len(COLS) - len(parts))
+        r = dict(zip(COLS, parts))
+        r["n"], r["t"] = int(r["n"]), float(r["t"] or 0)
+        tokens = [t.strip() for t in r["info"].split(" , ")]
+        r["retx"] = r["retx"] != "" or any("(retransmission)" in t for t in tokens)
+        tokens = [re.sub(r"(\S)\[Malformed Packet\]", r"\1 [Malformed Packet]", t) for t in tokens]
+        r["info"] = ", ".join(t for t in tokens if t and not NOISE.match(t)) or ""
+        rows.append(r)
+    return rows
+
+
+def matrix_links():
+    rows = []
+    for f in sorted((ROOT / "docs" / "conformance").glob("*-matrix.json")):
+        try:
+            rows += json.loads(f.read_text(encoding="utf-8"))["rows"]
+        except (OSError, ValueError, KeyError):
+            pass
+    return rows
+
+
+def spec_for(text, matrix):
+    for phrase, words in SPEC_HINTS:
+        if phrase.lower() in text.lower():
+            hit = [m["id"] for m in matrix if words in m["procedure"].lower()][:3]
+            if hit:
+                return " / ".join(hit)
+    return ""
+
+
+def first_id(v):
+    v = (v or "").split(",")[0].strip()
+    return v if v != "" else None
+
+
+def build(rows):
+    ues, sbi = {}, 0
+    amf_ips = {r["dst"] for r in rows if r["info"].startswith("NGSetupRequest")} | {r["src"] for r in rows if r["info"].startswith("NGSetupResponse")}
+    pfcp = []
+    for r in rows:
+        if "NGAP" in r["proto"]:
+            ran = first_id(r["ran"])
+            if r["info"].startswith("NGSetup") or ran is None:
+                ues.setdefault(("N2", "NG setup / non-UE"), []).append(r)
+                continue
+            gnb = r["dst"] if r["src"] in amf_ips else r["src"]
+            ues.setdefault(("UE", "%s ran-ue-id %s" % (gnb, ran)), []).append(r)
+        elif r["proto"].startswith("PFCP"):
+            if "Heartbeat" not in r["info"]:
+                pfcp.append(r)
+        elif r["proto"].startswith("TLS") or r["proto"].startswith("HTTP2"):
+            sbi += 1
+    return ues, group_n4(pfcp), sbi
+
+
+def group_n4(pfcp):
+    """PFCP messages of one session together: messages that carry a common non-zero SEID (union-find), the rest by their sequence number pair."""
+    parent = {}
+
+    def find(x):
+        while parent.setdefault(x, x) != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a, b):
+        parent[find(a)] = find(b)
+
+    for r in pfcp:
+        ids = ["seid:" + s for s in r["seid"].split(",") if s and set(s.replace("0x", "")) != {"0"}] + ["seq:" + r["seq"]] if r["seq"] else ["seid:" + s for s in r["seid"].split(",") if s and set(s.replace("0x", "")) != {"0"}]
+        ids = ids or ["msg:%d" % r["n"]]
+        for x in ids[1:]:
+            union(ids[0], x)
+        r["_key"] = ids[0]
+    groups = {}
+    for r in pfcp:
+        groups.setdefault(find(r["_key"]), []).append(r)
+    return {"#%d" % evs[0]["n"]: evs for evs in groups.values()}
+
+
+def findings_ue(evs):
+    f, names = [], [e["info"] for e in evs]
+    joined = " | ".join(names)
+
+    def at(word):
+        return next((i for i, n in enumerate(names) if word in n), None)
+
+    reg, ics, icsr = at("Registration request"), at("InitialContextSetupRequest"), at("InitialContextSetupResponse")
+    if reg is not None and ics is not None:
+        if at("Authentication request") is None or at("Authentication request") > ics:
+            f.append(("high", "Initial Context Setup (with the Registration Accept) without a preceding Authentication request"))
+        if at("Security mode command") is None or at("Security mode command") > ics:
+            f.append(("high", "Initial Context Setup (with the Registration Accept) without a preceding Security Mode Command"))
+    if reg is not None and ics is None and not any("Registration reject" in n for n in names):
+        f.append(("medium", "Registration request that never reached an Initial Context Setup or a reject"))
+    if ics is not None and icsr is None and at("InitialContextSetupFailure") is None:
+        f.append(("high", "InitialContextSetupRequest not answered"))
+    pdr, pdresp = at("PDUSessionResourceSetupRequest"), at("PDUSessionResourceSetupResponse")
+    if pdr is not None and pdresp is None and at("PDUSessionResourceSetupFailure") is None:
+        f.append(("high", "PDUSessionResourceSetupRequest not answered"))
+    for word, sev in (("ErrorIndication", "high"), ("Reject", "medium"), ("reject", "medium"), ("Failure", "high"), ("failure", "high"), ("Malformed", "high")):
+        if word in joined:
+            f.append((sev, "%s in the flow (%s)" % (word, next(n for n in names if word in n))))
+    if any(e["retx"] for e in evs):
+        f.append(("low", "SCTP retransmission (%d)" % sum(1 for e in evs if e["retx"])))
+    return f
+
+
+def findings_n4(evs):
+    """A request is answered when a response of the same kind with the same sequence number is in the same session group."""
+    f = []
+    for e in evs:
+        if "Malformed" in e["info"]:
+            f.append(("high", "frame %d: %s" % (e["n"], e["info"])))
+    for e in evs:
+        m = re.match(r"PFCP (Session \w+|Association \w+) Request", e["info"])
+        if m and not any(x["seq"] == e["seq"] and x["info"].startswith("PFCP %s Response" % m.group(1)) and x["src"] == e["dst"] for x in evs):
+            f.append(("high", "frame %d: PFCP %s Request (sequence %s) without a response in this capture" % (e["n"], m.group(1), e["seq"])))
+    return f
+
+
+def ladder_text(evs, t0):
+    out = []
+    for e in evs:
+        out.append("  %9.3f  #%-5d %-15s -> %-15s %s%s" % (e["t"] - t0, e["n"], e["src"], e["dst"], e["info"], "  (retransmission)" if e["retx"] else ""))
+    return out
+
+
+def report(rows, only_ue=None):
+    matrix = matrix_links()
+    ues, n4, sbi = build(rows)
+    t0 = rows[0]["t"] if rows else 0.0
+    sections, total = [], []
+    for (kind, name), evs in sorted(ues.items(), key=lambda kv: kv[1][0]["n"]):
+        fl = findings_ue(evs) if kind == "UE" else []
+        sections.append((("N2 " if kind == "N2" else "UE ") + name, evs, [(s, m, spec_for(m, matrix)) for s, m in fl]))
+    for key, evs in sorted(n4.items(), key=lambda kv: kv[1][0]["n"]):
+        sections.append(("N4 session starting at frame %s" % key, evs, [(s, m, spec_for(m, matrix)) for s, m in findings_n4(evs)]))
+    if only_ue is not None:
+        sections = [s for s in sections if s[0].endswith("ran-ue-id %s" % only_ue)]
+    for _, _, fl in sections:
+        total += fl
+    return sections, total, sbi, t0
+
+
+def text_report(rows, only_ue=None):
+    sections, total, sbi, t0 = report(rows, only_ue)
+    out = []
+    for title, evs, fl in sections:
+        out.append("%s  (%d messages)" % (title, len(evs)))
+        out += ladder_text(evs, t0)
+        for sev, msg, spec in fl:
+            out.append("  !! %-6s %s%s" % (sev.upper(), msg, "   [matrix: %s]" % spec if spec else ""))
+        out.append("")
+    if sbi:
+        out.append("%d encrypted SBI frames (TLS): set G5C_TLS_KEYLOG on the functions and give Wireshark the key log to read them" % sbi)
+    sev = {s: sum(1 for x in total if x[0] == s) for s in ("high", "medium", "low")}
+    out.append("ladders: %d, findings: %d high, %d medium, %d low" % (len(sections), sev["high"], sev["medium"], sev["low"]))
+    return "\n".join(out) + "\n", total
+
+
+def html_report(rows):
+    sections, total, sbi, t0 = report(rows)
+    parts = []
+    for title, evs, fl in sections:
+        body = "".join("<tr%s><td>%.3f</td><td>#%d</td><td>%s</td><td>&rarr;</td><td>%s</td><td>%s</td></tr>" % (" class='retx'" if e["retx"] else "", e["t"] - t0, e["n"], html.escape(e["src"]), html.escape(e["dst"]), html.escape(e["info"])) for e in evs)
+        flags = "".join("<li class='%s'><b>%s</b> %s%s</li>" % (s, s.upper(), html.escape(m), (" <i>[matrix: %s]</i>" % html.escape(sp)) if sp else "") for s, m, sp in fl)
+        parts.append("<h2>%s <small>(%d messages)</small></h2>%s<table>%s</table>" % (html.escape(title), len(evs), "<ul>%s</ul>" % flags if flags else "", body))
+    return ("<!doctype html><html lang='en'><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>g5c ladders</title>"
+            "<style>body{font:14px system-ui;margin:16px;max-width:1000px}table{border-collapse:collapse;width:100%%}td{padding:2px 6px;border-bottom:1px solid #8883;font-size:12px}tr.retx td{color:#9a6700}"
+            "li.high{color:#b3261e}li.medium{color:#9a6700}li.low{color:#57606a}@media(prefers-color-scheme:dark){body{background:#111;color:#ddd}li.high{color:#ff8a80}}</style>"
+            "<h1>Signalling ladders</h1><p>%d encrypted SBI frames not shown. %d findings.</p>%s</html>" % (sbi, len(total), "".join(parts)))
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("capture", nargs="?")
+    ap.add_argument("--from-tsv")
+    ap.add_argument("--tsv", action="store_true", help="print the rows tshark gave (to save for --from-tsv)")
+    ap.add_argument("--html")
+    ap.add_argument("--ue", help="only the UE with this RAN UE NGAP ID")
+    ap.add_argument("--fail-on", choices=["high", "medium", "low"], help="exit 1 when a finding of at least this severity exists")
+    a = ap.parse_args()
+    if a.from_tsv:
+        text = Path(a.from_tsv).read_text(encoding="utf-8")
+    elif a.capture:
+        text = run_tshark(a.capture)
+    else:
+        ap.error("give a capture or --from-tsv")
+    if a.tsv:
+        sys.stdout.write(text)
+        return 0
+    rows = parse_rows(text)
+    if a.html:
+        Path(a.html).write_text(html_report(rows), encoding="utf-8")
+        print("wrote", a.html)
+    out, total = text_report(rows, a.ue)
+    sys.stdout.write(out)
+    if a.fail_on:
+        order = ["low", "medium", "high"]
+        if any(order.index(s) >= order.index(a.fail_on) for s, _, _ in total):
+            return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

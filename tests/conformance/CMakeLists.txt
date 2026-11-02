@@ -30,20 +30,20 @@ set_property(TEST bad_configs_rejected APPEND PROPERTY LABELS component)
 # Differential PFCP analysis against Open5GS's own UPF, same SMF and scenario (needs the pinned TS 29.244 text for element names).
 find_program(G5C_PYTHON3 python3)
 if(G5C_PYTHON3 AND EXISTS ${CMAKE_SOURCE_DIR}/docs/specs/src/txt/29244-gd0.txt)
-  add_test(NAME pfcp_differential COMMAND ${G5C_PYTHON3} ${CMAKE_SOURCE_DIR}/tools/pfcp_diff.py)
+  add_test(NAME pfcp_differential COMMAND ${G5C_PYTHON3} ${CMAKE_SOURCE_DIR}/tools/diff/pfcp_diff.py)
   set_property(TEST pfcp_differential APPEND PROPERTY LABELS conformance)
 endif()
 
 # The same analysis for the SMF: same UPF and scenario, Open5GS's SMF versus ours (captures stored in tests/fixtures/golden).
 if(G5C_PYTHON3 AND EXISTS ${CMAKE_SOURCE_DIR}/docs/specs/src/txt/29244-gd0.txt)
-  add_test(NAME pfcp_differential_smf COMMAND ${G5C_PYTHON3} ${CMAKE_SOURCE_DIR}/tools/pfcp_diff.py --smf)
+  add_test(NAME pfcp_differential_smf COMMAND ${G5C_PYTHON3} ${CMAKE_SOURCE_DIR}/tools/diff/pfcp_diff.py --smf)
   set_property(TEST pfcp_differential_smf APPEND PROPERTY LABELS conformance)
 endif()
 
 # The same analysis for the AMF at N2 / N1: same UE, gNB and scenario, Open5GS's AMF versus ours (decoded by g5c-inspect with our own NGAP / NAS codecs).
 find_program(G5C_TSHARK tshark)
 if(G5C_PYTHON3 AND G5C_TSHARK AND TARGET g5c-inspect)
-  add_test(NAME ngap_differential_amf COMMAND ${G5C_PYTHON3} ${CMAKE_SOURCE_DIR}/tools/amf_diff.py --inspect $<TARGET_FILE:g5c-inspect>)
+  add_test(NAME ngap_differential_amf COMMAND ${G5C_PYTHON3} ${CMAKE_SOURCE_DIR}/tools/diff/amf_diff.py --inspect $<TARGET_FILE:g5c-inspect>)
   set_property(TEST ngap_differential_amf APPEND PROPERTY LABELS conformance)
 endif()
 

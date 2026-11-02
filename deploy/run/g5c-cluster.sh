@@ -21,7 +21,7 @@
 #   g5c-cluster.sh ns ops                            log level at run time, master key rotation, exec: key source, charging records (G5C_OAUTH2=0)
 #   g5c-cluster.sh ns slices                         the NSSF's slice decisions (registration, PDU session) and the AMF consuming both (G5C_OAUTH2=0)
 #   g5c-cluster.sh ns upgrade <ues> <seconds>        every function restarted gracefully one at a time under load (upgrade), then with the previous binaries (rollback); a clean wave must pass
-#   g5c-cluster.sh ns support                        the diagnostics bundle (tools/g5c-diag) holds logs, metrics, versions and no subscriber, key or token
+#   g5c-cluster.sh ns support                        the diagnostics bundle (tools/cli/g5c-diag) holds logs, metrics, versions and no subscriber, key or token
 #   g5c-cluster.sh ns shell                          a shell inside the namespace with the cluster up (inspect, curl, tcpdump)
 #
 # Addresses are 127.2.0.x so that the cluster can sit next to the Open5GS oracle (127.1.0.x) and to a real RAN on 127.0.0.x or a LAN address (set
@@ -461,12 +461,12 @@ cmd_impair() {
   echo "impairment to $nf ($a): $opts"
 }
 
-# scenarios (backlog B-01): the cluster is up; tools/g5c-scenario runs the steps of each file against it (load, kill, restart, impair, assert on metrics and KPIs, HTTP calls)
+# scenarios (backlog B-01): the cluster is up; tools/cli/g5c-scenario runs the steps of each file against it (load, kill, restart, impair, assert on metrics and KPIs, HTTP calls)
 do_scenario() {
   local rc=0 f
   export G5C_CLUSTER_SH="$0" G5C_CURL_ARGS="$(curlf)" G5C_SCENARIO_NFS="$NFS"
   for f in "$@"; do
-    python3 "$ROOT/tools/g5c-scenario" run "$f" || rc=1
+    python3 "$ROOT/tools/cli/g5c-scenario" run "$f" || rc=1
     cmd_impair clear >/dev/null 2>&1
   done
   return "$rc"
@@ -628,9 +628,9 @@ do_ops() {
     '{"imsi":"001019999000001","msisdn":["4915100001"],"security":{"k":"00112233445566778899aabbccddee01","opc":"ffeeddccbbaa99887766554433221101","amf":"8000","sqn":{"$numberLong":"32"}},"slice":[{"sst":1,"session":[{"name":"internet","type":1,"qos":{"index":9}}]}]}' \
     '{"imsi":"001019999000002","security":{"k":"00112233445566778899aabbccddee02","op":"00112233445566778899aabbccddee22"},"slice":[{"sst":1,"session":[{"name":"internet","type":3}]}]}' \
     '{"imsi":"001019999000003","security":{"k":"nothex","opc":"ffeeddccbbaa99887766554433221103"}}' > "$imp"
-  inv="$(python3 "$ROOT/tools/g5c-subscribers" import --format open5gs "$imp" --apply --bulk --ctl "$BIN/g5c-ctl" --udm "$udm" --token-file "$RUN/keys/admin_token" 2>&1)"
+  inv="$(python3 "$ROOT/tools/cli/g5c-subscribers" import --format open5gs "$imp" --apply --bulk --ctl "$BIN/g5c-ctl" --udm "$udm" --token-file "$RUN/keys/admin_token" 2>&1)"
   if echo "$inv" | grep -q "3 read, 2 valid, 1 rejected, 2 provisioned, 0 failed"; then ck ok "bulk import (the bulk endpoint): 2 of 3 Open5GS records provisioned, the malformed one reported and not sent"; else ck bad "bulk import: $inv"; fi
-  inv="$(python3 "$ROOT/tools/g5c-subscribers" export --format csv --ctl "$BIN/g5c-ctl" --udm "$udm" --token-file "$RUN/keys/admin_token" 2>/dev/null)"
+  inv="$(python3 "$ROOT/tools/cli/g5c-subscribers" export --format csv --ctl "$BIN/g5c-ctl" --udm "$udm" --token-file "$RUN/keys/admin_token" 2>/dev/null)"
   if echo "$inv" | grep -q "imsi-001019999000001" && echo "$inv" | grep -q "imsi-001019999000002" && ! echo "$inv" | grep -q "001019999000003" && ! echo "$inv" | grep -qi "ffeeddccbbaa9988"; then ck ok "export lists the imported subscribers, without keys"; else ck bad "export: $(echo "$inv" | head -c 300)"; fi
   # 6. Nudm_EventExposure: a subscription for any UE at the UDM reaches the AMF (found through the NRF), and the AMF's reports come back through the UDM
   local ee_body='{"callbackReference":"http://127.0.0.1:9/ee","monitoringConfigurations":{"1":{"eventType":"LOSS_OF_CONNECTIVITY"}}}' ne
@@ -643,7 +643,7 @@ do_ops() {
   if grep -q '"amfSub"' "$RUN/state/udm-ee.json" 2>/dev/null; then ck ok "the UDM keeps its event exposure subscriptions in a state file"; else ck bad "no event exposure state file"; fi
   # 7. the KPIs of the loads above, from the live metrics through the one definition file
   local kpi
-  kpi="$(G5C_CURL_ARGS="$(curlf)" python3 "$ROOT/tools/g5c-kpi" --json "$(sbi_of amf)/metrics" "$(sbi_of smf)/metrics" "$(sbi_of upf)/metrics" 2>&1)"
+  kpi="$(G5C_CURL_ARGS="$(curlf)" python3 "$ROOT/tools/cli/g5c-kpi" --json "$(sbi_of amf)/metrics" "$(sbi_of smf)/metrics" "$(sbi_of upf)/metrics" 2>&1)"
   if echo "$kpi" | python3 -c '
 import json, sys
 r = {k["id"]: k for k in json.load(sys.stdin)}
@@ -655,10 +655,10 @@ assert r["charging_records"]["value"] >= 15, r["charging_records"]
   # 8. every function serves its routes as OpenAPI; a client generated from them reaches the live UDM
   local sdk="$RUN/sdk" nfn
   mkdir -p "$sdk"
-  G5C_CURL_ARGS="$(curlf)" python3 "$ROOT/tools/g5c-sdk" fetch --out "$sdk/docs" $(for nfn in $NFS; do echo "$nfn=$(sbi_of "$nfn")"; done) >/dev/null 2>&1
+  G5C_CURL_ARGS="$(curlf)" python3 "$ROOT/tools/cli/g5c-sdk" fetch --out "$sdk/docs" $(for nfn in $NFS; do echo "$nfn=$(sbi_of "$nfn")"; done) >/dev/null 2>&1
   nfn="$(ls "$sdk/docs" 2>/dev/null | wc -l)"
   if [ "$nfn" -ge 11 ] && grep -q '"/nudm-ee/v1/{ueIdentity}/ee-subscriptions"' "$sdk/docs/udm.json"; then ck ok "$nfn functions serve /openapi.json (the UDM lists the event exposure routes)"; else ck bad "only $nfn OpenAPI documents"; fi
-  python3 "$ROOT/tools/g5c-sdk" python --from "$sdk/docs" --out "$sdk/g5c_sdk.py" >/dev/null 2>&1
+  python3 "$ROOT/tools/cli/g5c-sdk" python --from "$sdk/docs" --out "$sdk/g5c_sdk.py" >/dev/null 2>&1
   if G5C_CURL_ARGS="$(curlf)" SDK_DIR="$sdk" UDM_URL="$udm" python3 -c '
 import os, sys
 sys.path.insert(0, os.environ["SDK_DIR"])
@@ -669,7 +669,7 @@ assert st == 200 and body["status"] == "UP", (st, body)
 ' 2>/dev/null; then ck ok "the generated Python client called the live UDM (GET /health/live: UP)"; else ck bad "generated client"; fi
   # 9. one trace id follows a UE's procedure through the functions: the logs, joined by it, show a registration across several of them
   local tr
-  tr="$(python3 "$ROOT/tools/g5c-trace" "$RUN/log" --min-functions 3 2>&1 | tail -3)"
+  tr="$(python3 "$ROOT/tools/cli/g5c-trace" "$RUN/log" --min-functions 3 2>&1 | tail -3)"
   if echo "$tr" | grep -qE '^[0-9]+ traces' && [ "$(echo "$tr" | tail -1 | cut -d' ' -f1)" -ge 5 ]; then ck ok "log lines joined by trace id: $(echo "$tr" | tail -1) that touch three functions or more"; else ck bad "traces: $tr"; fi
   if [ "$f" = 0 ]; then echo "ops: PASS"; else echo "ops: FAIL"; fi
   return "$f"
@@ -699,7 +699,7 @@ do_slices() {
 
 # support tools: a diagnostics bundle after a load has the logs, metrics, versions and configurations and none of the subscribers, keys or tokens; the capture helper builds its filters
 do_support() {
-  local f=0 b="$RUN/diag.tar.gz" d n name v root="$HERE/../../tools"
+  local f=0 b="$RUN/diag.tar.gz" d n name v root="$HERE/../../tools/cli"
   ck() { if [ "$1" = ok ]; then echo "  PASS  $2"; else echo "  FAIL  $2"; f=1; fi; }
   [ "$(do_load 20 | tail -1)" = 0 ] && ck ok "20 UEs registered, got sessions and de-registered (the logs have subscribers in them)" || ck bad "load"
   "$BIN/g5c-ctl" --udm "$SCH://$A_UDM:7773" --token-file "$RUN/keys/admin_token" subscriber add --supi imsi-001019999999977 --k 00112233445566778899aabbccddee77 --opc ffeeddccbbaa99887766554433221177 --slice 1 --dnn internet >/dev/null 2>&1

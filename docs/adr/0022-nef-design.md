@@ -5,8 +5,8 @@ Status: Accepted (2026-10-23)
 ## Decision
 - **Pinned sources.** TS 29.522 v16.18.0 (the northbound APIs), TS 29.122 v16.19.0 (the T8 APIs they build on: MonitoringEvent, AsSessionWithQoS, the common data types and the
   procedures of the SCEF that TS 29.522 applies to the NEF), TS 29.514 v16.23.0 (Npcf_PolicyAuthorization, the N5 reference point) and TS 29.591 v16.7.0 (Nnef services, pinned but
-  not implemented, see the gaps). `tools/gen_nef_api.py` writes `nf/nef/src/api_schemas.gen.c` and `api_ids.gen.h` (234 schemas) from the OpenAPI files; bodies are validated by
-  the shared `libs/oaschema`. `python3 tools/gen_nef_api.py --check` fails when the committed tables are stale.
+  not implemented, see the gaps). `tools/spec/gen_nef_api.py` writes `nf/nef/src/api_schemas.gen.c` and `api_ids.gen.h` (234 schemas) from the OpenAPI files; bodies are validated by
+  the shared `libs/oaschema`. `python3 tools/spec/gen_nef_api.py --check` fails when the committed tables are stale.
 - **The AF is configuration.** `nef.afs` lists the application functions: identifier (the `{afId}` of the URIs), bearer token (file or environment variable, 16 characters at
   least; `no_auth: true` is the explicit development switch), the APIs it may use, the QoS references it may name, the hosts its notification destinations may name, a limit
   on its subscriptions. A notification destination outside the AF's hosts is refused (403): the NEF never POSTs to an address an AF merely names (no server-side request forgery).
@@ -14,7 +14,7 @@ Status: Accepted (2026-10-23)
 - **TrafficInfluence** (TS 29.522 5.4, 4.4.7.3): a request that is not identified by the UE's address is stored as TrafficInfluData (TS 29.519 6.2.6.2.2) in the UDR with
   `PUT /application-data/influenceData/{id}`; GPSI to SUPI by Nudm_SDM id translation (the UDM resolves it from the identity data in the UDR), a request for any UE is stored with
   `interGroupId` `AnyUE`. **The published TS 29.519 file types that member as GroupId, whose pattern rejects `AnyUE` although the text of the specification demands it.** The
-  generators and the payload validator apply the amendment listed in `tools/oa_pool.py` (`ANY_UE`); nothing under `docs/specs` is edited. A request identified by the UE's
+  generators and the payload validator apply the amendment listed in `tools/spec/oa_pool.py` (`ANY_UE`); nothing under `docs/specs` is edited. A request identified by the UE's
   address (the PCF path, 4.4.7.2) and a request for a group of UEs are answered 501.
 - **MonitoringEvent** (TS 29.122 5.3, 4.4.2; TS 29.522 4.4.2): LOSS_OF_CONNECTIVITY, UE_REACHABILITY and LOCATION_REPORTING for one UE named by an external identifier or an MSISDN.
   The NEF resolves the SUPI (id translation), finds the serving AMF (Nudm_UECM, then the NRF's profile of the AMF instance) and subscribes there with Namf_EventExposure; the AMF's

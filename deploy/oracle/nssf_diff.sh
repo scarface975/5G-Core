@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Differential analysis of the NSSF: Open5GS's NSSF (the unmodified system binary, behind Open5GS's NRF) and ours, side by side in a private network namespace,
-# configured with the same slices, the same Nnssf_NSSelection requests to both (tools/nssf_diff.py). Needs the Open5GS binaries and our binaries installed
+# configured with the same slices, the same Nnssf_NSSelection requests to both (tools/diff/nssf_diff.py). Needs the Open5GS binaries and our binaries installed
 # (scripts/c_install.sh). Exit status 77 (skipped) when user and network namespaces or Open5GS are not available.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -51,4 +51,4 @@ for _ in $(seq 1 60); do
   curl -s -o /dev/null --http2-prior-knowledge http://127.0.0.14:7777/nnssf-nsselection/v2/x && curl -s -o /dev/null --http2-prior-knowledge http://127.0.0.30:7777/nnssf-nsselection/v2/x && break
   sleep 0.2
 done
-python3 "$ROOT/tools/nssf_diff.py" http://127.0.0.14:7777 http://127.0.0.30:7777
+python3 "$ROOT/tools/diff/nssf_diff.py" http://127.0.0.14:7777 http://127.0.0.30:7777

@@ -59,7 +59,7 @@ Replacing the CA itself: issue every certificate from the new CA, put both CAs i
 The CA key (`$RUN/pki/ca.key`) belongs offline on a production cluster: `issue` only needs it where certificates are made.
 
 ## Reading the SBI in Wireshark (TLS)
-Start the function with `G5C_TLS_KEYLOG=/path/keys.log` in its environment (systemd: `Environment=` in a drop-in), capture on the SBI port with `tools/g5c-capture`, then in Wireshark set
+Start the function with `G5C_TLS_KEYLOG=/path/keys.log` in its environment (systemd: `Environment=` in a drop-in), capture on the SBI port with `tools/cli/g5c-capture`, then in Wireshark set
 Edit > Preferences > Protocols > TLS > (Pre)-Master-Secret log filename to the same file. The file holds session secrets: debugging only, delete it afterwards, never leave the variable set in production.
 
 ## Secrets

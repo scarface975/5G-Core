@@ -1,6 +1,6 @@
 {
  "title": "Conformance matrix, Phase 3 (UPF: N4 PFCP, N3 GTP-U, N6)",
- "note": "Same rules as phase1-2-matrix.json: every test reference, function and clause is checked by tools/check_matrix.py. verified = tests pass and a real peer or a byte-exact capture confirms it (Open5GS SMF + UERANSIM gNB against our UPF, scenarios S3/S4 with OUR_UPF=1).",
+ "note": "Same rules as phase1-2-matrix.json: every test reference, function and clause is checked by tools/check/check_matrix.py. verified = tests pass and a real peer or a byte-exact capture confirms it (Open5GS SMF + UERANSIM gNB against our UPF, scenarios S3/S4 with OUR_UPF=1).",
  "specs": {
   "TS 29.244": "29244-gd0.txt",
   "TS 29.281": "29281-g20.txt",
@@ -60,7 +60,7 @@
    "tests": [
     {
      "ctest": "pfcp_differential",
-     "file": "tools/pfcp_diff.py",
+     "file": "tools/diff/pfcp_diff.py",
      "fn": "main"
     }
    ],

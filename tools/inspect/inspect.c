@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* g5c-inspect: documentation helper used by tools/gen_dashboard.py. Everything it prints comes from the real code.
+/* g5c-inspect: documentation helper used by tools/docs/gen_dashboard.py. Everything it prints comes from the real code.
  *
  *   g5c-inspect routes          JSON object: NF name -> [{"method", "path"}] built from the routers the NFs really register
  *   g5c-inspect decode          reads lines "<id> <hex NGAP PDU>" on stdin, prints one JSON object per line with the

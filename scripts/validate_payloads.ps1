@@ -1,5 +1,5 @@
 # Dump the JSON our NFs really produce, then validate it against the official 3GPP OpenAPI schemas.
-# Needs: docs/specs/src/openapi (python tools/spec_text.py; python tools/extract_openapi.py), pip install jsonschema pyyaml
+# Needs: docs/specs/src/openapi (python tools/spec/spec_text.py; python tools/spec/extract_openapi.py), pip install jsonschema pyyaml
 $root = (Resolve-Path "$PSScriptRoot\..").Path
 $drive = $root.Substring(0, 1).ToLower()
 $wslRoot = "/mnt/$drive" + $root.Substring(2).Replace('\', '/')

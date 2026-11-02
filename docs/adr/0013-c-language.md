@@ -37,4 +37,4 @@ Network-facing parsers (NAS, NGAP, PFCP, GTP-U, SBI JSON) are the attack surface
 - Highest defect risk of the options; the controls above are the price and are not optional.
 - The port was completed on 2026-10-07 (crypto, base, config, sbi, nfcore, NAS, NGAP, PFCP/GTP-U headers, udr-lite, UDM,
   ausf-lite, PCF) and verified against the same golden traces, schemas and Open5GS interop scenarios as the Rust tree; Phase 3
-  onwards is written in C only. The measured evidence is in `docs/update.md` (2026-10-07).
+  onwards is written in C only. The measured evidence is in `docs/history/update.md` (2026-10-07).

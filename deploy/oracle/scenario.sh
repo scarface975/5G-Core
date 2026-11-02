@@ -226,6 +226,6 @@ if [ "$SCEN" = s4 ] && [ "${OUR_SMF:-0}" = 1 ]; then
   # UERANSIM's gNB does not answer it (the simulator has no modification handling), so the request itself is the evidence.
   sleep 1
   cap="$(ls -t "$ORACLE_HOME"/pcap/s4-*.pcapng | head -1)"
-  python3 "$(cd "$(dirname "$0")/../.." && pwd)/tools/pcap_ngap_to_hex.py" "$cap" 2>/dev/null | grep -qE ' 001a'     && echo "S4 PDU session modification reached the gNB (NGAP PDUSessionResourceModifyRequest): PASS"     || echo "S4 PDU session modification reached the gNB: FAIL"
+  python3 "$(cd "$(dirname "$0")/../.." && pwd)/tools/gen/pcap_ngap_to_hex.py" "$cap" 2>/dev/null | grep -qE ' 001a'     && echo "S4 PDU session modification reached the gNB (NGAP PDUSessionResourceModifyRequest): PASS"     || echo "S4 PDU session modification reached the gNB: FAIL"
 fi
 ls -l "$ORACLE_HOME"/pcap/"$SCEN"-*.pcapng | tail -1

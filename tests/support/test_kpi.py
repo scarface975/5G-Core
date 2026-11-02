@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""tools/g5c-kpi: the KPI arithmetic on a fixed exposition, targets and the exit code, periods from two samples, the recording rules in step with the definitions, and every metric the
+"""tools/cli/g5c-kpi: the KPI arithmetic on a fixed exposition, targets and the exit code, periods from two samples, the recording rules in step with the definitions, and every metric the
 definitions name exists in the sources."""
 import json
 import re
@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-TOOL = ROOT / "tools" / "g5c-kpi"
+TOOL = ROOT / "tools" / "cli" / "g5c-kpi"
 DEFS = ROOT / "deploy" / "ops" / "kpis.json"
 
 SAMPLE_A = """\

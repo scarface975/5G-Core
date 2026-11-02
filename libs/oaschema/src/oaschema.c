@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
-/* Validator for a schema pool generated from the pinned 3GPP OpenAPI files (tools/oa_pool.py) */
+/* Validator for a schema pool generated from the pinned 3GPP OpenAPI files (tools/spec/oa_pool.py) */
 #define _POSIX_C_SOURCE 200809L
 #include <pthread.h>
 #include <regex.h>

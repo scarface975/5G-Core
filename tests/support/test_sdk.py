@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""tools/g5c-sdk: a generated Python client builds the right requests (path parameters encoded, body as JSON, token), and the Postman collection has a folder per function."""
+"""tools/cli/g5c-sdk: a generated Python client builds the right requests (path parameters encoded, body as JSON, token), and the Postman collection has a folder per function."""
 import importlib.util
 import json
 import shutil
@@ -8,7 +8,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-TOOL = Path(__file__).resolve().parent.parent.parent / "tools" / "g5c-sdk"
+TOOL = Path(__file__).resolve().parent.parent.parent / "tools" / "cli" / "g5c-sdk"
 
 DOC = {"openapi": "3.0.3", "info": {"title": "udm-1", "version": "9.9.9"}, "paths": {
     "/nudm-ee/v1/{ueIdentity}/ee-subscriptions": {"post": {"operationId": "x"}},
