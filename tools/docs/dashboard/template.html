@@ -210,9 +210,10 @@ const DATA = /*__DATA__*/null;
   const STATE_LABEL = { verified: "verified against a real peer", tested: "tested with mocks / shims", codec: "wire codec built, NF not yet", planned: "planned", peer: "test peer / outside the core" };
   function renderMap(main) {
     const W = 1130, H = 610, NW = 124, NH = 58;
-    const pos = { UE: [70, 60], gNB: [70, 240], AMF: [300, 240], SMF: [560, 240], UPF: [820, 240], DN: [1040, 240], NSSF: [690, 90],
+    const pos = { UE: [70, 60], gNB: [70, 240], AMF: [300, 240], SMF: [560, 240], UPF: [820, 240], DN: [1040, 240], NSSF: [640, 90], BSF: [850, 90],
       UDM: [300, 390], AUSF: [110, 390], PCF: [560, 390], NEF: [1040, 390], UDR: [430, 540], NRF: [690, 540], SCP: [910, 540] };
-    const curved = { N3: [445, 345] };
+    const curved = { N3: [445, 345], N29u: [670, 470] };
+    const along = { "Nbsf-reg": 0.78, "Nbsf-dis": 0.78, N10: 0.28, N15: 0.28, N36: 0.35, Nnrf: 0.65 };
     const hidden = new Set();
     const svg = sv("svg", { class: "map", viewBox: "0 0 " + W + " " + H, role: "img", "aria-label": "5G core reference-point map" });
     const gE = sv("g"), gN = sv("g");
@@ -227,7 +228,8 @@ const DATA = /*__DATA__*/null;
       const c = curved[e.id];
       if (c) { const p1 = [a[0], a[1] + NH / 2], p2 = [b[0], b[1] + NH / 2]; return { d: "M" + p1 + " Q" + c + " " + p2, mid: [(p1[0] + 2 * c[0] + p2[0]) / 4, (p1[1] + 2 * c[1] + p2[1]) / 4] }; }
       const p1 = clip(a, b), p2 = clip(b, a);
-      return { d: "M" + p1[0] + " " + p1[1] + " L" + p2[0] + " " + p2[1], mid: [(p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2] };
+      const t = along[e.id] || 0.5;
+      return { d: "M" + p1[0] + " " + p1[1] + " L" + p2[0] + " " + p2[1], mid: [p1[0] + (p2[0] - p1[0]) * t, p1[1] + (p2[1] - p1[1]) * t] };
     }
     D.edges.forEach(e => {
       if (!pos[e.a] || !pos[e.b]) return;
