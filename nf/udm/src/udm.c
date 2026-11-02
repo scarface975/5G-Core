@@ -73,6 +73,7 @@ void udm_destroy(udm *u)
     g5c_json_free(u->ee_subs);
     free(u->ee_amf_uri);
     free(u->ee_self_uri);
+    free(u->ee_state_file);
     pthread_mutex_destroy(&u->mu);
 }
 

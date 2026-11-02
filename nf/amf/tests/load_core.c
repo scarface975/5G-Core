@@ -19,7 +19,10 @@
  *                      deploy/run/g5c-cluster.sh kills and restarts network functions)
  *   G5C_LOAD_CHECK_MEM 0: do not assert that RSS stops growing between waves (sanitizer builds)
  *   G5C_LOAD_TRAFFIC_MBPS  user plane (backlog B-02): once every UE has its session, each UE sends uplink GTP-U at this rate (Mbit/s, may be fractional) for G5C_LOAD_TRAFFIC_MS
- *                      (default 1000) with packets of G5C_LOAD_TRAFFIC_SIZE octets (default 1000). Remote mode only: the UPF's counters say what was forwarded and what its rate limiter
+ *   G5C_LOAD_ECHO      an echo server behind the UPF (tools/g5c-dn --echo 7 on the data network gateway): the uplink packets are addressed to it and come back as downlink through
+ *                      the UPF to the gNB's N3 socket, which gives loss, round-trip time and jitter and the downlink rate (at most 2 gNBs: each owns an N3 address).
+ *                      G5C_LOAD_EXPECT_DL_MBPS: the per-UE downlink rate the session AMBR allows (judged like G5C_LOAD_EXPECT_MBPS); G5C_LOAD_ECHO_MAX_LOSS_PCT: fail above this loss
+ *                      (default traffic: each UE sends at G5C_LOAD_TRAFFIC_MBPS)  G5C_LOAD_TRAFFIC_SIZE octets (default 1000). Remote mode only: the UPF's counters say what was forwarded and what its rate limiter
  *                      dropped. G5C_LOAD_EXPECT_MBPS: the per-UE rate the session AMBR allows; the run fails when the delivered rate is not between 0.5x and 1.3x of it (0: judge nothing)
  *
  * Remote mode (G5C_LOAD_REMOTE=1) does not start the network functions: the gNBs connect to real daemons (deploy/run/g5c-cluster.sh starts them) and the
@@ -188,16 +191,59 @@ static bool traf_on;
 static double traf_mbps, traf_ms;
 static unsigned traf_size;
 
-/* One UE's uplink traffic (B-02): GTP-U to the UPF's N3 with the TEID the UPF gave, a UDP datagram of `traf_size` octets from the UE's address, paced to `traf_mbps` for `traf_ms`.
- * The packets are not answered; the UPF's counters are the measurement. */
-static void traffic_phase(const sess_t *ss)
+/* With G5C_LOAD_ECHO the packets go to an echo server behind the UPF and return as downlink: what came back, when, and how much is counted here (all gNB threads). */
+static const char *echo_ip;
+static pthread_mutex_t echo_mu = PTHREAD_MUTEX_INITIALIZER;
+static unsigned long echo_sent, echo_recv, echo_bytes;
+static double echo_rtt[400000];
+static size_t echo_nrtt;
+
+static void ip_header_checksum(uint8_t *ip)
 {
-    int fd = socket(AF_INET, SOCK_DGRAM, 0);
+    uint32_t sum = 0;
+    ip[10] = ip[11] = 0;
+    for (int i = 0; i < 20; i += 2)
+        sum += (uint32_t)(ip[i] << 8 | ip[i + 1]);
+    while (sum >> 16)
+        sum = (sum & 0xffff) + (sum >> 16);
+    ip[10] = (uint8_t)(~sum >> 8);
+    ip[11] = (uint8_t)~sum;
+}
+
+/* downlink datagrams waiting at the gNB's N3 socket: GTP-U with the echoed packet, whose payload carries the sequence number and the time it left */
+static void echo_collect(int fd)
+{
+    uint8_t buf[2000];
+    ssize_t n;
+    while ((n = recv(fd, buf, sizeof buf, MSG_DONTWAIT)) > 0) {
+        gtpu_header gh;
+        const uint8_t *pl;
+        size_t plen;
+        double t0;
+        if (gtpu_decode(buf, (size_t)n, &gh, &pl, &plen) != 0 || gh.msg_type != GTPU_G_PDU || plen < 40 || (pl[0] >> 4) != 4 || pl[9] != 17)
+            continue;
+        memcpy(&t0, pl + 32, sizeof t0);
+        pthread_mutex_lock(&echo_mu);
+        echo_recv++;
+        echo_bytes += plen;
+        if (echo_nrtt < sizeof echo_rtt / sizeof echo_rtt[0])
+            echo_rtt[echo_nrtt++] = now_s() - t0;
+        pthread_mutex_unlock(&echo_mu);
+    }
+}
+
+/* One UE's uplink traffic (B-02): GTP-U to the UPF's N3 with the TEID the UPF gave, a UDP datagram of `traf_size` octets from the UE's address, paced to `traf_mbps` for `traf_ms`.
+ * Without an echo server the packets are not answered and the UPF's counters are the measurement; with one they come back and the receiver measures too. */
+static void traffic_phase(const sess_t *ss, int gnb)
+{
+    bool echo = echo_ip != NULL;
+    int fd = echo ? E.gnb_udp[gnb] : socket(AF_INET, SOCK_DGRAM, 0);
     struct sockaddr_in to;
     uint8_t ip[1500], out[1600], cont[2];
     gtpu_header h;
     size_t len, size = traf_size < 60 ? 60 : traf_size > 1400 ? 1400 : traf_size;
     double start, interval = (double)size * 8.0 / (traf_mbps * 1e6), sent = 0;
+    uint32_t seq = 0;
     TK_ASSERT(fd >= 0);
     memset(&to, 0, sizeof to);
     to.sin_family = AF_INET;
@@ -210,8 +256,13 @@ static void traffic_phase(const sess_t *ss)
     ip[8] = 64;
     ip[9] = 17;
     memcpy(ip + 12, ss->ue_ip, 4);
-    ip[16] = 198, ip[17] = 51, ip[18] = 100, ip[19] = 1;
-    ip[20] = 0x13, ip[21] = 0x88, ip[22] = 0, ip[23] = 9; /* UDP 5000 -> 9 (discard) */
+    if (echo) {
+        TK_ASSERT(inet_pton(AF_INET, echo_ip, ip + 16) == 1);
+    } else {
+        ip[16] = 198, ip[17] = 51, ip[18] = 100, ip[19] = 1;
+    }
+    ip_header_checksum(ip); /* the kernel behind the TUN device drops a packet whose header checksum is wrong */
+    ip[20] = 0x13, ip[21] = 0x88, ip[22] = 0, ip[23] = echo ? 7 : 9; /* UDP 5000 -> 7 (echo) or 9 (discard) */
     ip[24] = (uint8_t)((size - 20) >> 8);
     ip[25] = (uint8_t)(size - 20);
     gtpu_header_init(&h, GTPU_G_PDU, ss->upf_teid);
@@ -220,17 +271,33 @@ static void traffic_phase(const sess_t *ss)
     h.ext[0].data = cont;
     h.ext[0].len = 2;
     h.next = 1;
-    TK_ASSERT(gtpu_encode(&h, ip, size, out, sizeof out, &len) == 0);
     start = now_s();
     while (now_s() - start < traf_ms / 1000.0) {
         double due = (now_s() - start) / interval; /* packets that should have gone by now */
         while (sent < due) {
+            double t = now_s();
+            memcpy(ip + 28, &seq, sizeof seq);
+            memcpy(ip + 32, &t, sizeof t);
+            seq++;
+            TK_ASSERT(gtpu_encode(&h, ip, size, out, sizeof out, &len) == 0);
             (void)sendto(fd, out, len, 0, (struct sockaddr *)&to, sizeof to);
             sent += 1;
         }
+        if (echo)
+            echo_collect(fd);
         usleep(500);
     }
-    close(fd);
+    if (echo) {
+        pthread_mutex_lock(&echo_mu);
+        echo_sent += (unsigned long)sent;
+        pthread_mutex_unlock(&echo_mu);
+        for (int i = 0; i < 12; i++) { /* stragglers: the last packets are still on their way back */
+            usleep(50000);
+            echo_collect(fd);
+        }
+    } else {
+        close(fd);
+    }
 }
 
 typedef struct {
@@ -285,7 +352,7 @@ static void *gnb_thread(void *arg)
     if (traf_on) {
         pthread_barrier_wait(&bar_tgo); /* every UE has its session; the main thread has read the UPF counters */
         for (unsigned i = 0; i < w->count; i++)
-            traffic_phase(&sessions[i]);
+            traffic_phase(&sessions[i], (int)(w->idx % 2));
         pthread_barrier_wait(&bar_tdone);
     }
     pthread_barrier_wait(&bar_release);
@@ -533,6 +600,10 @@ int main(void)
         TK_ASSERT(g5c_serving_network_name("001", "01", E.snn, sizeof E.snn) > 0);
         inet_pton(AF_INET, "127.0.0.1", E.gnb_ip4[0]);
         inet_pton(AF_INET, "127.0.0.2", E.gnb_ip4[1]);
+        if (getenv("G5C_LOAD_ECHO") != NULL && getenv("G5C_LOAD_ECHO")[0] != 0) { /* downlink arrives at the gNBs' N3 addresses: one socket each */
+            bind_gnb_udp(0, "127.0.0.1");
+            bind_gnb_udp(1, "127.0.0.2");
+        }
     } else {
         setup();
     }
@@ -544,6 +615,10 @@ int main(void)
         traf_ms = (double)env_uint("G5C_LOAD_TRAFFIC_MS", 1000);
         traf_size = env_uint("G5C_LOAD_TRAFFIC_SIZE", 1000);
         traf_expect = getenv("G5C_LOAD_EXPECT_MBPS") != NULL ? atof(getenv("G5C_LOAD_EXPECT_MBPS")) : 0;
+        if (getenv("G5C_LOAD_ECHO") != NULL && getenv("G5C_LOAD_ECHO")[0] != 0) {
+            echo_ip = getenv("G5C_LOAD_ECHO");
+            TK_ASSERT(n_gnbs <= 2); /* each gNB thread owns an N3 address: more would share a socket and could not tell their replies apart */
+        }
     }
     if (env_uint("G5C_LOAD_CHAOS_SECONDS", 0) != 0)
         return chaos_main(n_ues, n_gnbs, env_uint("G5C_LOAD_CHAOS_SECONDS", 0));
@@ -629,6 +704,31 @@ int main(void)
             printf("traffic: %u UEs x %.0f ms at %.2f Mbit/s offered each (%u octet packets, %.1f s wall): the UPF forwarded %ld octets in %ld packets = %.2f Mbit/s per UE, "
                    "its rate limiter dropped %ld packets (about %.0f offered)\n",
                    n_ues, traf_ms, traf_mbps, traf_size, secs, b1 - b0, p1 - p0, per_ue, d1 - d0, offered_pkts);
+            if (echo_ip != NULL) {
+                double loss = echo_sent > 0 ? 100.0 * (1.0 - (double)echo_recv / (double)echo_sent) : 100.0, avg = 0, jit = 0, p95 = 0, dl;
+                double max_loss = getenv("G5C_LOAD_ECHO_MAX_LOSS_PCT") != NULL ? atof(getenv("G5C_LOAD_ECHO_MAX_LOSS_PCT")) : 101.0;
+                double exp_dl = getenv("G5C_LOAD_EXPECT_DL_MBPS") != NULL ? atof(getenv("G5C_LOAD_EXPECT_DL_MBPS")) : 0;
+                for (size_t i = 0; i < echo_nrtt; i++) {
+                    avg += echo_rtt[i];
+                    if (i > 0)
+                        jit += echo_rtt[i] > echo_rtt[i - 1] ? echo_rtt[i] - echo_rtt[i - 1] : echo_rtt[i - 1] - echo_rtt[i];
+                }
+                if (echo_nrtt > 0) {
+                    avg /= (double)echo_nrtt;
+                    jit /= (double)(echo_nrtt > 1 ? echo_nrtt - 1 : 1);
+                    qsort(echo_rtt, echo_nrtt, sizeof echo_rtt[0], cmp_d);
+                    p95 = echo_rtt[(size_t)((double)(echo_nrtt - 1) * 0.95)];
+                }
+                dl = (double)echo_bytes * 8.0 / 1e6 / ((double)n_ues * traf_ms / 1000.0);
+                printf("traffic: echo through the UPF: %lu sent, %lu came back as downlink (%.1f %% lost); round trip avg %.2f ms, p95 %.2f ms, jitter %.2f ms; downlink %.2f Mbit/s per UE\n", echo_sent,
+                       echo_recv, loss, avg * 1e3, p95 * 1e3, jit * 1e3, dl);
+                TK_ASSERT(loss <= max_loss);
+                if (exp_dl > 0) {
+                    bool dok = dl >= 0.5 * exp_dl && dl <= 1.3 * exp_dl;
+                    printf("traffic: the downlink AMBR allows %.2f Mbit/s per UE: delivered %.2f Mbit/s (%.0f %%): %s\n", exp_dl, dl, 100.0 * dl / exp_dl, dok ? "ENFORCED" : "NOT ENFORCED");
+                    TK_ASSERT(dok);
+                }
+            }
             if (traf_expect > 0) {
                 bool ok = per_ue >= 0.5 * traf_expect && per_ue <= 1.3 * traf_expect;
                 printf("traffic: the session AMBR allows %.2f Mbit/s per UE: delivered %.2f Mbit/s (%.0f %%): %s\n", traf_expect, per_ue, 100.0 * per_ue / traf_expect, ok ? "ENFORCED" : "NOT ENFORCED");

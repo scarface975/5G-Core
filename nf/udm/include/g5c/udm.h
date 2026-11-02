@@ -183,6 +183,7 @@ typedef struct udm {
     uint64_t next_ee;
     char *ee_amf_uri;  /* `ee.amf_uri`: the AMF to subscribe at for anyUE (or when the UE has no registration naming one) */
     char *ee_self_uri; /* where the AMF sends its notifications: `ee.notify_uri`, else this function's own address */
+    char *ee_state_file; /* `ee.state_file`: the subscriptions are written here after every change and read again at start (NULL: kept in memory only) */
     void **owned; /* route contexts, freed with the UDM */
     size_t nowned;
 } udm;
@@ -207,6 +208,7 @@ void udm_sdm_routes(g5c_router *r, udm *u);
 void udm_uecm_routes(g5c_router *r, udm *u);
 void udm_admin_routes(g5c_router *r, udm *u);
 void udm_ee_routes(g5c_router *r, udm *u); /* Nudm_EventExposure, TS 29.503 clause 5.5 */
+void udm_ee_load(udm *u);                    /* reads `ee.state_file` (a missing file is an empty start) */
 /* Send Nudm_SDM data-change notifications to every sdm-subscription of `supi` (best effort). */
 void udm_sdm_notify_change(udm *u, const char *supi);
 int udm_admin_guard(void *ctx /* udm* */, const g5c_req *req, g5c_resp *resp);

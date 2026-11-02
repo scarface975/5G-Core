@@ -45,11 +45,19 @@ if(G5C_BASH AND UNIX)
   add_test(NAME cluster_load_tls COMMAND ${G5C_BASH} ${CMAKE_SOURCE_DIR}/deploy/run/g5c-cluster.sh ns load 300 8 1)
   set_tests_properties(cluster_load_tls PROPERTIES ENVIRONMENT "${_tls_env};G5C_RUN=${CMAKE_BINARY_DIR}/cluster-run-load-tls" TIMEOUT 300
                        LABELS "integration;cluster" SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
+  # every function pinned to its callers (backlog D-02): a full wave works, and the load generator's direct calls use the operator certificate
+  add_test(NAME cluster_load_pinned COMMAND ${G5C_BASH} ${CMAKE_SOURCE_DIR}/deploy/run/g5c-cluster.sh ns load 100 8 1)
+  set_tests_properties(cluster_load_pinned PROPERTIES ENVIRONMENT "${_tls_env};G5C_PIN_PEERS=1;G5C_RUN=${CMAKE_BINARY_DIR}/cluster-run-load-pinned" TIMEOUT 300
+                       LABELS "integration;cluster" SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
   add_test(NAME cluster_chaos_tls COMMAND ${G5C_BASH} ${CMAKE_SOURCE_DIR}/deploy/run/g5c-cluster.sh ns chaos 100 25)
   set_tests_properties(cluster_chaos_tls PROPERTIES ENVIRONMENT "${_tls_env};G5C_RUN=${CMAKE_BINARY_DIR}/cluster-run-chaos-tls" TIMEOUT 300
                        LABELS "integration;cluster" SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
   add_test(NAME cluster_tls COMMAND ${G5C_BASH} ${CMAKE_SOURCE_DIR}/deploy/run/g5c-cluster.sh ns tls)
   set_tests_properties(cluster_tls PROPERTIES ENVIRONMENT "${_tls_env};G5C_RUN=${CMAKE_BINARY_DIR}/cluster-run-tls" TIMEOUT 300
+                       LABELS "integration;cluster" SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
+  # the TLS key log (backlog C-02): a capture of the SBI is opaque without it and decrypts with it
+  add_test(NAME cluster_keylog COMMAND ${G5C_BASH} ${CMAKE_SOURCE_DIR}/deploy/run/g5c-cluster.sh ns keylog)
+  set_tests_properties(cluster_keylog PROPERTIES ENVIRONMENT "${_tls_env};G5C_TLS_KEYLOG=${CMAKE_BINARY_DIR}/cluster-keylog.txt;G5C_RUN=${CMAKE_BINARY_DIR}/cluster-run-keylog" TIMEOUT 300
                        LABELS "integration;cluster" SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
   add_test(NAME cluster_secrets COMMAND ${G5C_BASH} ${CMAKE_SOURCE_DIR}/deploy/run/g5c-cluster.sh ns secrets)
   set_tests_properties(cluster_secrets PROPERTIES ENVIRONMENT "${_tls_env};G5C_RUN=${CMAKE_BINARY_DIR}/cluster-run-secrets" TIMEOUT 300
@@ -64,7 +72,7 @@ if(G5C_BASH AND UNIX)
   set_tests_properties(cluster_ops PROPERTIES ENVIRONMENT "${_direct_env};G5C_RUN=${CMAKE_BINARY_DIR}/cluster-run-ops" TIMEOUT 300
                        LABELS "integration;cluster" SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
   add_test(NAME cluster_scenarios COMMAND ${G5C_BASH} ${CMAKE_SOURCE_DIR}/deploy/run/g5c-cluster.sh ns scenario
-           ${CMAKE_SOURCE_DIR}/scenarios/basic-wave.yaml ${CMAKE_SOURCE_DIR}/scenarios/n4-delay.yaml ${CMAKE_SOURCE_DIR}/scenarios/smf-restart.yaml ${CMAKE_SOURCE_DIR}/scenarios/traffic-unlimited.yaml)
+           ${CMAKE_SOURCE_DIR}/scenarios/basic-wave.yaml ${CMAKE_SOURCE_DIR}/scenarios/n4-delay.yaml ${CMAKE_SOURCE_DIR}/scenarios/smf-restart.yaml ${CMAKE_SOURCE_DIR}/scenarios/traffic-unlimited.yaml ${CMAKE_SOURCE_DIR}/scenarios/link-chaos.yaml)
   set_tests_properties(cluster_scenarios PROPERTIES ENVIRONMENT "${_direct_env};G5C_RUN=${CMAKE_BINARY_DIR}/cluster-run-scenarios" TIMEOUT 400
                        LABELS "integration;cluster" SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
   # failure injection (backlog B-04): the AMF refuses every registration with cause #11 / the SMF loses a tenth of the N4 responses; the core counts what it injected

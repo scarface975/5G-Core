@@ -41,6 +41,15 @@ def wait_status(base, rid, want, secs=10):
     return v
 
 
+def _refuses(bind):
+    try:
+        s = api.serve(api.Api(TOKEN, ".", "true"), bind, 0)
+    except SystemExit:
+        return True
+    s.server_close()
+    return False
+
+
 def main():
     ok = True
 
@@ -74,6 +83,37 @@ def main():
             check("an inline scenario runs", st == 202 and wait_status(base, v["id"], ("passed", "failed"))["status"] == "passed", v)
             check("runs are listed", len(call(base, "GET", "/v1/runs")[1]) == 2)
             check("metrics without cluster tooling: 404", call(base, "GET", "/v1/metrics/amf")[0] == 404)
+            # following the output: ?since= returns the rest, `next` is the offset to ask for next
+            full = call(base, "GET", "/v1/runs/" + v["id"])[1]
+            part = call(base, "GET", "/v1/runs/%s?since=4" % v["id"])[1]
+            check("?since= returns the output from that octet, with the offset to continue from", part["output"] == full["output"][4:] and part["next"] == full["next"] == len(full["output"]), part)
+            check("?since= at the end returns nothing new", call(base, "GET", "/v1/runs/%s?since=%d" % (v["id"], full["next"]))[1]["output"] == "")
+            # a client generated from the API's own OpenAPI document talks to it
+            import importlib.machinery as im, importlib.util as iu
+            sdk_tool = iu.module_from_spec(iu.spec_from_loader("sdk", im.SourceFileLoader("sdk", str(ROOT / "tools" / "g5c-sdk"))))
+            sdk_tool.__spec__.loader.exec_module(sdk_tool)
+            (d / "docs").mkdir()
+            (d / "docs" / "automation.json").write_text(json.dumps(api.OPENAPI))
+            sdk_tool.gen_python(sdk_tool.load_docs(d / "docs"), d / "automation_sdk.py")
+            spec2 = iu.spec_from_file_location("automation_sdk", d / "automation_sdk.py")
+            gen = iu.module_from_spec(spec2)
+            spec2.loader.exec_module(gen)
+
+            def transport(method, url, headers, body):
+                req = urllib.request.Request(url, method=method, data=body, headers=headers)
+                try:
+                    with urllib.request.urlopen(req, timeout=5) as resp:
+                        return resp.status, resp.read()
+                except urllib.error.HTTPError as e:
+                    return e.code, e.read()
+
+            cl = gen.Client({"automation": base}, token=TOKEN, transport=transport)
+            st, runs = cl.automation.get_v1_runs()
+            check("the generated Python client lists the runs", st == 200 and len(runs) >= 2, (st, runs))
+            st, one = cl.automation.get_v1_runs_by_id(v["id"], query={"since": 4})
+            check("and reads one run incrementally", st == 200 and one["output"] == full["output"][4:], one)
+            check("a non-loopback address refuses to start without TLS", _refuses("0.0.0.0"))
+            check("loopback is allowed without TLS", not _refuses("127.0.0.1"))
             check("unknown run: 404", call(base, "GET", "/v1/runs/000000000000")[0] == 404)
         finally:
             srv.shutdown()

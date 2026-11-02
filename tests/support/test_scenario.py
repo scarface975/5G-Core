@@ -66,6 +66,8 @@ def main():
     check("background load needs an id", any("id" in e for e in sc.validate({"steps": [{"load": {"ues": 3, "background": True}}]})))
     check("bad assert", any("assert" in e for e in sc.validate({"steps": [{"assert": {"metric": "nonsense"}}]})))
     check("impair needs a target", any("impair" in e for e in sc.validate({"steps": [{"impair": {"delay_ms": 5}}]})))
+    check("impair with duplication / reordering / jitter is valid", sc.validate({"steps": [{"impair": {"to": "upf", "duplicate_pct": 3, "reorder_pct": 10, "delay_ms": 20, "jitter_ms": 5}}]}) == [])
+    check("impair with only a jitter is not (there is no delay to refine)", any("impair" in e for e in sc.validate({"steps": [{"impair": {"to": "upf", "jitter_ms": 5}}]})))
     check("bad expect", any("expect" in e for e in sc.validate({"steps": [{"load": {"ues": 1}, "expect": "maybe"}]})))
     check("metric spec parsed", sc.parse_metric('amf:g5c_amf_registrations_total{result="accepted",x=y}') == ("amf", "g5c_amf_registrations_total", {"result": "accepted", "x": "y"}))
 

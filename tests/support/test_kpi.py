@@ -18,8 +18,10 @@ g5c_amf_registrations_total{result="accepted"} 90
 g5c_amf_registrations_total{result="rejected"} 10
 g5c_amf_authentications_total{result="success"} 95
 g5c_amf_authentications_total{result="failed"} 5
-g5c_amf_pdu_session_requests_total{result="created"} 50
-g5c_amf_pdu_session_requests_total{result="smf_error"} 50
+g5c_amf_pdu_session_requests_total{result="created",snssai="1"} 30
+g5c_amf_pdu_session_requests_total{result="created",snssai="2-000001"} 20
+g5c_amf_pdu_session_requests_total{result="smf_error",snssai="1"} 10
+g5c_amf_pdu_session_requests_total{result="smf_error",snssai="2-000001"} 40
 g5c_amf_handover_total{result="completed"} 19
 g5c_amf_handover_total{result="aborted"} 1
 g5c_amf_registered_ues 7
@@ -65,6 +67,8 @@ def main():
         check("drop rate = dropped / (forwarded + dropped)", abs(rows["user_plane_drop_rate"]["value"] - 1.0) < 1e-9, rows["user_plane_drop_rate"])
         check("regex label selector (5xx) and a plain ratio", abs(rows["sbi_error_rate"]["value"] - 1.0) < 1e-9, rows["sbi_error_rate"])
         check("a rate without a period is empty", rows["uplink_throughput"]["value"] is None)
+        check("a KPI `by` a label gets one row per slice", abs(rows["pdu_session_success_per_slice{snssai=1}"]["value"] - 75.0) < 1e-9 and abs(rows["pdu_session_success_per_slice{snssai=2-000001}"]["value"] - 100.0 * 20 / 60) < 1e-9
+              and "pdu_session_success_per_slice" not in rows, [k for k in rows if "slice" in k])
         check("target missed -> MISS (registration 90 < 99)", rows["registration_success_rate"]["status"] == "MISS")
         check("--check exits 1 on a miss", run("--check", str(a)).returncode == 1)
         # the period between two samples: 100 more registrations all accepted, 10000 more downlink bytes in 10 s

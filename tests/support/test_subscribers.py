@@ -82,6 +82,16 @@ def main():
     p = run("open5gs", json.dumps(o5), "--apply", ctl=str(stub))
     sent = [json.loads(l) for l in log.read_text().splitlines() if l.strip()] if log.exists() else []
     check("--apply: one request per subscriber", p.returncode == 0 and [s["supi"] for s in sent] == ["imsi-999700000000001", "imsi-999700000000002"] and "2 provisioned" in p.stderr, p.stderr)
+    # --apply --bulk: batches go to `subscriber bulk -`, the answer says per record what happened
+    stub.write_text("#!/usr/bin/env python3\nimport json, sys\nrecs = json.load(sys.stdin)\nopen(%r, 'a').write(json.dumps(len(recs)) + '\\n')\n"
+                    "print(json.dumps({'results': [{'supi': r['supi'], 'status': 400 if r['supi'].endswith('2') else 201, 'detail': 'refused by the UDM'} for r in recs]}))\n" % str(log))
+    stub.chmod(0o755)
+    try:
+        log.unlink()
+    except FileNotFoundError:
+        pass
+    p = run("open5gs", json.dumps(o5), "--apply", "--bulk", ctl=str(stub))
+    check("--apply --bulk: one batch, per-record results counted", p.returncode == 1 and "1 provisioned, 1 failed" in p.stderr and "imsi-999700000000002: 400 refused by the UDM" in p.stderr and log.read_text().split() == ["2"], p.stderr)
     for f in (stub, log):
         try:
             f.unlink()

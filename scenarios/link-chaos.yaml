@@ -1,0 +1,8 @@
+# A bad link toward the UPF (N4 and N3): delay with jitter, reordered and duplicated packets, a little loss. The SMF's N4 retransmissions and its handling of duplicated
+# responses have to carry a wave through, and the wave must still complete. (B-08: reorder, duplication, jitter.)
+name: bad link toward the UPF
+steps:
+  - impair: {to: upf, delay_ms: 30, jitter_ms: 15, reorder_pct: 20, duplicate_pct: 5, loss_pct: 1}
+  - load: {ues: 16, gnbs: 4}
+  - impair: clear
+  - kpi: {name: pdu_session_establishment_success_rate, ">=": 95}

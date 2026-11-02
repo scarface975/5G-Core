@@ -148,7 +148,7 @@ udm *udm_from_config(const g5c_json *cfg, g5c_nf *nf, char *err, size_t errcap)
         free(udr_token);
     }
     {
-        static const char *const k_ee[] = {"amf_uri", "notify_uri", NULL};
+        static const char *const k_ee[] = {"amf_uri", "notify_uri", "state_file", NULL};
         const g5c_json *ee = g5c_json_get(cfg, "ee");
         const char *nu = g5c_json_get_str(ee, "notify_uri");
         if (ee != NULL && (!g5c_json_is(ee, G5C_J_OBJECT) || g5c_json_check_keys(ee, k_ee, "ee", err, errcap) != 0)) {
@@ -160,6 +160,10 @@ udm *udm_from_config(const g5c_json *cfg, g5c_nf *nf, char *err, size_t errcap)
         }
         if (g5c_json_get_str(ee, "amf_uri") != NULL)
             u->ee_amf_uri = g5c_xstrdup(g5c_json_get_str(ee, "amf_uri"));
+        if (g5c_json_get_str(ee, "state_file") != NULL) {
+            u->ee_state_file = g5c_xstrdup(g5c_json_get_str(ee, "state_file"));
+            udm_ee_load(u);
+        }
         if (nu != NULL) {
             u->ee_self_uri = g5c_xstrdup(nu);
         } else if (nf->common.address != NULL && strcmp(nf->common.address, "0.0.0.0") != 0 && strcmp(nf->common.address, "::") != 0) {

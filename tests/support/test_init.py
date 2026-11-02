@@ -39,6 +39,12 @@ def main():
         if (bindir / "udm").exists():  # the binaries accept what was written
             bad = [n for n in confs if subprocess.run([str(bindir / n[:-5]), "--check", str(d / "conf" / n)], capture_output=True, text=True).returncode != 0]
             check("every function accepts its generated configuration (--check)", not bad, bad)
+        # --systemd: the units point at this directory
+        p = subprocess.run(args + ["--systemd", "--bin-dir", "/opt/g5c/bin", "--pin-peers"], capture_output=True, text=True, stdin=subprocess.DEVNULL)
+        unit = (d / "systemd" / "g5c@.service").read_text() if (d / "systemd" / "g5c@.service").exists() else ""
+        check("--systemd writes the units for this directory", p.returncode == 0 and "ExecStart=/opt/g5c/bin/%i " + str(d) + "/conf/%i.yaml" in unit and "ReadWritePaths=" + str(d) + "/state" in unit
+              and "/var/lib/g5c" not in unit and (d / "systemd" / "g5c.target").exists() and (d / "systemd" / "g5c@upf.service.d" / "override.conf").exists(), unit[:400])
+        check("and the guide says how to install them", "systemctl enable --now g5c.target" in (d / "START-HERE.md").read_text())
         before = (d / "keys" / "master.key").read_text()
         p = subprocess.run(args, capture_output=True, text=True, stdin=subprocess.DEVNULL)
         check("a second run keeps the secrets", p.returncode == 0 and (d / "keys" / "master.key").read_text() == before)

@@ -18,6 +18,9 @@ groups:
       - record: g5c_kpi_pdu_session_establishment_success_rate
         expr: 100 * (sum(increase(g5c_amf_pdu_session_requests_total{result="created"}[5m]))) / clamp_min(sum(increase(g5c_amf_pdu_session_requests_total[5m])), 1)
         labels: {unit: "percent", window: "5m"}
+      - record: g5c_kpi_pdu_session_success_per_slice_by_snssai
+        expr: 100 * (sum by (snssai) (increase(g5c_amf_pdu_session_requests_total{result="created"}[5m]))) / clamp_min(sum by (snssai) (increase(g5c_amf_pdu_session_requests_total[5m])), 1)
+        labels: {unit: "percent", window: "5m"}
       - record: g5c_kpi_handover_success_rate
         expr: 100 * (sum(increase(g5c_amf_handover_total{result="completed"}[5m]))) / clamp_min(sum(increase(g5c_amf_handover_total[5m])), 1)
         labels: {unit: "percent", window: "5m"}

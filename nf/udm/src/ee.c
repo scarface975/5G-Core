@@ -11,8 +11,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <time.h>
 
+#include "g5c/config.h"
 #include "g5c/udm.h"
 
 #define EE_BASE "/nudm-ee/v1"
@@ -44,6 +46,59 @@ static const char *ee_type_of(const char *amf)
         if (strcmp(EVMAP[i].amf, amf) == 0)
             return EVMAP[i].ee;
     return NULL;
+}
+
+/* ---- persistence: the subscriptions survive a restart of the UDM (the AMF keeps its half) ---------------------------------------------------------------------- */
+
+static void ee_save(udm *u)
+{
+    char *tmp, *txt;
+    FILE *f;
+    g5c_json *doc;
+    if (u->ee_state_file == NULL)
+        return;
+    pthread_mutex_lock(&u->mu);
+    doc = g5c_json_new_obj();
+    g5c_json_set_int(doc, "next", (int64_t)u->next_ee);
+    g5c_json_set(doc, "subscriptions", g5c_json_dup(u->ee_subs));
+    pthread_mutex_unlock(&u->mu);
+    txt = g5c_json_to_string(doc, NULL);
+    g5c_json_free(doc);
+    tmp = g5c_xasprintf("%s.tmp", u->ee_state_file);
+    f = fopen(tmp, "wb");
+    if (f != NULL) {
+        bool ok = fputs(txt, f) >= 0;
+        ok = (fclose(f) == 0) && ok;
+        (void)!chmod(tmp, 0600);
+        if (!ok || rename(tmp, u->ee_state_file) != 0)
+            G5C_LOGW(LOG, "cannot write the event exposure state file %s", u->ee_state_file);
+    } else {
+        G5C_LOGW(LOG, "cannot write the event exposure state file %s", tmp);
+    }
+    free(tmp);
+    free(txt);
+}
+
+void udm_ee_load(udm *u)
+{
+    size_t n = 0;
+    char *txt = g5c_read_file(u->ee_state_file, 1u << 24, &n);
+    g5c_json *doc;
+    int64_t next = 0;
+    if (txt == NULL)
+        return; /* no file yet: a first start */
+    doc = g5c_json_parse(txt, n, NULL, 0);
+    free(txt);
+    if (g5c_json_is(g5c_json_get(doc, "subscriptions"), G5C_J_OBJECT)) {
+        pthread_mutex_lock(&u->mu);
+        g5c_json_free(u->ee_subs);
+        u->ee_subs = g5c_json_dup(g5c_json_get(doc, "subscriptions"));
+        if (g5c_json_get_int(doc, "next", &next) && next > 0)
+            u->next_ee = (uint64_t)next;
+        pthread_mutex_unlock(&u->mu);
+        G5C_LOGI(LOG, "%zu event exposure subscriptions read from %s", g5c_json_len(u->ee_subs), u->ee_state_file);
+    }
+    g5c_json_free(doc);
 }
 
 static void count(udm *u, const char *name, const char *help, const char *result)
@@ -274,6 +329,7 @@ static void create(void *ctx, const g5c_req *req, g5c_resp *resp)
     pthread_mutex_lock(&u->mu);
     g5c_json_set(u->ee_subs, id, rec);
     pthread_mutex_unlock(&u->mu);
+    ee_save(u);
     out = g5c_json_new_obj();
     {
         g5c_json *es = g5c_json_dup(in);
@@ -321,6 +377,7 @@ static void remove_sub(void *ctx, const g5c_req *req, g5c_resp *resp)
     }
     forget_at_amf(u, rec);
     g5c_json_free(rec);
+    ee_save(u);
     g5c_resp_status(resp, 204);
 }
 
@@ -361,9 +418,10 @@ static void patch_sub(void *ctx, const g5c_req *req, g5c_resp *resp)
         }
     }
     pthread_mutex_unlock(&u->mu);
-    if (status == 204)
+    if (status == 204) {
+        ee_save(u);
         g5c_resp_status(resp, 204);
-    else if (status == 404)
+    } else if (status == 404)
         g5c_resp_problem_simple(resp, 404, "SUBSCRIPTION_NOT_FOUND", "no such subscription");
     else
         g5c_resp_problem_simple(resp, 403, "MODIFICATION_NOT_ALLOWED", "only callbackReference and reportingOptions (maxNumOfReports, expiry) can be replaced");
@@ -433,6 +491,7 @@ static void amf_notify(void *ctx, const g5c_req *req, g5c_resp *resp)
         if (rec != NULL)
             g5c_json_set_int(rec, "sent", sent);
         pthread_mutex_unlock(&u->mu);
+        ee_save(u);
         if (max > 0 && sent >= max)
             drop = true;
     }
@@ -441,6 +500,7 @@ static void amf_notify(void *ctx, const g5c_req *req, g5c_resp *resp)
         dead = g5c_json_detach(u->ee_subs, id);
         pthread_mutex_unlock(&u->mu);
         if (dead != NULL) {
+            ee_save(u);
             forget_at_amf(u, dead);
             G5C_LOGI(LOG, "EE subscription %s ended (%s)", id, max > 0 && sent >= max ? "maxNumOfReports reached" : "expired");
             g5c_json_free(dead);

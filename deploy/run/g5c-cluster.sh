@@ -51,6 +51,7 @@ DISCOVERY="${G5C_DISCOVERY:-1}"
 # G5C_SCP=1 (default): the SCP (indirect communication, TS 29.500 6.10) is started after the NRF and every function sends its requests to other functions through it
 # (the NRF is reached directly). G5C_SCP=0: the functions talk to each other directly.
 SCPON="${G5C_SCP:-1}"
+# G5C_PIN_PEERS=1 (with G5C_TLS=1): sbi.tls.allowed_peers on every function, from the call graph (see tls_conf)
 # G5C_AMBR_UL / G5C_AMBR_DL: the session AMBR the PCF gives every session (default 1 Gbps / 2 Gbps), e.g. '1 Mbps' to see the UPF enforce it (scenarios/traffic-ambr.yaml)
 # G5C_AMF_EXTRA / G5C_SMF_EXTRA: lines added to the amf: / smf: block of the configuration (two-space indent), e.g. failure injection:
 #   G5C_AMF_EXTRA='  inject: { registration_reject: [{ supi: imsi-00101, cause: 11 }] }'
@@ -214,6 +215,7 @@ hn_keys:
   - { id: 1, scheme: profile-a, private_key_file: $RUN/keys/hn-1.key }
 master_key_file: $RUN/keys/master.key
 admin_token_file: $RUN/keys/admin_token
+ee: { state_file: $RUN/state/udm-ee.json }
 EOF
   cat > "$RUN/conf/ausf.yaml" <<EOF
 name: ausf-1
@@ -308,6 +310,13 @@ tls_conf() {
   local nf f="$RUN/conf/$1.yaml"
   nf="$1"
   sed -i -E "s#http://#https://#g; s#^sbi: \{ address: ([^,]+), port: ([0-9]+) \}#sbi: { address: \1, port: \2, tls: { cert: $RUN/pki/$nf.crt, key: $RUN/pki/$nf.key, ca: $RUN/pki/ca.crt, crl: $RUN/pki/ca.crl } }#" "$f"
+  # G5C_PIN_PEERS=1 (backlog D-02): every function accepts client certificates only from the functions that call it. With the SCP in the middle that is the SCP, the NRF (discovery,
+  # tokens, registration) and the operator's certificate; the NRF and the SCP are called by every function.
+  if [ "${G5C_PIN_PEERS:-0}" = 1 ]; then
+    local peers="admin, scp, nrf"
+    case "$nf" in nrf|scp) peers="admin, nrf, scp, bsf, udr, nssf, nef, udm, ausf, pcf, smf, amf, upf";; esac
+    sed -i -E "/^sbi:/ s#crl: ([^ ]+) \}#crl: \1, allowed_peers: [$peers] }#" "$f"
+  fi
 }
 
 # configuration and keys are written once, under a lock: several terminals start their function at the same moment and must all see the same keys
@@ -419,6 +428,7 @@ cmd_ns() {
     upgrade) do_upgrade "$@"; rc=$? ;;
     slices) do_slices; rc=$? ;;
     secrets) do_secrets; rc=$? ;;
+    keylog) do_keylog; rc=$? ;;
     scenario) do_scenario "$@"; rc=$? ;;
     shell) echo "inside the namespace; the cluster is up (exit to stop it)"; bash -i; ;;
     *) echo "unknown ns mode $what"; rc=2 ;;
@@ -427,21 +437,28 @@ cmd_ns() {
   return "$rc"
 }
 
-# link impairment (scenario steps, backlog B-08): packets TO one function's address are delayed and/or dropped (tc netem on the loopback of the namespace, selected by destination),
-# every other link stays as it was. `impair NF DELAY_MS [LOSS_PCT]`, `impair clear`. Needs the private namespace (ns mode) or root.
+# link impairment (scenario steps, backlog B-08): packets TO one function's address are delayed, dropped, duplicated and/or reordered (tc netem on the loopback of the namespace, selected by destination),
+# every other link stays as it was. `impair NF DELAY_MS [LOSS_PCT [REORDER_PCT [DUP_PCT [JITTER_MS]]]]`, `impair clear`. Needs the private namespace (ns mode) or root.
 addr_of() {
   case "$1" in nrf) echo "$A_NRF";; scp) echo "$A_SCP";; bsf) echo "$A_BSF";; udr) echo "$A_UDR";; nssf) echo "$A_NSSF";; nef) echo "$A_NEF";; udm) echo "$A_UDM";; ausf) echo "$A_AUSF";;
     pcf) echo "$A_PCF";; smf) echo "$A_SMF";; amf) echo "$A_AMF";; upf) echo "$A_UPF";; *) return 1;; esac
 }
 cmd_impair() {
-  local nf="${1:?function or clear}" delay="${2:-0}" loss="${3:-0}" a
+  local nf="${1:?function or clear}" delay="${2:-0}" loss="${3:-0}" reorder="${4:-0}" dup="${5:-0}" jitter="${6:-0}" a opts
   tc qdisc del dev lo root 2>/dev/null
   [ "$nf" = clear ] && { echo "impairment cleared"; return 0; }
   a="$(addr_of "$nf")" || { echo "unknown function $nf" >&2; return 2; }
   tc qdisc add dev lo root handle 1: prio || return 1
-  tc qdisc add dev lo parent 1:3 handle 30: netem delay "${delay}ms" loss "${loss}%" || return 1
+  [ "$reorder" != 0 ] && [ "$delay" = 0 ] && delay=1 # netem reorders by sending some packets ahead of the delayed ones: it needs a delay
+  opts="delay ${delay}ms"
+  [ "$jitter" != 0 ] && opts="$opts ${jitter}ms"
+  [ "$reorder" != 0 ] && opts="$opts reorder ${reorder}% 50%"
+  [ "$loss" != 0 ] && opts="$opts loss ${loss}%"
+  [ "$dup" != 0 ] && opts="$opts duplicate ${dup}%"
+  # shellcheck disable=SC2086
+  tc qdisc add dev lo parent 1:3 handle 30: netem $opts || return 1
   tc filter add dev lo parent 1: protocol ip prio 1 u32 match ip dst "$a/32" flowid 1:3 || return 1
-  echo "impairment: ${delay} ms delay, ${loss}% loss to $nf ($a)"
+  echo "impairment to $nf ($a): $opts"
 }
 
 # scenarios (backlog B-01): the cluster is up; tools/g5c-scenario runs the steps of each file against it (load, kill, restart, impair, assert on metrics and KPIs, HTTP calls)
@@ -509,6 +526,27 @@ do_tls() {
   if curl -s -o /dev/null --max-time 3 --cacert "$RUN/pki/ca.crt" --cert "$RUN/pki/nssf.crt" --key "$RUN/pki/nssf.key" --http2-prior-knowledge "$h"; then ck bad "the NSSF certificate was served by the UDM"; else ck ok "another function's certificate (nssf) cannot be used to call the UDM"; fi
   if [ "$(do_load 10 | tail -1)" = 0 ]; then ck ok "registrations and sessions work with the UDM pinned to its callers"; else ck bad "load with the pinned UDM"; fi
   if [ "$f" = 0 ]; then echo "tls: PASS"; else echo "tls: FAIL"; fi
+  return "$f"
+}
+
+# TLS key log (backlog C-02): the functions run with G5C_TLS_KEYLOG; a capture of requests to the UDM shows only TLS records without the key log and the HTTP/2 requests with it
+do_keylog() {
+  local f=0 kl="${G5C_TLS_KEYLOG:-}" cap="$RUN/keylog.pcap" tp n_plain n_dec
+  ck() { if [ "$1" = ok ]; then echo "  PASS  $2"; else echo "  FAIL  $2"; f=1; fi; }
+  [ "$TLSON" = 1 ] && [ -n "$kl" ] || { echo "keylog: needs G5C_TLS=1 and G5C_TLS_KEYLOG=<file>"; return 1; }
+  command -v tcpdump >/dev/null 2>&1 && command -v tshark >/dev/null 2>&1 || { echo "SKIP: tcpdump and tshark are needed"; return 77; }
+  tcpdump -i lo -Z root -U -w "$cap" "tcp port 7773" >/dev/null 2>&1 &
+  tp=$!
+  sleep 1
+  for i in 1 2 3; do curl -s -o /dev/null --max-time 5 $(curlf) "$SCH://$A_UDM:7773/health/ready?probe=keylog-check-$i"; done
+  sleep 1
+  kill "$tp" 2>/dev/null; wait "$tp" 2>/dev/null
+  n_plain="$(tshark -r "$cap" -d tcp.port==7773,tls -Y 'http2.headers.path contains "keylog-check"' 2>/dev/null | wc -l)"
+  n_dec="$(tshark -r "$cap" -d tcp.port==7773,tls -o "tls.keylog_file:$kl" -Y 'http2.headers.path contains "keylog-check"' 2>/dev/null | wc -l)"
+  if [ -s "$kl" ] && [ "$(stat -c %a "$kl")" = 600 ]; then ck ok "the key log exists ($(wc -l < "$kl") lines, mode 600)"; else ck bad "no key log or wrong mode"; fi
+  if [ "${n_plain:-0}" = 0 ]; then ck ok "without the key log the capture shows no HTTP/2 request (the SBI is encrypted)"; else ck bad "requests visible without keys: $n_plain"; fi
+  if [ "${n_dec:-0}" -ge 3 ]; then ck ok "with the key log Wireshark decrypts $n_dec HTTP/2 requests to the UDM"; else ck bad "only ${n_dec:-0} requests decrypted"; fi
+  if [ "$f" = 0 ]; then echo "keylog: PASS"; else echo "keylog: FAIL"; fi
   return "$f"
 }
 
@@ -591,8 +629,8 @@ do_ops() {
     '{"imsi":"001019999000001","msisdn":["4915100001"],"security":{"k":"00112233445566778899aabbccddee01","opc":"ffeeddccbbaa99887766554433221101","amf":"8000","sqn":{"$numberLong":"32"}},"slice":[{"sst":1,"session":[{"name":"internet","type":1,"qos":{"index":9}}]}]}' \
     '{"imsi":"001019999000002","security":{"k":"00112233445566778899aabbccddee02","op":"00112233445566778899aabbccddee22"},"slice":[{"sst":1,"session":[{"name":"internet","type":3}]}]}' \
     '{"imsi":"001019999000003","security":{"k":"nothex","opc":"ffeeddccbbaa99887766554433221103"}}' > "$imp"
-  inv="$(python3 "$ROOT/tools/g5c-subscribers" import --format open5gs "$imp" --apply --ctl "$BIN/g5c-ctl" --udm "$udm" --token-file "$RUN/keys/admin_token" 2>&1)"
-  if echo "$inv" | grep -q "3 read, 2 valid, 1 rejected, 2 provisioned, 0 failed"; then ck ok "bulk import: 2 of 3 Open5GS records provisioned, the malformed one reported and not sent"; else ck bad "bulk import: $inv"; fi
+  inv="$(python3 "$ROOT/tools/g5c-subscribers" import --format open5gs "$imp" --apply --bulk --ctl "$BIN/g5c-ctl" --udm "$udm" --token-file "$RUN/keys/admin_token" 2>&1)"
+  if echo "$inv" | grep -q "3 read, 2 valid, 1 rejected, 2 provisioned, 0 failed"; then ck ok "bulk import (the bulk endpoint): 2 of 3 Open5GS records provisioned, the malformed one reported and not sent"; else ck bad "bulk import: $inv"; fi
   inv="$(python3 "$ROOT/tools/g5c-subscribers" export --format csv --ctl "$BIN/g5c-ctl" --udm "$udm" --token-file "$RUN/keys/admin_token" 2>/dev/null)"
   if echo "$inv" | grep -q "imsi-001019999000001" && echo "$inv" | grep -q "imsi-001019999000002" && ! echo "$inv" | grep -q "001019999000003" && ! echo "$inv" | grep -qi "ffeeddccbbaa9988"; then ck ok "export lists the imported subscribers, without keys"; else ck bad "export: $(echo "$inv" | head -c 300)"; fi
   # 6. Nudm_EventExposure: a subscription for any UE at the UDM reaches the AMF (found through the NRF), and the AMF's reports come back through the UDM
@@ -603,6 +641,7 @@ do_ops() {
   sleep 1
   ne="$(curl -s --max-time 5 $(curlf) "$udm/metrics" | awk '/^g5c_udm_ee_notifications_total/{s+=$NF} END{print s+0}')"
   if [ "${ne:-0}" -ge 5 ]; then ck ok "the AMF reported $ne losses of connectivity through the UDM"; else ck bad "only ${ne:-0} EE reports reached the UDM"; fi
+  if grep -q '"amfSub"' "$RUN/state/udm-ee.json" 2>/dev/null; then ck ok "the UDM keeps its event exposure subscriptions in a state file"; else ck bad "no event exposure state file"; fi
   # 7. the KPIs of the loads above, from the live metrics through the one definition file
   local kpi
   kpi="$(G5C_CURL_ARGS="$(curlf)" python3 "$ROOT/tools/g5c-kpi" --json "$(sbi_of amf)/metrics" "$(sbi_of smf)/metrics" "$(sbi_of upf)/metrics" 2>&1)"

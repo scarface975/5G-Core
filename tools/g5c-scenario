@@ -9,11 +9,14 @@ A scenario:
     name: N4 slowed down while UEs register
     steps:
       - load: {ues: 30, gnbs: 8}                                  UEs register, get a PDU session and de-register through scripted gNBs (the load generator); passes when every UE completed
+      - load: {ues: 4, traffic_mbps: 4, traffic_ms: 1500, echo: true, expect_dl_mbps: 1}   with echo, the packets are answered by a server behind the UPF and return as downlink: loss, round trip
+                                                                  and jitter are printed; max_loss_pct and expect_dl_mbps (the downlink AMBR) are judged
       - load: {ues: 4, traffic_mbps: 4, traffic_ms: 1500, expect_mbps: 1}   as above, and every UE sends uplink traffic at 4 Mbit/s for 1.5 s once it has its session; the run fails unless the UPF
                                                                   delivered 0.5x to 1.3x of expect_mbps per UE (the session AMBR the PCF gave; traffic_size sets the packet size, 1000 octets by default)
       - load: {ues: 30, background: true, id: wave}               started and left running ... then
       - join: wave                                                ... waited for (expect: pass | fail applies to the result)
-      - impair: {to: upf, delay_ms: 150, loss_pct: 0, duration_s: 5}   packets to that function are delayed / dropped; duration_s lifts it again, `impair: clear` lifts it now
+      - impair: {to: upf, delay_ms: 150, jitter_ms: 20, loss_pct: 1, reorder_pct: 10, duplicate_pct: 2, duration_s: 5}   packets to that function are delayed / dropped / reordered / duplicated;
+                                                                  duration_s lifts it again, `impair: clear` lifts it now
       - kill: smf          restart: smf          start: smf       a function is killed (SIGKILL) / restarted / started
       - wait: 2                                                   seconds
       - assert: {metric: "amf:g5c_amf_registrations_total{result=accepted}", ">=": 30}     <function>:<name>[{label=value,...}], summed over the series; ops >= <= > < ==
@@ -71,8 +74,8 @@ def validate(doc):
         elif k == "join" and arg not in ids:
             errs.append("step %d: join %r: no background load with that id before it" % (i, arg))
         elif k == "impair":
-            if arg != "clear" and not (isinstance(arg, dict) and arg.get("to") and (arg.get("delay_ms") or arg.get("loss_pct"))):
-                errs.append("step %d: impair needs `clear` or {to, delay_ms and/or loss_pct}" % i)
+            if arg != "clear" and not (isinstance(arg, dict) and arg.get("to") and any(arg.get(k) for k in ("delay_ms", "loss_pct", "duplicate_pct", "reorder_pct"))):
+                errs.append("step %d: impair needs `clear` or {to, and at least one of delay_ms, loss_pct, duplicate_pct, reorder_pct (jitter_ms refines the delay)}" % i)
         elif k in ("kill", "restart", "start") and not isinstance(arg, str):
             errs.append("step %d: %s needs a function name" % (i, k))
         elif k == "wait" and not isinstance(arg, (int, float)):
@@ -119,12 +122,29 @@ class ClusterRunner:
     def _load_env(a):
         """Traffic profile of the load step (B-02): traffic_mbps per UE for traffic_ms with packets of traffic_size octets; expect_mbps is the per-UE rate the session AMBR allows."""
         env = dict(os.environ)
-        for key, var in (("traffic_mbps", "G5C_LOAD_TRAFFIC_MBPS"), ("traffic_ms", "G5C_LOAD_TRAFFIC_MS"), ("traffic_size", "G5C_LOAD_TRAFFIC_SIZE"), ("expect_mbps", "G5C_LOAD_EXPECT_MBPS")):
+        for key, var in (("traffic_mbps", "G5C_LOAD_TRAFFIC_MBPS"), ("traffic_ms", "G5C_LOAD_TRAFFIC_MS"), ("traffic_size", "G5C_LOAD_TRAFFIC_SIZE"), ("expect_mbps", "G5C_LOAD_EXPECT_MBPS"),
+                         ("expect_dl_mbps", "G5C_LOAD_EXPECT_DL_MBPS"), ("max_loss_pct", "G5C_LOAD_ECHO_MAX_LOSS_PCT")):
             if key in a:
                 env[var] = str(a[key])
+        if a.get("echo"):
+            env["G5C_LOAD_ECHO"] = os.environ.get("G5C_DN_ADDR", "10.45.0.1")
         return env
 
+    def ensure_echo(self):
+        """An echo server on the data network's gateway address (tools/g5c-dn), once per scenario run; it lives in the cluster's namespace like the engine."""
+        if getattr(self, "dn", None) is None:
+            self.dn = subprocess.Popen([sys.executable, str(ROOT / "tools" / "g5c-dn"), "--bind", os.environ.get("G5C_DN_ADDR", "10.45.0.1"), "--dns", "0", "--http", "0", "--echo", "7",
+                                        "--radius", "0", "--acct", "0"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            time.sleep(0.6)
+
+    def stop_echo(self):
+        if getattr(self, "dn", None) is not None:
+            self.dn.terminate()
+            self.dn = None
+
     def load(self, a):
+        if a.get("echo"):
+            self.ensure_echo()
         p = subprocess.run(self._load_cmd(a), capture_output=True, text=True, env=self._load_env(a))
         for line in p.stderr.splitlines():
             if line.startswith("traffic:"):
@@ -142,7 +162,7 @@ class ClusterRunner:
         if a == "clear":
             self.sh_run("impair", "clear")
             return
-        self.sh_run("impair", a["to"], str(a.get("delay_ms", 0)), str(a.get("loss_pct", 0)))
+        self.sh_run("impair", a["to"], *[str(a.get(k, 0)) for k in ("delay_ms", "loss_pct", "reorder_pct", "duplicate_pct", "jitter_ms")])
         if a.get("duration_s"):
             time.sleep(a["duration_s"])
             self.sh_run("impair", "clear")
@@ -271,6 +291,8 @@ def run_scenario(doc, r, out=print):
             r.impair("clear")
         except Exception:
             pass
+        if hasattr(r, "stop_echo"):
+            r.stop_echo()
     return results, time.time() - t0
 
 

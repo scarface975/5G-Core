@@ -227,6 +227,7 @@ Nudm_UEAuthentication, Nudm_SubscriberDataManagement, Nudm_UEContextManagement (
 | POST | `/admin/v1/keys/rewrap` |
 | GET | `/admin/v1/subscribers` |
 | POST | `/admin/v1/subscribers` |
+| POST | `/admin/v1/subscribers-bulk` |
 | DELETE | `/admin/v1/subscribers/{supi}` |
 | GET | `/admin/v1/subscribers/{supi}` |
 | GET | `/console` |
@@ -400,4 +401,4 @@ health and metrics only (the UPF's interfaces are N3 GTP-U, N4 PFCP, N6)
 
 ---
 
-302 routes in 12 functions.
+303 routes in 12 functions.

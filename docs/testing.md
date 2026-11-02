@@ -174,6 +174,8 @@ docs/phase6-baseline.md. Matrix: docs/conformance/phase6-matrix.json.
 | ctest `cluster_scenarios` | the three shipped scenarios on a live cluster, including a 150 ms delay toward the UPF that is visible in the session set-up percentile |
 | ctest `smf_e2e` (`test_usage_monitoring`) | the whole usage monitoring loop with the real PCF and UPF: below the threshold nothing happens, past it the UPF reports, the PCF throttles, the AMF receives the modification command with the 256 kbit/s AMBR; the counters |
 | ctest `cluster_traffic_ambr`, `cluster_scenarios` (`traffic-unlimited`) | uplink GTP-U at 4 Mbit/s per UE against a 1 Mbit/s session AMBR: 1.03 Mbit/s delivered, 2228 of about 3000 packets dropped and counted; and 2 Mbit/s through with nothing limiting |
+| ctests `udm_unit_and_services` (`test_bulk`, `test_ee` restart), `subscribers_tool` (`--bulk`), `kpi_tool` (per slice), `dn_tool` (accounting), `api_tool` (`?since=`, the TLS guard, a client generated from its OpenAPI), `sdk_tool` (JavaScript client over HTTP/2 under node), `init_tool` (`--systemd`) | the finishing round of the first versions |
+| ctests `cluster_keylog`, `cluster_load_pinned`, `cluster_scenarios` (`link-chaos`) | a capture decrypted with tshark and the key log (and opaque without it); a wave with every function pinned to its callers; a wave through a link with delay, jitter, reordering, duplication and loss |
 | ctests `cluster_inject_amf`, `cluster_inject_smf` | failure injection: every registration refused with a cause and counted; a tenth of the N4 responses lost and the wave still completes |
 
 ## BSF (Phase 7)

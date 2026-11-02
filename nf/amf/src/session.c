@@ -292,6 +292,20 @@ int amf_sm_deactivate_all(amf *a, amf_ue *u)
 
 static void sm_forward_result(amf_conn *c, amf_ue *u, uint8_t psi, amf_smresp *r);
 
+
+/* The counter of PDU session establishment requests by result and slice (backlog B-15: per-slice KPIs): snssai is "<sst>" or "<sst>-<sd as 6 hex>". */
+static void count_pdu(amf *a, const nas_snssai *sn, const char *result)
+{
+    char sl[16];
+    g5c_label l[2];
+    if (sn->has_sd)
+        snprintf(sl, sizeof sl, "%u-%06x", (unsigned)sn->sst, (unsigned)sn->sd);
+    else
+        snprintf(sl, sizeof sl, "%u", (unsigned)sn->sst);
+    l[0] = (g5c_label){"result", result};
+    l[1] = (g5c_label){"snssai", sl};
+    g5c_counter_inc(g5c_counter_get(a->metrics, "g5c_amf_pdu_session_requests_total", "PDU session establishment requests by result and slice.", l, 2));
+}
 static void sm_establish(amf_conn *c, amf_ue *u, const nas_msg *ul, uint8_t psi, const uint8_t *n1, size_t n1l)
 {
     amf *a = c->a;
@@ -323,7 +337,7 @@ static void sm_establish(amf_conn *c, amf_ue *u, const nas_msg *ul, uint8_t psi,
         sn = u->allowed[0];
     } else if (!amf_snssai_in(u->allowed, u->nallowed, &sn)) {
         G5C_LOGW(AMF_LOG, "%s asked for a slice outside its allowed NSSAI", u->supi);
-        amf_count(a, "g5c_amf_pdu_session_requests_total", "PDU session establishment requests by result.", "result", "slice_not_allowed");
+        count_pdu(a, &sn, "slice_not_allowed");
         send_payload_not_forwarded(c, u, 1, n1, n1l, psi);
         return;
     }
@@ -332,7 +346,7 @@ static void sm_establish(amf_conn *c, amf_ue *u, const nas_msg *ul, uint8_t psi,
         (void)nas_dnn_decode(v, n, dnn, sizeof dnn);
     if (a->cfg.use_nssf && amf_nssf_pdu_session(a, &sn, c->has_tai ? &c->tai : &a->cfg.tai[0]) == 1) {
         G5C_LOGW(AMF_LOG, "%s: the NSSF does not serve the requested slice in this tracking area", u->supi);
-        amf_count(a, "g5c_amf_pdu_session_requests_total", "PDU session establishment requests by result.", "result", "slice_refused_by_nssf");
+        count_pdu(a, &sn, "slice_refused_by_nssf");
         send_payload_not_forwarded(c, u, 1, n1, n1l, psi);
         return;
     }
@@ -340,7 +354,7 @@ static void sm_establish(amf_conn *c, amf_ue *u, const nas_msg *ul, uint8_t psi,
         const char *use = dnn[0] != 0 ? dnn : a->cfg.default_dnn;
         root = sm_root(a, &sn, use);
         if (root == NULL) {
-            amf_count(a, "g5c_amf_pdu_session_requests_total", "PDU session establishment requests by result.", "result", "no_smf");
+            count_pdu(a, &sn, "no_smf");
             send_payload_not_forwarded(c, u, 1, n1, n1l, psi);
             return;
         }
@@ -396,10 +410,10 @@ static void sm_establish(amf_conn *c, amf_ue *u, const nas_msg *ul, uint8_t psi,
         snprintf(p->dnn, sizeof p->dnn, "%s", dnn);
         p->snssai = sn;
         p->has_snssai = true;
-        amf_count(a, "g5c_amf_pdu_session_requests_total", "PDU session establishment requests by result.", "result", "created");
+        count_pdu(a, &sn, "created");
         amf_persist_request(a);
     } else {
-        amf_count(a, "g5c_amf_pdu_session_requests_total", "PDU session establishment requests by result.", "result", http > 0 ? "rejected" : "smf_error");
+        count_pdu(a, &sn, http > 0 ? "rejected" : "smf_error");
         if (r.n1 != NULL && r.n1->len > 0)
             (void)send_sm_nas(c, u, psi, r.n1->data, r.n1->len); /* the establishment reject the SMF built */
         else

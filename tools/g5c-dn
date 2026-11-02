@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """g5c-dn: the things behind N6 for scenarios (backlog B-14): a DNS server, an HTTP server, a UDP echo and a RADIUS AAA server, standard library only.
 
-  g5c-dn --bind 10.45.0.1 [--dns 53] [--http 80] [--echo 7] [--radius 1812] [--zone zone.json] [--users users.json] [--secret S]
+  g5c-dn --bind 10.45.0.1 [--dns 53] [--http 80] [--echo 7] [--radius 1812] [--acct 1813] [--zone zone.json] [--users users.json] [--secret S]
 
   DNS     answers A queries from the zone ({"name": "ip"}; "*" is the default answer); a name that is not in a zone without "*" gets NXDOMAIN
   HTTP    GET /          a small page;  GET /bytes/N  N bytes (throughput tests, N up to 100 MB);  GET /delay/MS  answers after MS milliseconds;  GET /status/CODE
   echo    returns every UDP datagram unchanged (loss, latency and jitter probes)
+  RADIUS  accounting (RFC 2866, --acct): Accounting-Request (Start / Interim / Stop) is checked against the shared secret, answered with Accounting-Response and kept for the scenario to inspect
   RADIUS  Access-Request with a User-Password (PAP, RFC 2865): Access-Accept when {"user": "password"} in --users matches, else Access-Reject; the answer is authenticated with the shared secret
           (the AAA-S side of slice authentication, backlog A-09)
 A port of 0 turns that service off; run it in the data network's namespace or on the host address behind the UPF's N6. Press Ctrl-C to stop."""
@@ -67,6 +68,24 @@ def radius_pap(enc, secret, req_auth):
         out += bytes(a ^ b for a, b in zip(block, pad))
         prev = block
     return out.rstrip(b"\x00")
+
+
+def radius_acct_answer(pkt, secret, records):
+    """Accounting-Request (code 4): the Request Authenticator is MD5(code, id, length, 16 zero octets, attributes, secret); a wrong one is silently dropped (RFC 2866 3). The reply is code 5."""
+    if len(pkt) < 20 or pkt[0] != 4:
+        return None
+    ident, length = pkt[1], struct.unpack("!H", pkt[2:4])[0]
+    if length > len(pkt) or length < 20:
+        return None
+    auth, body = pkt[4:20], pkt[20:length]
+    if hashlib.md5(pkt[:4] + b"\x00" * 16 + body + secret).digest() != auth:
+        return None
+    attrs = radius_attrs(body)
+    status = int.from_bytes(attrs.get(40, [b"\x00\x00\x00\x00"])[0], "big")  # Acct-Status-Type: 1 start, 2 stop, 3 interim
+    records.append({"user": attrs.get(1, [b""])[0].decode("utf-8", "replace"), "status": {1: "start", 2: "stop", 3: "interim"}.get(status, str(status)),
+                    "session": attrs.get(44, [b""])[0].decode("utf-8", "replace")})
+    head = struct.pack("!BBH", 5, ident, 20)
+    return head + hashlib.md5(head + auth + secret).digest()
 
 
 def radius_answer(pkt, secret, users):
@@ -164,10 +183,11 @@ class HttpHandler(http.server.BaseHTTPRequestHandler):
 class Dn:
     """The running services; ports are those actually bound (port 0 asks the system for a free one, which the tests use)."""
 
-    def __init__(self, bind, dns=None, http_port=None, echo=None, radius=None, zone=None, users=None, secret=b"g5c-secret"):
-        self.udp, self.http, self.ports = [], None, {}
+    def __init__(self, bind, dns=None, http_port=None, echo=None, radius=None, zone=None, users=None, secret=b"g5c-secret", acct=None):
+        self.udp, self.http, self.ports, self.acct_records = [], None, {}, []
         zone = zone or {"*": "192.0.2.1"}
-        for name, port, h in (("dns", dns, lambda d: dns_answer(d, zone)), ("echo", echo, lambda d: d), ("radius", radius, lambda d: radius_answer(d, secret, users or {}))):
+        for name, port, h in (("dns", dns, lambda d: dns_answer(d, zone)), ("echo", echo, lambda d: d), ("radius", radius, lambda d: radius_answer(d, secret, users or {})),
+                              ("acct", acct, lambda d: radius_acct_answer(d, secret, self.acct_records))):
             if port is not None:
                 s = UdpService(bind, port, h)
                 self.udp.append(s)
@@ -196,7 +216,7 @@ class Dn:
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--bind", default="0.0.0.0")
-    for n, d in (("dns", 53), ("http", 80), ("echo", 7), ("radius", 1812)):
+    for n, d in (("dns", 53), ("http", 80), ("echo", 7), ("radius", 1812), ("acct", 1813)):
         ap.add_argument("--" + n, type=int, default=d, help="port (0: off), default %d" % d)
     ap.add_argument("--zone", help="JSON file {name: ip}")
     ap.add_argument("--users", help="JSON file {user: password}")
@@ -204,7 +224,7 @@ def main():
     a = ap.parse_args()
     zone = json.load(open(a.zone)) if a.zone else None
     users = json.load(open(a.users)) if a.users else {}
-    dn = Dn(a.bind, a.dns or None, a.http or None, a.echo or None, a.radius or None, zone, users, a.secret.encode()).start()
+    dn = Dn(a.bind, a.dns or None, a.http or None, a.echo or None, a.radius or None, zone, users, a.secret.encode(), a.acct or None).start()
     print("g5c-dn on %s: %s" % (a.bind, ", ".join("%s %d" % kv for kv in sorted(dn.ports.items()))), flush=True)
     try:
         while True:

@@ -1,0 +1,5 @@
+# Downlink through the UPF (B-02): each UE's packets go to an echo server behind the UPF (tools/g5c-dn) and come back as downlink to the gNB's N3 socket.
+# Nothing limits them, so what was sent has to come back; loss, round trip and jitter are printed.
+name: echo through the UPF, nothing limiting
+steps:
+  - load: {ues: 2, gnbs: 2, traffic_mbps: 2, traffic_ms: 1500, echo: true, max_loss_pct: 5}

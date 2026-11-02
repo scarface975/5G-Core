@@ -452,6 +452,59 @@ static void post_subscriber(void *ctx, const g5c_req *req, g5c_resp *resp)
     g5c_json_free(s);
 }
 
+/* POST /admin/v1/subscribers-bulk: an array of up to 1000 subscribers (the /admin/v1/subscribers body each), or {"subscribers": [...]}. Each is checked and stored on its own: one bad record does not stop the
+ * others. The answer is 200 with the totals and, in order, {supi, status} per record (201 stored, else the status and detail the single-record call would have given). */
+#define UDM_BULK_MAX 1000
+
+static void post_bulk(void *ctx, const g5c_req *req, g5c_resp *resp)
+{
+    udm *u = ctx;
+    g5c_json *in = g5c_req_json(req, resp), *out, *results;
+    const g5c_json *list;
+    size_t created = 0, failed = 0, n;
+    if (in == NULL)
+        return;
+    list = g5c_json_is(in, G5C_J_ARRAY) ? in : g5c_json_get(in, "subscribers");
+    n = g5c_json_len(list);
+    if (!g5c_json_is(list, G5C_J_ARRAY) || n == 0 || n > UDM_BULK_MAX) {
+        bad(resp, "an array of 1 to 1000 subscribers is expected");
+        g5c_json_free(in);
+        return;
+    }
+    out = g5c_json_new_obj();
+    results = g5c_json_set(out, "results", g5c_json_new_arr());
+    for (size_t i = 0; i < n; i++) {
+        const g5c_json *s = g5c_json_at(list, i);
+        g5c_json *r = g5c_json_push(results, g5c_json_new_obj());
+        g5c_resp one;
+        const char *supi = NULL;
+        g5c_resp_init(&one);
+        if (provision(u, s, &supi, &one)) {
+            G5C_LOGI("g5c_audit", "udm admin: subscriber.provision supi=%s (bulk)", supi);
+            udm_sdm_notify_change(u, supi);
+            g5c_json_set_str(r, "supi", supi);
+            g5c_json_set_int(r, "status", 201);
+            created++;
+        } else {
+            g5c_json *pb = g5c_resp_parse_json(&one);
+            const char *detail = g5c_json_get_str(pb, "detail"), *given = g5c_json_get_str(s, "supi");
+            g5c_json_set_str(r, "supi", given != NULL ? given : "");
+            g5c_json_set_int(r, "status", one.status != 0 ? one.status : 400);
+            g5c_json_set_str(r, "detail", detail != NULL ? detail : "refused");
+            g5c_json_free(pb);
+            failed++;
+        }
+        g5c_resp_free(&one);
+    }
+    g5c_json_set_int(out, "total", (int64_t)n);
+    g5c_json_set_int(out, "created", (int64_t)created);
+    g5c_json_set_int(out, "failed", (int64_t)failed);
+    G5C_LOGI("g5c_audit", "udm admin: subscriber.bulk total=%zu created=%zu failed=%zu", n, created, failed);
+    g5c_resp_json(resp, 200, out);
+    g5c_json_free(out);
+    g5c_json_free(in);
+}
+
 static void list_subscribers(void *ctx, const g5c_req *req, g5c_resp *resp)
 {
     udm *u = ctx;
@@ -630,6 +683,7 @@ void udm_admin_routes(g5c_router *r, udm *u)
 {
     g5c_router_route(r, "GET", "/console", console_page, u);
     g5c_router_route(r, "POST", "/admin/v1/subscribers", post_subscriber, u);
+    g5c_router_route(r, "POST", "/admin/v1/subscribers-bulk", post_bulk, u);
     g5c_router_route(r, "GET", "/admin/v1/subscribers", list_subscribers, u);
     g5c_router_route(r, "GET", "/admin/v1/subscribers/{supi}", get_subscriber, u);
     g5c_router_route(r, "DELETE", "/admin/v1/subscribers/{supi}", delete_subscriber, u);

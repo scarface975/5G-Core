@@ -638,7 +638,7 @@ static void test_ee(void)
     g5c_router *amfr = g5c_router_new(), *cbr = g5c_router_new();
     g5c_server_cfg cfg = {"127.0.0.1", 0, NULL};
     g5c_server *amf, *cbs;
-    char amf_base[64], dereg[96], body[900], notify[160], *regb, id[16], path[200];
+    char amf_base[64], dereg[96], body[900], notify[160], *regb, id[16], path[200], sf[80];
     const char *reg = "/nudm-uecm/v1/" SUPI "/registrations/amf-3gpp-access";
     g5c_json *v;
     setup(&t, false);
@@ -650,6 +650,9 @@ static void test_ee(void)
     snprintf(amf_base, sizeof amf_base, "http://127.0.0.1:%u", g5c_server_port(amf));
     snprintf(dereg, sizeof dereg, "%s/dereg", amf_base);
     t.u.ee_self_uri = g5c_xstrdup(t.base);
+    snprintf(sf, sizeof sf, "/tmp/g5c-ee-state-%d.json", (int)getpid());
+    unlink(sf);
+    t.u.ee_state_file = g5c_xstrdup(sf); /* A-05: the subscriptions are written down after every change */
     atomic_store(&ee_amf_posts, 0);
     atomic_store(&ee_amf_deletes, 0);
     atomic_store(&ee_cb_calls, 0);
@@ -697,6 +700,24 @@ static void test_ee(void)
     TK_ASSERT(rq(&t, "POST", notify, "{\"reportList\":[{\"type\":\"LOCATION_REPORT\",\"timeStamp\":\"2026-11-02T10:01:30Z\"}]}", false, NULL, NULL) == 204);
     TK_ASSERT(atomic_load(&ee_cb_calls) == 1);
 
+    /* a restart of the UDM: the table is forgotten and read again from the file; everything below then works on the restored subscription */
+    {
+        char buf[4096];
+        size_t k;
+        FILE *f = fopen(sf, "rb");
+        TK_ASSERT(f != NULL);
+        k = fread(buf, 1, sizeof buf - 1, f);
+        buf[k] = 0;
+        fclose(f);
+        TK_ASSERT(strstr(buf, "\"amfSub\":\"77\"") != NULL && strstr(buf, "\"sent\":1") != NULL && strstr(buf, "\"next\"") != NULL);
+        pthread_mutex_lock(&t.u.mu);
+        g5c_json_free(t.u.ee_subs);
+        t.u.ee_subs = g5c_json_new_obj();
+        t.u.next_ee = 1;
+        pthread_mutex_unlock(&t.u.mu);
+        udm_ee_load(&t.u);
+        TK_ASSERT(g5c_json_len(t.u.ee_subs) == 1 && t.u.next_ee > 1);
+    }
     /* modification: at most two reports; the second ends the subscription at the UDM and at the AMF */
     snprintf(path, sizeof path, "/nudm-ee/v1/" SUPI "/ee-subscriptions/%s", id);
     TK_ASSERT(rq(&t, "PATCH", path, "[{\"op\":\"replace\",\"path\":\"/reportingOptions/maxNumOfReports\",\"value\":2}]", false, NULL, NULL) == 204);
@@ -720,6 +741,7 @@ static void test_ee(void)
     TK_ASSERT(rq(&t, "POST", "/nudm-ee/v1/anyUE/ee-subscriptions", body, false, NULL, NULL) == 201);
     TK_ASSERT(strstr(ee_amf_body, "\"anyUE\":true") && !strstr(ee_amf_body, "\"supi\""));
 
+    unlink(sf);
     g5c_server_stop(amf);
     g5c_server_stop(cbs);
     g5c_router_free(amfr);
@@ -1104,6 +1126,42 @@ static void test_admin_validation(void)
 }
 
 /* Garbage, wrong methods, unknown paths and oversized bodies never crash the NF and get the right status. */
+/* F-02: the bulk endpoint stores each record on its own and says what became of each */
+static void test_bulk(void)
+{
+    T t;
+    g5c_json *v;
+    const g5c_json *res;
+    setup(&t, true);
+    TK_ASSERT(rq(&t, "POST", "/admin/v1/subscribers-bulk", "[]", false, NULL, NULL) == 401); /* the admin token is needed */
+    TK_ASSERT(rq(&t, "POST", "/admin/v1/subscribers-bulk", "[]", true, NULL, NULL) == 400);  /* and at least one record */
+    TK_ASSERT(rq(&t, "POST", "/admin/v1/subscribers-bulk", "{\"nope\":1}", true, NULL, NULL) == 400);
+    TK_ASSERT(rq(&t, "POST", "/admin/v1/subscribers-bulk",
+                 "[{\"supi\":\"imsi-001010000000041\",\"k\":\"" K_HEX "\",\"opc\":\"" K_HEX "\"},"
+                 "{\"supi\":\"imsi-001010000000042\",\"k\":\"short\",\"opc\":\"" K_HEX "\"},"
+                 "{\"supi\":\"imsi-001010000000043\",\"k\":\"" K_HEX "\",\"op\":\"" OP_HEX "\",\"slices\":[{\"sst\":1}]},"
+                 "{\"supi\":\"imsi-001010000000044\",\"k\":\"" K_HEX "\",\"opc\":\"" K_HEX "\",\"typo\":1},"
+                 "42]",
+                 true, &v, NULL) == 200);
+    res = g5c_json_get(v, "results");
+    {
+        int64_t total = 0, created = 0, failed = 0, st = 0;
+        TK_ASSERT(g5c_json_get_int(v, "total", &total) && total == 5 && g5c_json_get_int(v, "created", &created) && created == 2 && g5c_json_get_int(v, "failed", &failed) && failed == 3);
+        TK_ASSERT(g5c_json_len(res) == 5);
+        TK_ASSERT(g5c_json_get_int(g5c_json_at(res, 0), "status", &st) && st == 201 && strcmp(g5c_json_get_str(g5c_json_at(res, 0), "supi"), "imsi-001010000000041") == 0);
+        TK_ASSERT(g5c_json_get_int(g5c_json_at(res, 1), "status", &st) && st == 400 && strstr(g5c_json_get_str(g5c_json_at(res, 1), "detail"), "32 hex") != NULL);
+        TK_ASSERT(g5c_json_get_int(g5c_json_at(res, 2), "status", &st) && st == 201);
+        TK_ASSERT(g5c_json_get_int(g5c_json_at(res, 3), "status", &st) && st == 400 && strstr(g5c_json_get_str(g5c_json_at(res, 3), "detail"), "typo") != NULL);
+        TK_ASSERT(g5c_json_get_int(g5c_json_at(res, 4), "status", &st) && st == 400);
+    }
+    g5c_json_free(v);
+    /* the two good ones are really there, the bad ones are not */
+    TK_ASSERT(rq(&t, "GET", "/admin/v1/subscribers/imsi-001010000000041", NULL, true, NULL, NULL) == 200);
+    TK_ASSERT(rq(&t, "GET", "/admin/v1/subscribers/imsi-001010000000043", NULL, true, NULL, NULL) == 200);
+    TK_ASSERT(rq(&t, "GET", "/admin/v1/subscribers/imsi-001010000000042", NULL, true, NULL, NULL) == 404);
+    teardown(&t);
+}
+
 /* F-01: the console page is served, with a policy that allows only its own script, and not at all when the admin API is off */
 static void test_console(void)
 {
@@ -1326,6 +1384,7 @@ int main(void)
     test_admin_validation();
     test_protocol_abuse();
     test_console();
+    test_bulk();
     test_udr_failures();
     test_complexity_abuse();
     puts("udm: ok");

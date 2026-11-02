@@ -1,0 +1,6 @@
+# The downlink AMBR on the user plane (B-02): uplink is wide open (100 Mbit/s), the downlink AMBR is 1 Mbit/s (run with G5C_AMBR_UL='100 Mbps' G5C_AMBR_DL='1 Mbps').
+# Each UE sends 4 Mbit/s to the echo server, which sends it all back; the UPF must hold the downlink to about 1 Mbit/s per UE and count what it drops.
+name: downlink AMBR enforced by the UPF
+steps:
+  - load: {ues: 2, gnbs: 2, traffic_mbps: 4, traffic_ms: 1500, echo: true, expect_dl_mbps: 1}
+  - assert: {metric: "upf:g5c_upf_dropped_packets_total{reason=rate_limit}", ">=": 100}

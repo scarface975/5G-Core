@@ -51,7 +51,7 @@ def main():
         ok = ok and cond
 
     secret = b"s3cret"
-    srv = dn.Dn("127.0.0.1", dns=0, http_port=0, echo=0, radius=0, zone={"app.example": "198.51.100.7", "*": "192.0.2.9"}, users={"alice": "pw-alice"}, secret=secret).start()
+    srv = dn.Dn("127.0.0.1", dns=0, http_port=0, echo=0, radius=0, acct=0, zone={"app.example": "198.51.100.7", "*": "192.0.2.9"}, users={"alice": "pw-alice"}, secret=secret).start()
     try:
         r = udp(srv.ports["dns"], dns_query("app.example"))
         check("DNS: a name in the zone", r is not None and r[:2] == b"\x12\x34" and r[3] & 0xF == 0 and r[-4:] == socket.inet_aton("198.51.100.7"), r)
@@ -78,6 +78,21 @@ def main():
         check("RADIUS: wrong password -> Access-Reject", r is not None and r[0] == 3, r)
         pkt, auth = radius_request("mallory", "x", secret)
         check("RADIUS: unknown user -> Access-Reject", udp(srv.ports["radius"], pkt)[0] == 3)
+        # accounting (RFC 2866): the request authenticator is checked, the answer is authenticated, the record is kept
+        def acct_request(status, session, secret_used):
+            attrs = bytes([1, 7]) + b"alice" + bytes([40, 6]) + struct.pack("!I", status) + bytes([44, 2 + len(session)]) + session.encode()
+            head = struct.pack("!BBH", 4, 9, 20 + len(attrs))
+            auth = hashlib.md5(head + b"\x00" * 16 + attrs + secret_used).digest()
+            return head + auth + attrs, auth
+
+        pkt, auth = acct_request(1, "sess-1", secret)
+        r = udp(srv.ports["acct"], pkt)
+        check("RADIUS accounting: Accounting-Response, authenticated with the secret", r is not None and r[0] == 5 and r[1] == 9 and r[4:20] == hashlib.md5(r[:4] + auth + secret).digest(), r)
+        pkt, auth = acct_request(2, "sess-1", secret)
+        udp(srv.ports["acct"], pkt)
+        check("accounting: start and stop are recorded", [x["status"] for x in srv.acct_records] == ["start", "stop"] and srv.acct_records[0]["user"] == "alice" and srv.acct_records[0]["session"] == "sess-1", srv.acct_records)
+        pkt, auth = acct_request(1, "forged", b"wrong-secret")
+        check("accounting: a request with a wrong authenticator gets no answer and no record", udp(srv.ports["acct"], pkt, timeout=0.4) is None and len(srv.acct_records) == 2)
     finally:
         srv.stop()
     print("dn: PASS" if ok else "dn: FAIL")

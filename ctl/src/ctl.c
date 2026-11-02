@@ -4,6 +4,7 @@
  *   g5c-ctl [--udm URL] [--pcf URL] [--token-file FILE] <command>
  *     subscriber add --supi S --k HEX (--op HEX | --opc HEX) [--amf HEX] [--sqn HEX] [--slice SST[:SD]]... [--dnn NAME]...
  *     subscriber add --json FILE|-          (the raw /admin/v1/subscribers body)
+ *     subscriber bulk FILE|-                (a JSON array of subscribers, up to 1000: /admin/v1/subscribers-bulk)
  *     subscriber get SUPI | list | delete SUPI
  *     policy get SUPI | delete SUPI | put SUPI FILE|-   (JSON or YAML policy document)
  *     session list | terminate SMPOLICYID
@@ -37,6 +38,7 @@ static int usage(ctl *c, const char *why)
     fputs("usage: g5c-ctl [--udm URL] [--pcf URL] [--token-file FILE] <command>\n"
           "  subscriber add --supi S --k HEX (--op HEX | --opc HEX) [--amf HEX] [--sqn HEX] [--slice SST[:SD]]... [--dnn NAME]...\n"
           "  subscriber add --json FILE|-\n"
+          "  subscriber bulk FILE|-          (a JSON array of up to 1000 subscriber records)\n"
           "  subscriber get SUPI | list | delete SUPI\n"
           "  policy get SUPI | delete SUPI | put SUPI FILE|-\n"
           "  session list | terminate SMPOLICYID\n",
@@ -198,6 +200,14 @@ static int cmd_subscriber(ctl *c, int argc, char **argv)
             return rc;
         }
         return subscriber_add_flags(c, argc - 1, argv + 1);
+    }
+    if (strcmp(argv[0], "bulk") == 0 && argc == 2) { /* a JSON array (or JSON lines) of subscribers, stored one by one: the answer lists what became of each */
+        g5c_json *j = load_doc(c, argv[1]);
+        if (j == NULL)
+            return RC_USAGE;
+        rc = call(c, "POST", c->udm, "/admin/v1/subscribers-bulk", j);
+        g5c_json_free(j);
+        return rc;
     }
     if (strcmp(argv[0], "list") == 0 && argc == 1)
         return call(c, "GET", c->udm, "/admin/v1/subscribers", NULL);

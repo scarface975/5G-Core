@@ -20,6 +20,10 @@ The first release candidate: all eleven functions of the strategy and the option
 - `tools/g5c-subscribers`: bulk import of Open5GS, free5GC and CSV subscribers (validated like the UDM does, applied through `g5c-ctl`) and a key-less export.
 - Nudm_EventExposure at the UDM (`/nudm-ee/v1`): loss of connectivity, CM state, location and reachability events for a UE, a GPSI or any UE, relayed from the AMF; `nef.events_via_udm` routes the NEF's monitoring events through it.
 - Operator tools and test helpers: `g5c-init`, scenarios (`g5c-scenario`, `g5c-api`, link impairment with `tc netem`), `g5c-dn`, `g5c-ladder`, `g5c-trace`, `g5c-dossier`, `g5c-sdk`, `perf_history.py` (see the admin guide).
+- Finishing the first versions: bulk subscriber endpoint (`POST /admin/v1/subscribers-bulk`, `g5c-ctl subscriber bulk`, `g5c-subscribers import --apply --bulk`); event exposure subscriptions kept in a state file
+  (`ee.state_file`); per-slice KPIs (`slice` label on the PDU session counter, `by:` in the KPI definitions); link impairment with reordering, duplication and jitter; RADIUS accounting in `g5c-dn`; the
+  automation API follows output with `?since=`, refuses to listen on a network address without TLS, and its OpenAPI makes a client; a JavaScript client from `g5c-sdk js`; systemd units from `g5c-init --systemd`;
+  `G5C_PIN_PEERS=1` / `g5c-init --pin-peers` pin every function to its callers; the TLS key log is proven to decrypt a capture with tshark.
 - Usage monitoring (volume threshold, report, throttle) through the PCF, SMF and UPF; user plane traffic profiles in the load generator with a numeric check of the session AMBR on the UPF.
 - Failure injection in the AMF and the SMF (`amf.inject`, `smf.inject`); identity pinning of client certificates (`sbi.tls.allowed_peers`) and revocation lists (`sbi.tls.crl`, `g5c-pki.sh revoke`).
 - Trace ids over the SBI (`traceparent`) in every log line; `/openapi.json` on every function; an operator console at the UDM (`/console`).

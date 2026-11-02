@@ -87,6 +87,12 @@ sends the PCF an update with the `accuUsageReports`, and the PCF answers with th
 `G5C_LOAD_TRAFFIC_MS`, `G5C_LOAD_TRAFFIC_SIZE`, `G5C_LOAD_EXPECT_MBPS`). The UPF's own counters give what it forwarded and what its rate limiter dropped; the run fails when the delivered rate per UE is not within 0.5x to 1.3x of the expected one
 (`scenarios/traffic-ambr.yaml`: a session AMBR of 1 Mbit/s set with `G5C_AMBR_UL` / `G5C_AMBR_DL` held a 4 Mbit/s offer to 1.03 Mbit/s). Uplink only: downlink needs a sender on the data network side.
 
+**Pinning every function to its callers**: `G5C_PIN_PEERS=1` in the cluster script (or `g5c-init --pin-peers`) writes `sbi.tls.allowed_peers` into every configuration from the call graph: with the SCP in the middle a
+function accepts the SCP, the NRF and the operator's certificate, and the NRF and the SCP accept every function. A full wave runs under it (`cluster_load_pinned`).
+
+**Bulk and persistence**: `POST /admin/v1/subscribers-bulk` stores up to 1000 subscribers, each on its own, and answers per record; `g5c-subscribers import --apply --bulk` uses it in batches of 200. The UDM keeps its event
+exposure subscriptions in `ee.state_file`, so a restart does not lose them. KPIs with `by: snssai` give one row per slice.
+
 **Failure injection** (for testing a RAN against a core that misbehaves; a warning is logged at start, every injection is counted in `g5c_*_injected_total`): `amf.inject: { registration_reject: [{ supi: imsi-00101, cause: 11 }], accept_delay_ms: 2000 }`,
 `smf.inject: { pdu_session_reject: [{ supi: imsi-00101, status: 403 }], n4_drop_responses_percent: 10 }`. `supi` is a prefix.
 
