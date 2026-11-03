@@ -372,13 +372,13 @@ void amf_ue_gc(amf_ue *u)
     amf_ue_remove(u);
 }
 
-static void reg_reject(amf_conn *c, amf_ue *u, uint8_t cause, const char *why)
+static void reg_reject_t3346(amf_conn *c, amf_ue *u, uint8_t cause, const char *why, unsigned t3346_s)
 {
     g5c_bytes b;
     g5c_bytes_init(&b);
     G5C_LOGI(AMF_LOG, "registration of %s rejected, cause #%u (%s)", u != NULL ? u->supi : "(unidentified)", cause, why);
-    amf_count(c->a, "g5c_amf_registrations_total", "Registration requests by result.", "result", "rejected");
-    if (nm_reg_reject(cause, &b) == 0) {
+    amf_count(c->a, "g5c_amf_registrations_total", "Registration requests by result.", "result", cause == MM_CAUSE_CONGESTION ? "congestion" : "rejected");
+    if (nm_reg_reject_t3346(cause, t3346_s, &b) == 0) {
         if (c->sec_active && u != NULL && u->sec.valid)
             (void)send_dl(c, u, b.data, b.len, 2);
         else
@@ -386,6 +386,62 @@ static void reg_reject(amf_conn *c, amf_ue *u, uint8_t cause, const char *why)
     }
     g5c_bytes_free(&b);
     release_conn(c, "nas", "unspecified", REL_DELETE_UE);
+}
+
+static void reg_reject(amf_conn *c, amf_ue *u, uint8_t cause, const char *why)
+{
+    reg_reject_t3346(c, u, cause, why, 0);
+}
+
+static double mono_now(void)
+{
+    struct timespec t;
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    return (double)t.tv_sec + (double)t.tv_nsec / 1e9;
+}
+
+/* refill a bucket of `rate` tokens a second holding `cap`, and take one if there is one */
+static bool bucket_take(double *tokens, double *last, double rate, double cap, double now, bool commit)
+{
+    double t = *tokens + (*last > 0 ? (now - *last) * rate : cap);
+    if (t > cap)
+        t = cap;
+    *last = now;
+    if (t < 1.0) {
+        *tokens = t;
+        return false;
+    }
+    *tokens = commit ? t - 1.0 : t;
+    return true;
+}
+
+/* signalling-storm protection (TS 24.501 5.5.1.2.5, 5.3.9): registrations above the configured rate, for the AMF and for each gNB, are turned away with cause #22 and a back-off timer */
+static bool admit_registration(amf_conn *c, unsigned *t3346)
+{
+    amf *a = c->a;
+    bool ok = true;
+    pthread_mutex_lock(&a->tmu); /* the limits can change while the function runs (configuration reload) */
+    *t3346 = a->cfg.ov_t3346;
+    if (a->cfg.ov_regs_per_s == 0 && a->cfg.ov_gnb_regs_per_s == 0) {
+        pthread_mutex_unlock(&a->tmu);
+        return true;
+    }
+    {
+        double now = mono_now(), burst = a->cfg.ov_burst_s > 0 ? a->cfg.ov_burst_s : 1;
+        amf_gnb *g = c->gnb < AMF_MAX_GNB ? &a->gnbs[c->gnb] : NULL;
+        double all_cap = a->cfg.ov_regs_per_s * burst, gnb_cap = a->cfg.ov_gnb_regs_per_s * burst;
+        bool all_ok = a->cfg.ov_regs_per_s == 0 || bucket_take(&a->ov_tokens, &a->ov_last, a->cfg.ov_regs_per_s, all_cap < 1 ? 1 : all_cap, now, false);
+        bool gnb_ok = g == NULL || a->cfg.ov_gnb_regs_per_s == 0 || bucket_take(&g->ov_tokens, &g->ov_last, a->cfg.ov_gnb_regs_per_s, gnb_cap < 1 ? 1 : gnb_cap, now, false);
+        ok = all_ok && gnb_ok;
+        if (ok) { /* a token from each bucket in use, only when both had one */
+            if (a->cfg.ov_regs_per_s > 0)
+                a->ov_tokens -= 1.0;
+            if (g != NULL && a->cfg.ov_gnb_regs_per_s > 0)
+                g->ov_tokens -= 1.0;
+        }
+    }
+    pthread_mutex_unlock(&a->tmu);
+    return ok;
 }
 
 /* ---- registration: identification and authentication ---- */
@@ -947,6 +1003,13 @@ static void reg_request(amf_conn *c, const nas_msg *m, nas_auth *au)
     if (ri.type == 5) {
         reg_reject(c, c->ue, MM_CAUSE_5GS_NOT_ALLOWED, "SNPN onboarding is not supported");
         return;
+    }
+    {
+        unsigned t3346 = 0;
+        if (!admit_registration(c, &t3346)) {
+            reg_reject_t3346(c, c->ue, MM_CAUSE_CONGESTION, "the registration rate is above amf.overload", t3346);
+            return;
+        }
     }
     conn_clear_proc(c);
     c->sec_active = false;

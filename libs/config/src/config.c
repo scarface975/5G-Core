@@ -45,6 +45,13 @@ char *g5c_read_file(const char *path, size_t max_len, size_t *len)
     return g5c_bytes_take(&b, len);
 }
 
+static char last_path[1024];
+
+const char *g5c_config_last_path(void)
+{
+    return last_path;
+}
+
 g5c_json *g5c_config_load(const char *path, char *err, size_t errcap)
 {
     size_t len = 0;
@@ -57,6 +64,8 @@ g5c_json *g5c_config_load(const char *path, char *err, size_t errcap)
     /* a JSON document is also valid for the YAML subset (flow style) */
     j = g5c_yaml_parse(text, len, err, errcap);
     free(text);
+    if (j != NULL)
+        snprintf(last_path, sizeof last_path, "%s", path);
     if (j != NULL && !g5c_json_is(j, G5C_J_OBJECT)) {
         seterr(err, errcap, "config root must be a mapping");
         g5c_json_free(j);
@@ -117,7 +126,170 @@ void g5c_common_free(g5c_common *c)
     free(c->log_level);
     free(c->nrf_uri);
     free(c->scp_uri);
+    free(c->events.syslog_host);
+    free(c->events.syslog_proto);
+    free(c->events.syslog_ca);
+    free(c->events.http_uri);
+    free(c->events.http_ca);
+    free(c->reload.token_file);
     memset(c, 0, sizeof *c);
+}
+
+static int facility_of(const char *s)
+{
+    static const struct {
+        const char *n;
+        int v;
+    } f[] = {{"kern", 0}, {"user", 1}, {"daemon", 3}, {"auth", 4}, {"syslog", 5}, {"authpriv", 10}, {"local0", 16}, {"local1", 17},
+             {"local2", 18}, {"local3", 19}, {"local4", 20}, {"local5", 21}, {"local6", 22}, {"local7", 23}};
+    for (size_t i = 0; i < sizeof f / sizeof *f; i++)
+        if (strcmp(s, f[i].n) == 0)
+            return f[i].v;
+    return -1;
+}
+
+static int parse_reload(const g5c_json *rl, g5c_reload_cfg *r, char *err, size_t errcap)
+{
+    static const char *const k_rl[] = {"token_file", "settle_ms", NULL};
+    int64_t v;
+    if (!g5c_json_is(rl, G5C_J_OBJECT) || g5c_json_check_keys(rl, k_rl, "reload", err, errcap) != 0) {
+        if (err != NULL && errcap > 0 && err[0] == '\0')
+            seterr(err, errcap, "invalid config: `reload` must be a mapping");
+        return -1;
+    }
+    r->token_file = opt_str(rl, "token_file");
+    r->settle_ms = 1000;
+    if (g5c_json_get(rl, "settle_ms") != NULL) {
+        if (!g5c_json_get_int(rl, "settle_ms", &v) || v < 0 || v > 60000) {
+            seterr(err, errcap, "invalid value for `reload.settle_ms`: must be an integer from 0 to 60000");
+            return -1;
+        }
+        r->settle_ms = (unsigned)v;
+    }
+    return 0;
+}
+
+static int parse_overload(const g5c_json *ov, g5c_overload_cfg *o, char *err, size_t errcap)
+{
+    static const char *const k_ov[] = {"rate_per_source", "burst", "retry_after_s", "capacity_rps", NULL};
+    static const struct {
+        const char *key;
+        int64_t lo, hi;
+    } lim[] = {{"rate_per_source", 1, 1000000}, {"burst", 1, 10000000}, {"retry_after_s", 1, 60}, {"capacity_rps", 1, 10000000}};
+    unsigned *dst[] = {&o->rate_per_source, &o->burst, &o->retry_after_s, &o->capacity_rps};
+    if (!g5c_json_is(ov, G5C_J_OBJECT) || g5c_json_check_keys(ov, k_ov, "overload", err, errcap) != 0) {
+        if (err != NULL && errcap > 0 && err[0] == '\0')
+            seterr(err, errcap, "invalid config: `overload` must be a mapping");
+        return -1;
+    }
+    for (size_t i = 0; i < sizeof lim / sizeof *lim; i++) {
+        int64_t v;
+        if (g5c_json_get(ov, lim[i].key) == NULL)
+            continue;
+        if (!g5c_json_get_int(ov, lim[i].key, &v) || v < lim[i].lo || v > lim[i].hi) {
+            seterr(err, errcap, "invalid value for `overload.%s`: must be an integer from %lld to %lld", lim[i].key, (long long)lim[i].lo, (long long)lim[i].hi);
+            return -1;
+        }
+        *dst[i] = (unsigned)v;
+    }
+    if (o->rate_per_source == 0 && o->capacity_rps == 0) {
+        seterr(err, errcap, "invalid config: `overload` needs `rate_per_source` or `capacity_rps`");
+        return -1;
+    }
+    if (o->burst == 0)
+        o->burst = o->rate_per_source > 0 ? 2 * o->rate_per_source : 1;
+    if (o->retry_after_s == 0)
+        o->retry_after_s = 1;
+    o->enabled = true;
+    return 0;
+}
+
+static int parse_events(const g5c_json *ev, g5c_events_cfg *e, char *err, size_t errcap)
+{
+    static const char *const k_ev[] = {"min_level", "syslog", "http", NULL}, *const k_sl[] = {"host", "port", "proto", "ca", "facility", NULL},
+                             *const k_ht[] = {"uri", "ca", "batch", NULL};
+    const g5c_json *sl = g5c_json_get(ev, "syslog"), *ht = g5c_json_get(ev, "http");
+    const char *lv = g5c_json_get_str(ev, "min_level");
+    int64_t v;
+    if (!g5c_json_is(ev, G5C_J_OBJECT) || g5c_json_check_keys(ev, k_ev, "events", err, errcap) != 0) {
+        if (err != NULL && errcap > 0 && err[0] == '\0')
+            seterr(err, errcap, "invalid config: `events` must be a mapping");
+        return -1;
+    }
+    e->min_level = 1;
+    if (lv != NULL) {
+        if (strcmp(lv, "error") == 0)
+            e->min_level = 0;
+        else if (strcmp(lv, "warn") != 0) {
+            seterr(err, errcap, "invalid value for `events.min_level`: must be error or warn");
+            return -1;
+        }
+    }
+    if (sl != NULL && !g5c_json_is(sl, G5C_J_NULL)) {
+        const char *fac = g5c_json_get_str(sl, "facility");
+        if (!g5c_json_is(sl, G5C_J_OBJECT) || g5c_json_check_keys(sl, k_sl, "events.syslog", err, errcap) != 0) {
+            if (err != NULL && errcap > 0 && err[0] == '\0')
+                seterr(err, errcap, "invalid config: `events.syslog` must be a mapping");
+            return -1;
+        }
+        if (need_str(sl, "host", "events.syslog", &e->syslog_host, err, errcap) != 0)
+            return -1;
+        e->syslog_proto = g5c_xstrdup(g5c_json_get_str(sl, "proto") != NULL ? g5c_json_get_str(sl, "proto") : "udp");
+        if (strcmp(e->syslog_proto, "udp") != 0 && strcmp(e->syslog_proto, "tcp") != 0 && strcmp(e->syslog_proto, "tls") != 0) {
+            seterr(err, errcap, "invalid value for `events.syslog.proto`: must be udp, tcp or tls");
+            return -1;
+        }
+        e->syslog_port = strcmp(e->syslog_proto, "tls") == 0 ? 6514 : 514;
+        if (g5c_json_get(sl, "port") != NULL) {
+            if (!g5c_json_get_int(sl, "port", &v) || v < 1 || v > 65535) {
+                seterr(err, errcap, "invalid value for `events.syslog.port`: must be 1 to 65535");
+                return -1;
+            }
+            e->syslog_port = (uint16_t)v;
+        }
+        e->syslog_ca = opt_str(sl, "ca");
+        if (strcmp(e->syslog_proto, "tls") == 0 && e->syslog_ca == NULL) {
+            seterr(err, errcap, "invalid config: `events.syslog.proto: tls` needs `events.syslog.ca`");
+            return -1;
+        }
+        e->syslog_facility = fac != NULL ? facility_of(fac) : 16;
+        if (e->syslog_facility < 0) {
+            seterr(err, errcap, "invalid value for `events.syslog.facility`: use daemon, auth, authpriv, user, syslog, kern or local0 to local7");
+            return -1;
+        }
+    }
+    if (ht != NULL && !g5c_json_is(ht, G5C_J_NULL)) {
+        if (!g5c_json_is(ht, G5C_J_OBJECT) || g5c_json_check_keys(ht, k_ht, "events.http", err, errcap) != 0) {
+            if (err != NULL && errcap > 0 && err[0] == '\0')
+                seterr(err, errcap, "invalid config: `events.http` must be a mapping");
+            return -1;
+        }
+        if (need_str(ht, "uri", "events.http", &e->http_uri, err, errcap) != 0)
+            return -1;
+        if (strncmp(e->http_uri, "http://", 7) != 0 && strncmp(e->http_uri, "https://", 8) != 0) {
+            seterr(err, errcap, "invalid value for `events.http.uri`: must be an http or https URI");
+            return -1;
+        }
+        e->http_ca = opt_str(ht, "ca");
+        if (strncmp(e->http_uri, "https://", 8) == 0 && e->http_ca == NULL) {
+            seterr(err, errcap, "invalid config: an https `events.http.uri` needs `events.http.ca`");
+            return -1;
+        }
+        e->http_batch = 50;
+        if (g5c_json_get(ht, "batch") != NULL) {
+            if (!g5c_json_get_int(ht, "batch", &v) || v < 1 || v > 1000) {
+                seterr(err, errcap, "invalid value for `events.http.batch`: must be 1 to 1000");
+                return -1;
+            }
+            e->http_batch = (unsigned)v;
+        }
+    }
+    if (e->syslog_host == NULL && e->http_uri == NULL) {
+        seterr(err, errcap, "invalid config: `events` needs a `syslog` or an `http` target");
+        return -1;
+    }
+    e->enabled = true;
+    return 0;
 }
 
 int g5c_common_parse(const g5c_json *root, g5c_common *out, char *err, size_t errcap)
@@ -240,6 +412,16 @@ int g5c_common_parse(const g5c_json *root, g5c_common *out, char *err, size_t er
         if (need_str(nrf, "uri", "nrf", &out->nrf_uri, err, errcap) != 0)
             goto bad;
     }
+    if (g5c_json_get(root, "events") != NULL && !g5c_json_is(g5c_json_get(root, "events"), G5C_J_NULL) &&
+        parse_events(g5c_json_get(root, "events"), &out->events, err, errcap) != 0)
+        goto bad;
+    if (g5c_json_get(root, "overload") != NULL && !g5c_json_is(g5c_json_get(root, "overload"), G5C_J_NULL) &&
+        parse_overload(g5c_json_get(root, "overload"), &out->overload, err, errcap) != 0)
+        goto bad;
+    out->reload.settle_ms = 1000;
+    if (g5c_json_get(root, "reload") != NULL && !g5c_json_is(g5c_json_get(root, "reload"), G5C_J_NULL) &&
+        parse_reload(g5c_json_get(root, "reload"), &out->reload, err, errcap) != 0)
+        goto bad;
     return 0;
 bad:
     g5c_common_free(out);

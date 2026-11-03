@@ -280,6 +280,11 @@ static bool all_digits(const char *s, size_t n)
 
 int udm_resolve(const char *id, const udm_hnkey *keys, size_t nkeys, char *out, size_t cap)
 {
+    return udm_resolve_ex(id, keys, nkeys, true, out, cap);
+}
+
+int udm_resolve_ex(const char *id, const udm_hnkey *keys, size_t nkeys, bool allow_null, char *out, size_t cap)
+{
     const char *p[7];
     size_t pl[7];
     const char *rest;
@@ -332,6 +337,8 @@ int udm_resolve(const char *id, const udm_hnkey *keys, size_t nkeys, char *out, 
             return UDM_ID_MALFORMED;
     }
     if (scheme == 0) {
+        if (!allow_null)
+            return UDM_ID_NULL_SCHEME;
         if (pl[6] == 0 || pl[6] > 20 || !all_digits(p[6], pl[6]))
             return UDM_ID_MALFORMED;
         memcpy(msin, p[6], pl[6]);

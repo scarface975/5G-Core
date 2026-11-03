@@ -3,6 +3,7 @@
 #include "e2e_env.h"
 
 #include "e2e_procs.h"
+#include "../src/priv.h"
 
 /* ---- cases ---- */
 
@@ -149,6 +150,192 @@ static void test_registration(void)
         }
         TK_ASSERT(n == 0);
     }
+    gnb_close(&g);
+}
+
+/* ---- privacy on N1 / N2 (TS 33.501 5.2.5, 6.12) ---- */
+
+/* the digits as ASCII or as packed BCD (the earlier digit in the low nibble) anywhere in the recorded N2 bytes */
+static bool wire_has(const char *digits)
+{
+    size_t n = strlen(digits), packed = (n + 1) / 2;
+    uint8_t bcd[16];
+    for (size_t i = 0; i < packed; i++) {
+        uint8_t lo = (uint8_t)(digits[2 * i] - '0'), hi = 2 * i + 1 < n ? (uint8_t)(digits[2 * i + 1] - '0') : 0xf;
+        bcd[i] = (uint8_t)(hi << 4 | lo);
+    }
+    for (size_t i = 0; WIRE.data != NULL && i + n <= WIRE.len; i++)
+        if (memcmp(WIRE.data + i, digits, n) == 0)
+            return true;
+    for (size_t i = 0; WIRE.data != NULL && i + packed <= WIRE.len; i++)
+        if (memcmp(WIRE.data + i, bcd, packed) == 0)
+            return true;
+    return false;
+}
+
+static void wire_reset(void)
+{
+    g5c_bytes_free(&WIRE);
+    g5c_bytes_init(&WIRE);
+}
+
+static void ue_switch_off(gnb_t *g, ue_t *u)
+{
+    nas_msg m;
+    g5c_bytes b, id;
+    uint8_t dt = 0x09, ng = u->ngksi;
+    g5c_bytes_init(&b);
+    g5c_bytes_init(&id);
+    put_guti_identity(u, &id);
+    TK_ASSERT(nas_msg_init(&m, "De-registration request (UE originating de-registration)"));
+    nas_msg_set(&m, "De-registration type", &dt, 1);
+    nas_msg_set(&m, "ngKSI", &ng, 1);
+    nas_msg_set(&m, "5GS mobile identity", id.data, id.len);
+    TK_ASSERT(nas_msg_encode(&m, &b) == NAS_OK);
+    nas_free(&m);
+    ue_send_protected(g, u, 2, b.data, b.len, 1);
+    g5c_bytes_free(&b);
+    g5c_bytes_free(&id);
+    gnb_confirm_release(g, u);
+    TK_ASSERT(wait_ue_gone(u->supi));
+}
+
+static void test_privacy(void)
+{
+    gnb_t g;
+    ue_t u, v, w, x;
+    accept_info ai;
+    g5c_bytes req, plain;
+    gnb_setup_ok(&g, 0, 1, 1);
+    g5c_bytes_init(&WIRE);
+
+    /* a UE that conceals its SUCI: the subscriber's digits are nowhere on N2, the registration still completes (the UDM de-conceals) */
+    ue_init(&u, "001010000000042", 42);
+    u.conceal = true;
+    ue_provision(&u, NULL);
+    wire_reset();
+    WIRE_ON = true;
+    ai = ue_register(&g, &u, 1);
+    TK_ASSERT(ai.has_guti && ai.nallowed == 1);
+    accept_free(&ai);
+    WIRE_ON = false;
+    TK_ASSERT(WIRE.len > 200);                       /* the whole registration was recorded */
+    TK_ASSERT(!wire_has("0000000042"));              /* the MSIN */
+    TK_ASSERT(!wire_has("001010000000042"));         /* the IMSI */
+    ue_switch_off(&g, &u);
+
+    /* the control: the same registration with the null scheme shows the MSIN, so the check above can fail */
+    ue_init(&v, "001010000000043", 43);
+    ue_provision(&v, NULL);
+    wire_reset();
+    WIRE_ON = true;
+    ai = ue_register(&g, &v, 1);
+    accept_free(&ai);
+    WIRE_ON = false;
+    TK_ASSERT(wire_has("0000000043"));
+    ue_switch_off(&g, &v);
+
+    /* two SUCIs of one UE differ (a fresh ephemeral key each time), so registrations cannot be linked by them */
+    {
+        g5c_bytes s1, s2;
+        g5c_bytes_init(&s1);
+        g5c_bytes_init(&s2);
+        put_msin_identity(&u, &s1);
+        put_msin_identity(&u, &s2);
+        TK_ASSERT(s1.len == s2.len && memcmp(s1.data, s2.data, s1.len) != 0);
+        g5c_bytes_free(&s1);
+        g5c_bytes_free(&s2);
+    }
+
+    /* suci.null_scheme: reject at the home network: the null-scheme UE is refused, the concealing UE is not */
+    E.u.refuse_null_scheme = true;
+    ue_init(&w, "001010000000044", 44);
+    ue_provision(&w, NULL);
+    g5c_bytes_init(&req);
+    build_reg_request(&w, 1, false, &req);
+    gnb_initial_ue(&g, &w, req.data, req.len, 1, false);
+    plain = dl_nas(&g, &w);
+    TK_ASSERT(plain.len >= 3 && (plain.data[2] == 0x44 || plain.data[2] == 0x58)); /* Registration reject or Authentication reject */
+    g5c_bytes_free(&plain);
+    g5c_bytes_free(&req);
+    gnb_confirm_release(&g, &w);
+    TK_ASSERT(wait_ue_gone(w.supi));
+    ue_init(&x, "001010000000045", 45);
+    x.conceal = true;
+    ue_provision(&x, NULL);
+    ai = ue_register(&g, &x, 1);
+    TK_ASSERT(ai.has_guti);
+    accept_free(&ai);
+    ue_switch_off(&g, &x);
+    E.u.refuse_null_scheme = false;
+    g5c_bytes_free(&WIRE);
+    gnb_close(&g);
+}
+
+/* ---- signalling-storm protection: amf.overload (TS 24.501 5.5.1.2.5, cause #22 with T3346) ---- */
+
+static void expect_congestion_reject(gnb_t *g, ue_t *u, uint8_t t3346)
+{
+    g5c_bytes req, plain;
+    g5c_bytes_init(&req);
+    build_reg_request(u, 1, false, &req);
+    gnb_initial_ue(g, u, req.data, req.len, 1, false);
+    plain = dl_nas(g, u);
+    TK_ASSERT(plain.len >= 7 && plain.data[2] == 0x44 && plain.data[3] == 22); /* Registration reject, #22 congestion */
+    TK_ASSERT(plain.data[4] == 0x5f && plain.data[5] == 1 && plain.data[6] == t3346); /* T3346 */
+    g5c_bytes_free(&plain);
+    g5c_bytes_free(&req);
+    gnb_confirm_release(g, u);
+    TK_ASSERT(wait_ue_gone(u->supi));
+}
+
+static void test_congestion(void)
+{
+    gnb_t g;
+    ue_t a, b, c, d, e;
+    accept_info ai;
+    gnb_setup_ok(&g, 0, 1, 1);
+
+    /* the AMF admits one registration a second: the first goes through, the second is turned away at once with the back-off timer, a second later there is room again */
+    E.a->cfg.ov_regs_per_s = 1;
+    E.a->cfg.ov_burst_s = 1;
+    E.a->cfg.ov_t3346 = 60;
+    E.a->ov_last = 0;
+    ue_init(&a, "001010000000052", 52);
+    ue_provision(&a, NULL);
+    ai = ue_register(&g, &a, 1);
+    TK_ASSERT(ai.has_guti);
+    accept_free(&ai);
+    ue_init(&b, "001010000000053", 53);
+    ue_provision(&b, NULL);
+    expect_congestion_reject(&g, &b, 30); /* 60 s: GPRS timer 2 in units of 2 s, value 30 */
+    usleep(1100000);
+    ue_init(&c, "001010000000054", 54);
+    ue_provision(&c, NULL);
+    ai = ue_register(&g, &c, 1);
+    TK_ASSERT(ai.has_guti);
+    accept_free(&ai);
+    ue_switch_off(&g, &a);
+    ue_switch_off(&g, &c);
+
+    /* per gNB: the AMF as a whole has room, this gNB does not */
+    E.a->cfg.ov_regs_per_s = 0;
+    E.a->cfg.ov_gnb_regs_per_s = 1;
+    E.a->cfg.ov_t3346 = 30;
+    for (size_t i = 0; i < AMF_MAX_GNB; i++)
+        E.a->gnbs[i].ov_last = 0;
+    ue_init(&d, "001010000000055", 55);
+    ue_provision(&d, NULL);
+    ai = ue_register(&g, &d, 1);
+    TK_ASSERT(ai.has_guti);
+    accept_free(&ai);
+    ue_init(&e, "001010000000056", 56);
+    ue_provision(&e, NULL);
+    expect_congestion_reject(&g, &e, 15); /* 30 s: unit 2 s, value 15 */
+    ue_switch_off(&g, &d);
+
+    E.a->cfg.ov_regs_per_s = 0;
+    E.a->cfg.ov_gnb_regs_per_s = 0; /* off again: later tests register freely */
     gnb_close(&g);
 }
 
@@ -2290,6 +2477,8 @@ int main(void)
     test_ng_setup();
     test_registration();
     test_auth_failures();
+    test_privacy();
+    test_congestion();
     test_eap_registration();
     test_sessions();
     test_idle_service_paging();

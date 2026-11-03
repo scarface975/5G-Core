@@ -17,6 +17,7 @@
 
 #include "g5c/base.h"
 #include "g5c/json.h"
+#include "g5c/metrics.h"
 
 #define G5C_SBI_MAX_BODY (1U << 20) /* requests larger than this get 413 */
 #define G5C_JSON_TYPE "application/json"
@@ -38,6 +39,7 @@ typedef struct {
     char *query; /* raw, may be NULL */
     char *scheme;    /* "http" or "https" */
     char *authority; /* host:port the client addressed */
+    char peer[48];   /* the IP address of the client as the server saw it ("" when unknown) */
     g5c_header *headers;
     size_t nheaders;
     g5c_param *params; /* {name} captures from the matched route */
@@ -173,10 +175,16 @@ typedef enum {
     G5C_SBI_E_HTTP = -3,
     G5C_SBI_E_TIMEOUT = -4,
     G5C_SBI_E_TLS = -5,
-    G5C_SBI_E_REQUEST = -6
+    G5C_SBI_E_REQUEST = -6,
+    G5C_SBI_E_OVERLOAD = -7 /* not sent: the producer asked its consumers to back off (429 / Retry-After / 3gpp-Sbi-Oci) */
 } g5c_sbi_err;
 
 typedef struct g5c_client g5c_client;
+/* The values of 3gpp-Sbi-Lci (TS 29.500 6.3.3) and 3gpp-Sbi-Oci (6.4.3): "Timestamp: ...; Load-Metric: 35%" and "...; Period-of-Validity: 5s; Overload-Reduction-Metric: 25%" */
+bool g5c_sbi_parse_lci(const char *value, unsigned *load_pct);
+bool g5c_sbi_parse_oci(const char *value, unsigned *validity_s, unsigned *reduction_pct);
+/* Counts the requests the client did not send because of a back-off (may be NULL). */
+void g5c_client_set_backoff_counter(g5c_client *c, g5c_counter *k);
 typedef struct {
     const char *name, *value;
 } g5c_kv;

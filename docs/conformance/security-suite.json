@@ -1,0 +1,224 @@
+{
+  "name": "g5c security suite",
+  "note": "Each case names a security requirement, the specification it comes from and the ctest cases that prove it. `scas` is the test case name of the GSMA NESAS / 3GPP SCAS documents: TS 33.117 and the SCAS documents are not pinned in this repository, so those entries name the document and not a clause, and the SCAS column stays empty until they are pinned; nothing is named from memory.",
+  "cases": [
+    {
+      "id": "SEC-AKA-01",
+      "title": "5G-AKA vectors and the key hierarchy",
+      "spec": "TS 33.501",
+      "clause": "6.1.3.2, Annex A",
+      "tests": [
+        "crypto_milenage",
+        "crypto_kdf",
+        "crypto_aka5g"
+      ],
+      "evidence": "Milenage, KAUSF / KSEAF / KAMF / KgNB / NAS key derivation and RES* / HXRES* against the published test vectors",
+      "scas": ""
+    },
+    {
+      "id": "SEC-AKA-02",
+      "title": "EAP-AKA' authentication",
+      "spec": "TS 33.501",
+      "clause": "6.1.3.1",
+      "tests": [
+        "crypto_eapaka",
+        "ausf_e2e"
+      ],
+      "evidence": "RFC 9048 vectors; the AUSF runs EAP-AKA' against a scripted UE with independently derived keys",
+      "scas": ""
+    },
+    {
+      "id": "SEC-NAS-01",
+      "title": "NAS integrity, ciphering, replay and wrong-MAC handling",
+      "spec": "TS 33.501",
+      "clause": "6.4, Annex D",
+      "tests": [
+        "crypto_nas_sec",
+        "amf_e2e"
+      ],
+      "evidence": "NIA2 / NEA2 vectors; the AMF drops a replayed count, a wrong MAC and an unprotected message after the security context exists",
+      "scas": ""
+    },
+    {
+      "id": "SEC-NAS-02",
+      "title": "NAS and NGAP decoders survive hostile input",
+      "spec": "TS 24.501, TS 38.413",
+      "clause": "decoders (robustness; see TS 33.117 for the product requirement)",
+      "tests": [
+        "nas_codec",
+        "ngap_aper_golden",
+        "fuzz_replay_nas",
+        "fuzz_replay_ngap",
+        "fuzz_replay_amf"
+      ],
+      "evidence": "golden PDUs byte for byte; fuzz seeds replayed under ASan / UBSan",
+      "scas": ""
+    },
+    {
+      "id": "SEC-PRIV-01",
+      "title": "SUCI concealment (Profile A and B) and de-concealment",
+      "spec": "TS 33.501",
+      "clause": "6.12, Annex C",
+      "tests": [
+        "crypto_suci",
+        "udm_unit_and_services"
+      ],
+      "evidence": "the Annex C vectors; the UDM resolves a concealed SUCI, refuses a tampered one and an unknown key id",
+      "scas": ""
+    },
+    {
+      "id": "SEC-PRIV-02",
+      "title": "No subscriber identity in clear on N1 / N2; the null scheme can be refused; GUTI reallocation",
+      "spec": "TS 33.501",
+      "clause": "5.2.5, 6.12.2, 6.12.3",
+      "tests": [
+        "amf_e2e",
+        "udm_unit_and_services",
+        "privacy_tool"
+      ],
+      "evidence": "a concealing UE leaves no digits on N2 (and a null-scheme UE does, as the control); suci.null_scheme: reject; a fresh 5G-GUTI at every registration; g5c-privacy reads captures",
+      "scas": ""
+    },
+    {
+      "id": "SEC-SBI-01",
+      "title": "Mutual TLS between all network functions, certificates renewed live",
+      "spec": "TS 33.501",
+      "clause": "13",
+      "tests": [
+        "sbi_router_h2_tls",
+        "cluster_tls",
+        "cluster_chaos_tls"
+      ],
+      "evidence": "a client without a certificate, with a foreign CA's certificate, and cleartext to a TLS port are refused; renewal by SIGHUP without a restart",
+      "scas": ""
+    },
+    {
+      "id": "SEC-SBI-02",
+      "title": "Client certificate pinning and revocation",
+      "spec": "TS 33.501",
+      "clause": "13",
+      "tests": [
+        "cluster_load_pinned",
+        "cluster_tls"
+      ],
+      "evidence": "sbi.tls.allowed_peers and sbi.tls.crl enforced in the live cluster",
+      "scas": ""
+    },
+    {
+      "id": "SEC-SBI-03",
+      "title": "OAuth2 access tokens between network functions",
+      "spec": "TS 33.501",
+      "clause": "13.4.1",
+      "tests": [
+        "nrf_oauth2"
+      ],
+      "evidence": "no token, expired, forged key id, another audience and wrong NF type are all refused; the second of expiry",
+      "scas": ""
+    },
+    {
+      "id": "SEC-SBI-04",
+      "title": "Overload and rate control protect against signalling floods",
+      "spec": "TS 29.500",
+      "clause": "5.2.7.2, 6.3, 6.4",
+      "tests": [
+        "nfcore_overload",
+        "cluster_overload_amf"
+      ],
+      "evidence": "429 with Retry-After and 3gpp-Sbi-Oci, clients that back off; 22,535 registrations in 4 s, 100 admitted, the AMF ready throughout",
+      "scas": ""
+    },
+    {
+      "id": "SEC-ADM-01",
+      "title": "Administration with roles and tenants",
+      "spec": "TS 33.117 (not pinned here)",
+      "clause": "the clause is to be confirmed against the document",
+      "tests": [
+        "nfcore_authz",
+        "tokens_tool",
+        "udm_unit_and_services",
+        "pcf_policy_and_services"
+      ],
+      "evidence": "read / provision / policy / key-admin; a tenant cannot see that another tenant's subscriber exists; revocation without a restart",
+      "scas": ""
+    },
+    {
+      "id": "SEC-ADM-02",
+      "title": "Audit trail and security event streaming",
+      "spec": "TS 33.117 (not pinned here)",
+      "clause": "the clause is to be confirmed against the document",
+      "tests": [
+        "nfcore_events",
+        "alarms_tool"
+      ],
+      "evidence": "audit lines name the caller; warnings, errors and audit lines go to a syslog / HTTP collector with X.733 fields",
+      "scas": ""
+    },
+    {
+      "id": "SEC-KEY-01",
+      "title": "Secrets are never written to logs, state or bundles",
+      "spec": "TS 33.117 (not pinned here)",
+      "clause": "the clause is to be confirmed against the document",
+      "tests": [
+        "cluster_secrets",
+        "redact_tool"
+      ],
+      "evidence": "K and OPc looked for in logs and state after traffic; the support bundle redacts identities, keys and tokens",
+      "scas": ""
+    },
+    {
+      "id": "SEC-KEY-02",
+      "title": "TLS session secrets are exported only on request",
+      "spec": "TS 33.117 (not pinned here)",
+      "clause": "the clause is to be confirmed against the document",
+      "tests": [
+        "cluster_keylog"
+      ],
+      "evidence": "G5C_TLS_KEYLOG decrypts a capture; without it the capture is opaque",
+      "scas": ""
+    },
+    {
+      "id": "SEC-CFG-01",
+      "title": "Invalid configuration is refused; a live change is validated and undone on harm",
+      "spec": "TS 33.117 (not pinned here)",
+      "clause": "the clause is to be confirmed against the document",
+      "tests": [
+        "bad_configs_rejected",
+        "nfcore_reload"
+      ],
+      "evidence": "unknown keys and out-of-range values refused at start and at reload; a section that fails or a function that suffers is rolled back",
+      "scas": ""
+    },
+    {
+      "id": "SEC-ROB-01",
+      "title": "Parsers of every interface survive hostile input",
+      "spec": "TS 33.117 (not pinned here)",
+      "clause": "the clause is to be confirmed against the document",
+      "tests": [
+        "fuzz_replay_pfcp_gtpu",
+        "fuzz_replay_upf",
+        "fuzz_replay_smf",
+        "fuzz_replay_nrf",
+        "fuzz_replay_ausf",
+        "fuzz_replay_udr",
+        "fuzz_replay_nssf",
+        "fuzz_replay_nef",
+        "fuzz_replay_scp",
+        "fuzz_replay_bsf",
+        "fuzz_replay_json_yaml"
+      ],
+      "evidence": "fuzz seeds replayed under ASan / UBSan on every build; coverage-guided fuzzing needs clang (CI)",
+      "scas": ""
+    },
+    {
+      "id": "SEC-SUP-01",
+      "title": "Licences of the dependencies are audited",
+      "spec": "TS 33.117 (not pinned here)",
+      "clause": "the clause is to be confirmed against the document",
+      "tests": [
+        "licence_audit"
+      ],
+      "evidence": "SBOM and licence audit on every release; counsel's sign-off is outstanding",
+      "scas": ""
+    }
+  ]
+}

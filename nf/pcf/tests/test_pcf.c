@@ -545,6 +545,111 @@ static void test_admin(void)
     teardown(&t);
 }
 
+/* roles and tenants of the admin API (backlog F-03) */
+static int call_as(T *t, const char *method, const char *path, const char *body, const char *token, g5c_json **out)
+{
+    char *url = g5c_xasprintf("%s%s", t->base, path), auth[96], err[160];
+    g5c_kv hdr = {"authorization", auth};
+    g5c_resp r;
+    int st;
+    snprintf(auth, sizeof auth, "Bearer %s", token);
+    TK_ASSERT(g5c_client_request(t->client, method, url, &hdr, 1, G5C_JSON_TYPE, body, body ? strlen(body) : 0, &r, err, sizeof err) == 0);
+    free(url);
+    st = r.status;
+    if (out)
+        *out = g5c_resp_parse_json(&r);
+    g5c_resp_free(&r);
+    return st;
+}
+
+static char *ctx_for(const char *supi, const char *notif)
+{
+    char *b = ctx_body("internet", notif), *p;
+    while (strcmp(supi, SUPI) != 0 && (p = strstr(b, SUPI)) != NULL) { /* the same request for another subscriber */
+        char *n = g5c_xasprintf("%.*s%s%s", (int)(p - b), b, supi, p + strlen(SUPI));
+        free(b);
+        b = n;
+    }
+    return b;
+}
+
+static void test_admin_roles_and_tenants(void)
+{
+    T t;
+    char dir[] = "/tmp/g5c-pcf-roles-XXXXXX", file[96], err[200], h[4][65], *b, path[160];
+    const char *tok[4] = {"reader-token-0123456789", "acme-token-0123456789ab", "beta-token-0123456789ab", "prov-token-0123456789ab"};
+    const char *acme_supi = SUPI, *beta_supi = "imsi-001020000000007";
+    FILE *f;
+    g5c_json *v = NULL, *list = NULL;
+    char acme_id[80] = "", beta_id[80] = "";
+    setup(&t, "{}");
+    TK_ASSERT(mkdtemp(dir) != NULL);
+    snprintf(file, sizeof file, "%s/tokens.json", dir);
+    for (int i = 0; i < 4; i++)
+        g5c_authz_hash(tok[i], h[i]);
+    f = fopen(file, "w");
+    TK_ASSERT(f != NULL);
+    fprintf(f,
+            "{\"tokens\":[{\"name\":\"reader\",\"sha256\":\"%s\",\"roles\":[\"read\"]},"
+            "{\"name\":\"acme\",\"sha256\":\"%s\",\"roles\":[\"read\",\"policy\"],\"tenant\":\"acme\"},"
+            "{\"name\":\"beta\",\"sha256\":\"%s\",\"roles\":[\"read\",\"policy\"],\"tenant\":\"beta\"},"
+            "{\"name\":\"prov\",\"sha256\":\"%s\",\"roles\":[\"provision\"]}],"
+            "\"tenants\":{\"acme\":{\"supi_prefixes\":[\"imsi-0010100\"]},\"beta\":{\"supi_prefixes\":[\"imsi-0010200\"]}}}",
+            h[0], h[1], h[2], h[3]);
+    fclose(f);
+    t.p.authz = g5c_authz_new(file, ADMIN, err, sizeof err);
+    TK_ASSERT(t.p.authz != NULL);
+
+    /* a session of each tenant */
+    b = ctx_for(acme_supi, t.smf);
+    TK_ASSERT(call(&t, "POST", SMP, b, false, NULL, NULL) == 201);
+    free(b);
+    b = ctx_for(beta_supi, t.smf);
+    TK_ASSERT(call(&t, "POST", SMP, b, false, NULL, NULL) == 201);
+    free(b);
+
+    /* the roles */
+    TK_ASSERT(call_as(&t, "GET", "/admin/v1/sessions", NULL, "stranger-token-0123456", NULL) == 401);
+    TK_ASSERT(call_as(&t, "GET", "/admin/v1/sessions", NULL, tok[3], NULL) == 403); /* provisioning is not reading */
+    TK_ASSERT(call_as(&t, "PUT", "/admin/v1/policies/" SUPI, "{}", tok[0], &v) == 403 && strstr(g5c_json_get_str(v, "detail"), "policy") != NULL);
+    g5c_json_free(v);
+    TK_ASSERT(call_as(&t, "PUT", "/admin/v1/policies/" SUPI, "{}", tok[3], NULL) == 403);
+    TK_ASSERT(call_as(&t, "DELETE", "/admin/v1/policies/" SUPI, NULL, tok[0], NULL) == 403);
+    TK_ASSERT(call_as(&t, "GET", "/admin/v1/sessions", NULL, tok[0], &list) == 200 && g5c_json_len(list) == 2); /* a reader sees all of them */
+    for (size_t i = 0; i < g5c_json_len(list); i++) {
+        const char *sid = g5c_json_get_str(g5c_json_at(list, i), "smPolicyId");
+        snprintf(strcmp(g5c_json_get_str(g5c_json_at(list, i), "supi"), acme_supi) == 0 ? acme_id : beta_id, 80, "%s", sid);
+    }
+    g5c_json_free(list);
+    TK_ASSERT(acme_id[0] != '\0' && beta_id[0] != '\0');
+
+    /* a tenant: its own policies and sessions, and nothing else */
+    TK_ASSERT(call_as(&t, "PUT", "/admin/v1/policies/" SUPI, "{}", tok[1], NULL) == 200);
+    TK_ASSERT(call_as(&t, "PUT", "/admin/v1/policies/" SUPI, "{}", tok[2], &v) == 403 && strstr(g5c_json_get_str(v, "detail"), "tenant") != NULL);
+    g5c_json_free(v);
+    TK_ASSERT(call_as(&t, "GET", "/admin/v1/policies/" SUPI, NULL, tok[1], NULL) == 200);
+    TK_ASSERT(call_as(&t, "GET", "/admin/v1/policies/" SUPI, NULL, tok[2], NULL) == 404); /* not there for another tenant */
+    TK_ASSERT(call_as(&t, "GET", "/admin/v1/policies/" SUPI, NULL, tok[0], NULL) == 200);
+    TK_ASSERT(call_as(&t, "DELETE", "/admin/v1/policies/" SUPI, NULL, tok[2], NULL) == 404);
+    TK_ASSERT(call_as(&t, "GET", "/admin/v1/policies/" SUPI, NULL, tok[0], NULL) == 200); /* still there */
+    TK_ASSERT(call_as(&t, "GET", "/admin/v1/sessions", NULL, tok[1], &list) == 200 && g5c_json_len(list) == 1 && strcmp(g5c_json_get_str(g5c_json_at(list, 0), "supi"), acme_supi) == 0);
+    g5c_json_free(list);
+    TK_ASSERT(call_as(&t, "GET", "/admin/v1/sessions", NULL, tok[2], &list) == 200 && g5c_json_len(list) == 1 && strcmp(g5c_json_get_str(g5c_json_at(list, 0), "supi"), beta_supi) == 0);
+    g5c_json_free(list);
+    snprintf(path, sizeof path, "/admin/v1/sessions/%s", acme_id);
+    TK_ASSERT(call_as(&t, "DELETE", path, NULL, tok[2], NULL) == 404); /* beta cannot end acme's session ... */
+    TK_ASSERT(call_as(&t, "GET", "/admin/v1/sessions", NULL, tok[0], &list) == 200 && g5c_json_len(list) == 2); /* ... and it is still there */
+    g5c_json_free(list);
+    TK_ASSERT(call_as(&t, "DELETE", path, NULL, tok[1], NULL) == 204);
+    snprintf(path, sizeof path, "/admin/v1/sessions/%s", beta_id);
+    TK_ASSERT(call_as(&t, "DELETE", path, NULL, tok[0], NULL) == 403); /* read is not enough */
+    TK_ASSERT(call(&t, "DELETE", path, NULL, true, NULL, NULL) == 204); /* the single admin token is every role */
+    TK_ASSERT(call_as(&t, "DELETE", "/admin/v1/policies/" SUPI, NULL, tok[1], NULL) == 204);
+    unlink(file);
+    rmdir(dir);
+    teardown(&t);
+}
+
 static void test_termination_and_unreachable_smf(void)
 {
     T t;
@@ -1278,6 +1383,7 @@ int main(void)
     test_configured_profiles();
     test_push_mid_session();
     test_admin();
+    test_admin_roles_and_tenants();
     test_termination_and_unreachable_smf();
     test_am_policy();
     test_metrics_and_empty_arrays();

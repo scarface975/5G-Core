@@ -2,6 +2,18 @@
 
 Newest first. Versions follow `MAJOR.MINOR.PATCH[-rcN]` (docs/guides/release-process.md). The detailed engineering log is `docs/history/update.md`.
 
+## Unreleased
+
+### Wave 2
+- Alarm and event streaming (`events:` in the configuration): warnings, errors and audit lines to a syslog (UDP, TCP, TLS) or HTTP collector with X.733 alarm fields; `deploy/ops/alarms.json` and `tools/cli/g5c-alarms` carry the Prometheus alerts into the same stream.
+- Privacy test kit: `tools/cli/g5c-privacy` reports identities that leak on N1 / N2 in a capture; `suci: { null_scheme: reject }` at the UDM refuses a SUCI in clear; the AMF end-to-end test proves a concealed SUCI leaves no digits on N2.
+- Overload and rate control (TS 29.500 5.2.7.2, 6.3, 6.4): `overload:` on the SBI (429 with `Retry-After` and `3gpp-Sbi-Oci`, `3gpp-Sbi-Lci`), back-off in the SBI client and the SCP, `amf.overload` (registrations refused with cause #22 and T3346), a storm mode in `load_core` and the `cluster_overload_amf` test.
+- Configuration hot reload: SIGHUP, `POST /admin/v1/reload` and `g5c-ctl reload` re-read the file, validate it, apply `overload`, `events`, `log.level`, `suci` and `amf.overload` live, list the rest as restart-required, undo a partial or harmful change.
+- Roles and tenants for the admin APIs of the UDM and PCF (`admin_tokens_file`, `tools/cli/g5c-tokens`): read / provision / policy / key-admin, tenants confined to SUPI prefixes, audit lines that name the caller.
+- `tools/cli/g5c-why`: the logs of the functions explained per subscriber (cause in plain words, function, clause, what to check, runbook), lines of one trace joined across functions.
+- `tools/cli/g5c-cdr`: usage, quality and roaming reports from the SMF charging records, with checks on the records themselves.
+- Security assurance: `docs/conformance/security-suite.json` (17 named cases with their tests) and `g5c-dossier security`, which reports the suite and the security rows of the conformance matrices; the release dossier carries it.
+
 ## 0.9.0-rc1 (release candidate)
 The first release candidate: all eleven functions of the strategy and the optional BSF, validated against Open5GS 2.8.0 and UERANSIM and against an OCUDU gNB with srsUE over ZeroMQ.
 

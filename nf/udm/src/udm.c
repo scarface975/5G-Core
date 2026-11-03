@@ -65,6 +65,7 @@ void udm_destroy(udm *u)
         OPENSSL_cleanse(u->hn_keys, u->nhn_keys * sizeof *u->hn_keys);
     free(u->hn_keys);
     OPENSSL_cleanse(&u->keys, sizeof u->keys);
+    g5c_authz_free(u->authz);
     if (u->admin_token) {
         OPENSSL_cleanse(u->admin_token, strlen(u->admin_token));
         free(u->admin_token);

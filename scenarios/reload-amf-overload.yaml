@@ -1,0 +1,15 @@
+# Configuration hot reload on a running function (run with G5C_AMF_EXTRA='  overload: { registrations_per_s: 100000, burst_s: 1, t3346_s: 10 }'): a storm against a limit nobody reaches
+# is admitted; the limit is lowered in the configuration file and the AMF sent SIGHUP; the same storm is now refused with cause #22, the AMF never restarted. A change that is invalid
+# for the AMF is refused and taken back, and the limit stays what it was.
+name: SIGHUP changes the registration limit of a running AMF
+steps:
+  - load: {ues: 100, gnbs: 1, storm_seconds: 3}
+  - assert: {metric: "amf:g5c_amf_registrations_total{result=congestion}", "==": 0}
+  - reload: {nf: amf, from: "registrations_per_s: 100000", to: "registrations_per_s: 20", result: applied}
+  - assert: {metric: "amf:g5c_config_reloads_total{result=applied}", "==": 1}
+  - load: {ues: 100, gnbs: 1, storm_seconds: 3}
+  - assert: {metric: "amf:g5c_amf_registrations_total{result=congestion}", ">=": 100}
+  - reload: {nf: amf, from: "registrations_per_s: 20", to: "registrations_per_s: 20, surprise: 1", result: "rolled-back"}
+  - reload: {nf: amf, from: "registrations_per_s: 20, surprise: 1", to: "registrations_per_s: 20", result: unchanged}
+  - assert: {metric: "amf:g5c_config_reloads_total{result=rolled_back}", "==": 1}
+  - http: {nf: amf, path: /health/ready, expect: 200}

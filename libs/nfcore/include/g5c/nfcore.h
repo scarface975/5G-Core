@@ -6,9 +6,12 @@
 #include <stdatomic.h>
 #include <stdbool.h>
 
+#include "g5c/authz.h"
 #include "g5c/config.h"
+#include "g5c/events.h"
 #include "g5c/metrics.h"
 #include "g5c/oauth.h"
+#include "g5c/overload.h"
 #include "g5c/sbi.h"
 
 /* ---- NRF client (Nnrf_NFManagement, TS 29.510 clause 5.2.2) ---- */
@@ -48,6 +51,8 @@ void g5c_disc_forget(g5c_disc *d, const char *target_type);
 
 /* ---- NF context ---- */
 
+struct g5c_reload;
+
 typedef struct {
     g5c_common common;
     g5c_registry *metrics;
@@ -55,7 +60,26 @@ typedef struct {
     char instance_id[37];
     g5c_client *client; /* outgoing SBI client (TLS/mTLS when the config gives a CA) */
     g5c_oauth_client *oauth_client; /* `oauth2.acquire`: the access tokens of the requests to other functions */
+    g5c_events *events;             /* `events`: alarms and audit lines to a collector */
+    g5c_overload *overload;         /* `overload`: always there, a pass-through when off, so that a reload can switch it on */
+    atomic_ulong server_errors;     /* the 5xx answers of this function: a reload that raises them is taken back */
+    struct g5c_reload *reload;      /* configuration reload (reload.c) */
 } g5c_nf;
+
+/* ---- configuration reload (SIGHUP, or POST /admin/v1/reload with the token of `reload.token_file`) ----
+ * The file the function was started from is read again and validated as at start; what is wrong changes nothing. The sections that changed are applied live where the function says it can
+ * (`overload`, `events` and `log.level` always; the functions register more with g5c_nf_on_reload) and listed as `restartRequired` where it cannot. After the change the function is
+ * watched for `reload.settle_ms`: if it stops being ready or answers three server errors, everything is put back. */
+
+/* Applies the change of a section ("udm" for the whole block, "amf.overload" for one key of it): from -> to; either may be NULL (absent). The same function is called with the two the other way round
+ * to undo it, so it must be able to. 0 or -1 with err. */
+typedef int (*g5c_reload_fn)(void *ctx, const g5c_json *from, const g5c_json *to, char *err, size_t errcap);
+void g5c_nf_on_reload(g5c_nf *nf, const char *path, g5c_reload_fn fn, void *ctx);
+/* One reload. The report: result (applied, unchanged, dry-run, restart-required, rejected, rolled-back), applied, restartRequired, error. dry_run only plans. Caller frees. */
+g5c_json *g5c_nf_reload(g5c_nf *nf, bool dry_run);
+void g5c_reload_init(g5c_nf *nf);
+void g5c_reload_free(g5c_nf *nf);
+void g5c_reload_routes(g5c_nf *nf, g5c_router *r);
 
 /* Takes ownership of the strings inside `common`. */
 g5c_nf *g5c_nf_new(g5c_common *common, char *err, size_t errcap);

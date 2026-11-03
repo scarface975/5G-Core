@@ -48,6 +48,8 @@ int nm_smc_eap(uint8_t int_alg, uint8_t enc_alg, uint8_t ngksi, const uint8_t *u
                const uint8_t abba[2], g5c_bytes *out);
 int nm_smc(uint8_t int_alg, uint8_t enc_alg, uint8_t ngksi, const uint8_t *ue_cap, size_t cap_len, bool imeisv_req, bool rinmr, g5c_bytes *out);
 int nm_reg_reject(uint8_t cause, g5c_bytes *out);
+/* with the back-off timer T3346 (TS 24.501 5.5.1.2.5, cause #22); t3346_s 0: none */
+int nm_reg_reject_t3346(uint8_t cause, unsigned t3346_s, g5c_bytes *out);
 int nm_reg_accept(const nm_regacc *p, g5c_bytes *out);
 int nm_service_accept(bool has_status, uint16_t status, bool has_react, uint16_t react, g5c_bytes *out);
 int nm_service_reject(uint8_t cause, bool has_status, uint16_t status, g5c_bytes *out);

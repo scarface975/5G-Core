@@ -1,0 +1,270 @@
+#!/usr/bin/env python3
+"""g5c-why: why did this subscriber fail? (backlog C-05)
+
+  g5c-why LOGFILE... | LOGDIR   [--supi imsi-...] [--json] [--all]
+  some-command | g5c-why -
+
+Reads the logs of the functions (text or JSON lines, a directory of <function>.log files as the cluster script writes them), finds the lines that explain a failure and says, per subscriber: what
+happened, the most likely cause in plain words, which function and which specification clause it belongs to, what to look at, and where the runbook has more. Lines that carry the same trace
+id (a registration is one trace across the AMF, AUSF, UDM, ...) are joined, so a refusal at the AMF shows the error of the function that caused it. Exit code 1 when something was found.
+--all adds the failures that name no subscriber."""
+import argparse
+import json
+import os
+import re
+import sys
+from collections import OrderedDict
+
+TEXT = re.compile(r"^(\d{4}-\d\d-\d\dT[\d:.]+Z)\s+(ERROR|WARN|INFO|DEBUG|TRACE)\s+(\S+?):\s(.*?)(?:\s+trace=([0-9a-f]{32}))?\s*$")
+SUPI = re.compile(r"(imsi-\d{6,15})")
+
+# 5GMM causes (TS 24.501 Annex A) that the AMF sends
+CAUSE = {3: "Illegal UE", 5: "PEI not accepted", 7: "5GS services not allowed", 9: "UE identity cannot be derived by the network", 10: "Implicitly de-registered", 11: "PLMN not allowed",
+         12: "Tracking area not allowed", 20: "MAC failure", 21: "Synch failure", 22: "Congestion", 23: "UE security capabilities mismatch", 62: "No network slices available",
+         90: "Payload was not forwarded", 96: "Invalid mandatory information", 111: "Protocol error, unspecified"}
+# PFCP causes (TS 29.244 8.2.1) that matter for a session set-up
+PFCP = {64: "request rejected (no reason given)", 65: "session context not found", 66: "mandatory IE missing", 67: "conditional IE missing", 68: "invalid length", 69: "mandatory IE incorrect",
+        70: "invalid forwarding policy", 71: "invalid F-TEID allocation option", 72: "no established PFCP association", 73: "rule creation or modification failure", 74: "PFCP entity in congestion",
+        75: "no resources available", 76: "service not supported", 77: "system failure"}
+SUCI = {-1: "the SUCI is malformed", -2: "the protection scheme is not supported", -3: "the home network key identifier in the SUCI is not one the UDM has",
+        -4: "the SUCI could not be de-concealed (a wrong key, a tampered SUCI or a SUCI made for another home network)", -5: "the null protection scheme is refused (suci.null_scheme: reject)"}
+
+
+def rule(pattern, **kw):
+    return (re.compile(pattern), kw)
+
+
+RB = "docs/ops/runbooks.md#"
+RULES = [
+    # --- the AMF's own words ---
+    rule(r"injected failure \(amf\.inject\)|refused with \d+ on purpose \(smf\.inject\)", id="injected", what="the failure was injected on purpose", why="amf.inject or smf.inject is configured for this subscriber",
+         where="the function's own configuration", check="remove the `inject` section of the function and restart it", clause="", runbook=RB + "registrations-rejected"),
+    rule(r"registration of (\S+) rejected, cause #(\d+) \((.*)\)$", id="registration", handler="registration"),
+    rule(r"authentication of (\S+) failed: (.*)$", id="auth", what="authentication failed", why="the UE answered the challenge with a result the network does not accept: usually a SIM whose K or OPc differs from what is provisioned",
+         where="the UE or the subscriber data at the UDM", check="compare K / OPc: `g5c-ctl subscriber get {supi}` (keys are not shown: re-provision and retry); a resynchronisation loop points at the SQN", clause="TS 33.501 6.1.3.2",
+         runbook=RB + "authentication-failures"),
+    rule(r"EAP authentication of (\S+) failed", id="eap", what="EAP-AKA' authentication failed", why="the UE did not complete EAP-AKA' (a wrong key or an AT_KDF the UE does not support)",
+         where="the UE or the AUSF", check="`auth_method` of the subscriber and the UE's EAP support", clause="TS 33.501 6.1.3.1, RFC 9048", runbook=RB + "authentication-failures"),
+    rule(r"(\S+) asked for a slice outside its allowed NSSAI", id="slice", what="a PDU session was refused for its slice", why="the UE asked for an S-NSSAI that is not in its allowed NSSAI",
+         where="the subscription (UDM) or the UE", check="`slices` of the subscriber, and the `amf.slices` list", clause="TS 23.501 5.15", runbook=RB + "registrations-rejected"),
+    rule(r"(\S+): the NSSF does not serve the requested slice in this tracking area", id="nssf", what="the slice is not served here", why="the NSSF has no AMF set or NSI for this S-NSSAI in the UE's tracking area",
+         where="the NSSF configuration", check="`nssf.slices` and the TAC of the gNB", clause="TS 29.531", runbook=RB + "registrations-rejected"),
+    rule(r"SMF answered (\d+) for a 5GSM message of (\S+)/(\d+)", id="smf_status", what="the SMF refused a session message", why="the SMF answered with an error status for this PDU session",
+         where="the SMF (see its log for the same time and trace)", check="the SMF log; the DNN and the S-NSSAI of the session; the policy of the subscriber", clause="TS 29.502", runbook=RB + "sbi-errors"),
+    rule(r"SMF call to (\S+): (.*)$", id="smf_down", what="the SMF could not be reached", why="the AMF's call to the SMF failed (the SMF is down or not discoverable)",
+         where="the SMF or the network between", check="`g5c-cluster.sh status`; the NRF registration of the SMF", clause="TS 29.502", runbook=RB + "function-down"),
+    rule(r"paging of (\S+) failed", id="paging", what="the UE could not be paged", why="the UE did not answer paging in any tracking area of its list: out of coverage, switched off or on another AMF",
+         where="the radio side", check="`tais` of the AMF against the cells; the mobile reachable timer", clause="TS 23.502 4.2.3.3", runbook=RB + "no-gnb"),
+    rule(r"procedure (\d+) of (\S+) aborted after (\d+) retransmissions", id="timer", what="the UE stopped answering", why="a NAS procedure was repeated until its retry limit and then abandoned: the UE or the radio link is gone",
+         where="the UE or the radio side", check="the gNB log and the capture of N2 for the same time (g5c-ladder)", clause="TS 24.501 10.2", runbook=RB + "no-gnb"),
+    rule(r"uplink NAS message of (\S+) dropped \((.*)\)", id="nas_drop", what="a NAS message was dropped", why="its integrity check failed, its count was replayed or it could not be decoded: the UE and the AMF disagree about the security context",
+         where="the UE or an attacker on N1", check="whether the UE was reset without a new registration; repeated occurrences from one UE", clause="TS 33.501 6.4", runbook=RB + "nas-integrity-failures"),
+    rule(r"service request of (\S+) failed the integrity check", id="svc_integrity", what="a service request was refused", why="its integrity check failed: the UE holds a security context the AMF no longer has",
+         where="the UE", check="the UE re-registers by itself; if not, its state", clause="TS 33.501 6.4", runbook=RB + "nas-integrity-failures"),
+    # --- subscriber data and identity ---
+    rule(r"SUCI resolution failed \((-?\d+)\)", id="suci", handler="suci"),
+    rule(r"(\S+): stored credentials unusable", id="creds", what="the stored credentials cannot be opened", why="the master key is wrong, the record is damaged or the OPc is missing",
+         where="the UDM", check="`master_key_file` (and `master_key_previous_file` after a rotation); `g5c-ctl keys rewrap`", clause="", runbook=RB + "secrets"),
+    rule(r"UDM refused the authentication event of (\S+) \((\d+) ?(.*)\)", id="udm_refused", what="the UDM refused an authentication event", why="the UDM does not know the subscriber or refused the update",
+         where="the UDM", check="`g5c-ctl subscriber get {supi}`", clause="TS 29.503 5.4", runbook=RB + "registrations-rejected"),
+    rule(r"UDM unreachable: (.*)$", id="udm_down", what="the AUSF could not reach the UDM", why="the UDM is down or not discoverable",
+         where="the UDM", check="`g5c-cluster.sh status`; the NRF registration of the UDM", clause="TS 29.509", runbook=RB + "function-down"),
+    rule(r"policy data unavailable for (\S+)", id="pcf_data", what="the PCF could not read the policy of a subscriber", why="the UDR (or the file behind it) did not answer",
+         where="the UDR", check="the UDR log and `g5c_udr` metrics", clause="TS 29.519", runbook=RB + "sbi-errors"),
+    # --- sessions and the user plane ---
+    rule(r"N4 session establishment on (\S+) failed for (\S+)/(\d+) \(cause (\d+)\)", handler="n4"),
+    rule(r"N4 session (?:modification|deletion) for (\S+)/(\d+) (?:got no answer|refused with cause (\d+))", id="n4_other", what="the UPF did not complete an N4 change", why="the UPF did not answer or refused a modification or deletion",
+         where="the UPF or the N4 link", check="the UPF log; `n4.heartbeat` of the SMF", clause="TS 29.244", runbook=RB + "upf-lost"),
+    rule(r"UPF (\S+) (?:is down|has been unreachable for \d+s: declared lost|refused the association|is not answering)", id="upf", what="the UPF is not reachable over N4", why="the SMF lost its PFCP association with the UPF",
+         where="the UPF or the N4 link", check="restart the UPF (it needs root for its TUN device); the SMF re-associates by itself", clause="TS 29.244 6.2.6", runbook=RB + "upf-lost"),
+    rule(r"UPF (\S+) restarted \(Recovery Time Stamp changed\)|UPF (\S+) (?:restarted|was declared lost): releasing (\d+) PDU session", id="upf_restart", what="the UPF restarted and its sessions were released",
+         why="the Recovery Time Stamp changed or the UPF was lost: its PDU sessions are gone and are released towards the AMF", where="the UPF", check="why the UPF restarted (its log)",
+         clause="TS 29.244 6.2.6", runbook=RB + "upf-lost"),
+    rule(r"the gNB could not set up PDU session (\d+) of (\S+): (.*)$", id="gnb_setup", what="the radio side refused the PDU session", why="the gNB answered the PDU Session Resource Setup with a failure",
+         where="the gNB", check="the gNB log and the cause named here", clause="TS 38.413 8.2.1", runbook=RB + "no-gnb"),
+    rule(r"policy decision for (\S+) rejected: (.*)$", id="policy", what="the policy for the session was refused", why="the PCF's decision cannot be turned into rules the SMF can install",
+         where="the PCF policy (or the SMF)", check="the policy of the subscriber: `g5c-ctl policy get {supi}`", clause="TS 29.512", runbook=RB + "sbi-errors"),
+    rule(r"NRF discovery of (\w+): (.*)$|NRF discovery of (\w+) answered (\d+)", id="nrf_disc", what="a function was not found at the NRF", why="the NRF did not answer or does not list that function type",
+         where="the NRF or the missing function", check="`g5c_nrf_profiles` and whether the function registered", clause="TS 29.510 5.3", runbook=RB + "nrf-registrations"),
+    # --- operations ---
+    rule(r"config reload (rejected|rolled back): (.*)$", id="reload", what="a configuration reload did not take", why="the new file was invalid or the change hurt the function and was undone",
+         where="the configuration file", check="`g5c-ctl --url <function> reload --dry-run`", clause="", runbook=RB + "configuration-reload"),
+]
+
+N4_HINT = {72: "the association with the UPF is not established", 75: "the UPF has no resources (sessions, TEIDs, addresses)", 73: "the UPF could not create a rule from the SMF's request (a PDR, FAR or QER it does not support)"}
+
+
+def parse_line(line, nf_hint):
+    line = line.rstrip("\n")
+    if line.startswith("{"):
+        try:
+            j = json.loads(line)
+        except ValueError:
+            return None
+        return {"ts": j.get("timestamp", ""), "level": j.get("level", ""), "target": j.get("target", ""), "msg": j.get("message", ""), "trace": j.get("trace_id", ""), "nf": nf_hint}
+    m = TEXT.match(line)
+    if not m:
+        return None
+    return {"ts": m.group(1), "level": m.group(2), "target": m.group(3), "msg": m.group(4), "trace": m.group(5) or "", "nf": nf_hint}
+
+
+def nf_of(path, target):
+    base = os.path.basename(path)
+    if base.endswith(".log") and base != "-.log":
+        return base[:-4]
+    return target.replace("g5c_", "") if target.startswith("g5c_") else target
+
+
+def read_logs(paths):
+    files = []
+    for p in paths:
+        if p == "-":
+            files.append(("-", sys.stdin.read().splitlines()))
+        elif os.path.isdir(p):
+            for n in sorted(os.listdir(p)):
+                if n.endswith(".log"):
+                    files.append((os.path.join(p, n), open(os.path.join(p, n), errors="replace").read().splitlines()))
+        else:
+            files.append((p, open(p, errors="replace").read().splitlines()))
+    out = []
+    for path, lines in files:
+        for ln in lines:
+            r = parse_line(ln, "")
+            if r is not None:
+                r["nf"] = nf_of(path, r["target"])
+                out.append(r)
+    return out
+
+
+def explain(rec):
+    """-> a finding dict or None"""
+    if rec["level"] not in ("ERROR", "WARN", "INFO"):
+        return None
+    for rx, kw in RULES:
+        m = rx.search(rec["msg"])
+        if not m:
+            continue
+        f = {"id": kw.get("id", "?"), "nf": rec["nf"], "ts": rec["ts"], "trace": rec["trace"], "msg": rec["msg"], "supi": None}
+        sm = SUPI.search(rec["msg"])
+        if sm:
+            f["supi"] = sm.group(1)
+        if kw.get("handler") == "registration":
+            supi, cause, reason = m.group(1), int(m.group(2)), m.group(3)
+            f.update(registration(supi, cause, reason))
+            f["supi"] = supi if supi.startswith("imsi-") else "(unidentified UE)"  # refused before the UE was identified: a storm, or an identity that did not resolve
+        elif kw.get("handler") == "suci":
+            code = int(m.group(1))
+            f.update(id="suci", what="the subscriber identity could not be resolved", why=SUCI.get(code, "the SUCI could not be resolved (code %d)" % code), where="the UE's SUCI or the UDM's home network keys",
+                     check="`hn_keys` of the UDM (id and scheme) against what the UE was provisioned with; `suci.null_scheme`", clause="TS 33.501 6.12, TS 23.003 2.2B", runbook=RB + "registrations-rejected")
+        elif kw.get("handler") == "n4":
+            upf, supi, psi, cause = m.group(1), m.group(2), m.group(3), int(m.group(4))
+            f["supi"] = supi
+            f.update(id="n4", what="the UPF refused to set up the session", why="PFCP cause %d: %s" % (cause, PFCP.get(cause, "see TS 29.244 8.2.1")) + (" (%s)" % N4_HINT[cause] if cause in N4_HINT else ""),
+                     where="UPF %s" % upf, check="the UPF log at the same time; its session limit and address pool", clause="TS 29.244 7.5.2", runbook=RB + "upf-lost")
+        else:
+            for k in ("what", "why", "where", "check", "clause", "runbook"):
+                f[k] = kw.get(k, "").replace("{supi}", f["supi"] or "<supi>")
+        return f
+    return None
+
+
+def registration(supi, cause, reason):
+    name = CAUSE.get(cause, "cause %d" % cause)
+    r = {"id": "registration", "what": "registration refused with 5GMM cause #%d (%s)" % (cause, name), "clause": "TS 24.501 5.5.1.2.5, Annex A", "runbook": RB + "registrations-rejected"}
+    if cause == 7:
+        r.update(why="the UDM has no access and mobility subscription for this subscriber (%s)" % reason, where="the subscriber data at the UDM",
+                 check="`g5c-ctl subscriber get %s`; provision it (`g5c-ctl subscriber add`); if the UE sends a SUCI, check that it resolves to this SUPI (hn_keys)" % supi)
+    elif cause == 12:
+        r.update(why="the tracking area the gNB reported is not one the AMF serves (%s)" % reason, where="the AMF configuration or the gNB", check="`amf.tais` against the TAC of the gNB's cell")
+    elif cause == 62:
+        r.update(why="none of the slices the UE asked for is allowed (%s)" % reason, where="the subscription, the AMF slice list or the NSSF",
+                 check="`slices` of the subscriber, `amf.slices`, and the NSSF's `g5c_amf_nssf_selections_total{result=\"refused\"}`")
+    elif cause == 22:
+        r.update(why="the AMF is above the registration rate it was configured to admit (%s)" % reason, where="amf.overload (a signalling storm, or a limit set too low)",
+                 check="`g5c_amf_registrations_total{result=\"congestion\"}` per gNB; raise `registrations_per_s` or find the surge (a cell that restarted brings all its UEs back together)", runbook=RB + "overload-and-rate-control")
+    elif cause == 9:
+        r.update(why="the AMF could not turn the identity into a subscriber (%s)" % reason, where="the UE's identity or the UDM's keys", check="the UDM log line `SUCI resolution failed`; hn_keys and the null scheme policy")
+    elif cause == 23:
+        r.update(why="the UE and the AMF share no NAS security algorithm (%s)" % reason, where="the UE or `amf.security`", check="the algorithms the UE offers (ladder of the registration) against `amf.security`")
+    elif cause == 96:
+        r.update(why="the request was incomplete or unreadable (%s)" % reason, where="the UE", check="a capture of N1 (g5c-ladder) for the first message")
+    elif cause == 111:
+        r.update(why="a function the AMF depends on failed (%s)" % reason, where="the AUSF or UDM named in the reason, or key derivation", check="the logs of the AUSF and the UDM at the same time (same trace id)", runbook=RB + "authentication-failures")
+    else:
+        r.update(why=reason, where="see the cause", check="the AMF log around this line")
+    if "injected" in reason:
+        r.update(id="injected", what="registration refused on purpose, cause #%d" % cause, why="amf.inject is configured for this subscriber", where="the AMF's own configuration",
+                 check="remove `inject` from the AMF's configuration and restart it", clause="")
+    return r
+
+
+def correlate(findings, records):
+    """other WARN / ERROR lines of the same trace, from other functions: the likely root cause of the refusal"""
+    by_trace = {}
+    for r in records:
+        if r["trace"] and r["level"] in ("ERROR", "WARN"):
+            by_trace.setdefault(r["trace"], []).append(r)
+    for f in findings:
+        rel = []
+        for r in by_trace.get(f["trace"], []) if f["trace"] else []:
+            if r["nf"] != f["nf"] and r["msg"] != f["msg"]:
+                rel.append("%s: %s" % (r["nf"], r["msg"]))
+        f["related"] = rel[:4]
+
+
+def analyse(records, supi=None, include_unnamed=False):
+    findings = [f for f in (explain(r) for r in records) if f]
+    correlate(findings, records)
+    if supi:
+        findings = [f for f in findings if f["supi"] == supi]
+    elif not include_unnamed:
+        findings = [f for f in findings if f["supi"]]
+    groups = OrderedDict()
+    for f in findings:
+        key = (f["supi"] or "(no subscriber)", f["id"], f["why"])
+        g = groups.setdefault(key, dict(f, count=0, first=f["ts"], last=f["ts"]))
+        g["count"] += 1
+        g["last"] = f["ts"]
+        if f["related"] and not g["related"]:
+            g["related"] = f["related"]
+    return list(groups.values())
+
+
+def render(groups):
+    by_supi = OrderedDict()
+    for g in groups:
+        by_supi.setdefault(g["supi"] or "(no subscriber)", []).append(g)
+    out = []
+    for supi, gs in by_supi.items():
+        out.append(supi)
+        for g in gs:
+            out.append("  %s%s" % (g["what"], "  (x%d, last at %s)" % (g["count"], g["last"]) if g["count"] > 1 else "  (at %s)" % g["first"]))
+            out.append("    why:   %s" % g["why"])
+            out.append("    where: %s, in the %s%s" % (g["where"], g["nf"].upper() if g["nf"] else "log", " - " + g["clause"] if g["clause"] else ""))
+            out.append("    check: %s" % g["check"])
+            for r in g.get("related", []):
+                out.append("    also:  %s" % r)
+            out.append("    see:   %s" % g["runbook"])
+    return "\n".join(out)
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(prog="g5c-why", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("logs", nargs="+")
+    ap.add_argument("--supi")
+    ap.add_argument("--json", action="store_true")
+    ap.add_argument("--all", action="store_true", help="also the failures that name no subscriber")
+    a = ap.parse_args(argv)
+    records = read_logs(a.logs)
+    groups = analyse(records, a.supi, a.all)
+    if a.json:
+        print(json.dumps(groups, indent=2))
+    elif groups:
+        print(render(groups))
+    else:
+        print("g5c-why: nothing in these logs explains a failure%s" % (" of " + a.supi if a.supi else ""))
+    return 1 if groups else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

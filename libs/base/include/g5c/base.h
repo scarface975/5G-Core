@@ -73,6 +73,10 @@ bool g5c_log_enabled(g5c_log_level l);
 void g5c_log_set_level(g5c_log_level l);
 g5c_log_level g5c_log_baseline(void);
 void g5c_log(g5c_log_level l, const char *target, const char *fmt, ...) G5C_PRINTF(3, 4);
+/* One tap per process sees every line at `min` or more severe, and every "g5c_audit" line when `audit` is set, whatever the log level. It runs on the logging thread, must not log,
+ * and is never called once g5c_log_set_tap(NULL, ...) has returned. */
+typedef void (*g5c_log_tap_fn)(void *user, g5c_log_level l, const char *target, const char *ts, const char *msg);
+int g5c_log_set_tap(g5c_log_tap_fn fn, void *user, g5c_log_level min, bool audit); /* 0, or -1 when another tap is set */
 
 /* ---- request tracing (W3C trace context, backlog C-03) ---- */
 /* A trace id follows one UE's procedure through the functions */

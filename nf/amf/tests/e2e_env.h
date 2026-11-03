@@ -15,6 +15,8 @@
 #include <time.h>
 #include <unistd.h>
 
+#include <openssl/rand.h>
+
 #include "g5c/amf.h"
 #include "g5c/ausf.h"
 #include "g5c/eapaka.h"
@@ -259,7 +261,11 @@ static void setup(void)
     E.cl = g5c_client_new(4000, NULL);
     memset(master, 7, sizeof master);
     udm_keys_with_master(&E.keys, (const uint8_t *)master);
-    udm_init(&E.u, E.cl, udr_url, &E.keys, NULL, 0, "00101", "udm-e2e", E.m);
+    {   /* the home network's Profile A key, for the UEs that conceal their SUCI */
+        udm_hnkey hk = {.id = 1, .profile = G5C_PROFILE_A};
+        memset(hk.secret, 0x42, sizeof hk.secret);
+        udm_init(&E.u, E.cl, udr_url, &E.keys, &hk, 1, "00101", "udm-e2e", E.m);
+    }
     E.u.admin_token = g5c_xstrdup(ADMIN);
     E.udm_r = udm_router(&E.u);
     E.udm_s = g5c_server_start(&cfg, E.udm_r, err, sizeof err);
@@ -385,8 +391,19 @@ static void gnb_close(gnb_t *g)
     g->fd = -1;
 }
 
+/* every byte that crosses N2, when a test switches it on: for the privacy checks */
+static g5c_bytes WIRE;
+static bool WIRE_ON;
+
+static void wire_note(const uint8_t *b, size_t n)
+{
+    if (WIRE_ON)
+        g5c_bytes_append(&WIRE, b, n);
+}
+
 static void gnb_tx_raw(gnb_t *g, const uint8_t *b, size_t n, uint16_t stream)
 {
+    wire_note(b, n);
     struct msghdr mh;
     struct iovec iov = {(void *)(uintptr_t)b, n};
     char cbuf[CMSG_SPACE(sizeof(struct sctp_sndinfo))];
@@ -434,6 +451,7 @@ static g5c_json *gnb_rx(gnb_t *g, int timeout_ms)
     n = recv(g->fd, buf, sizeof buf, 0);
     if (n <= 0)
         return NULL;
+    wire_note(buf, (size_t)n);
     j = ngap_decode(buf, (size_t)n, err, sizeof err);
     if (j == NULL)
         TK_FAIL("the AMF sent an undecodable NGAP PDU: %s", err);
@@ -567,6 +585,7 @@ typedef struct {
     bool flip_res; /* answer the authentication with a wrong RES* */
     bool report_mac_failure;
     bool report_sync_failure;
+    bool conceal; /* the SUCI is concealed with the home network's Profile A key instead of the null scheme */
 } ue_t;
 
 static void ue_init(ue_t *u, const char *imsi, uint32_t ran_id)
@@ -637,8 +656,21 @@ static void put_msin_identity(const ue_t *u, g5c_bytes *out)
     snprintf(id.mnc, sizeof id.mnc, "01");
     snprintf(id.routing_indicator, sizeof id.routing_indicator, "0000");
     TK_ASSERT(g5c_msin_to_bcd(u->msin, bcd, sizeof bcd, &n) == 0);
-    memcpy(id.output, bcd, n);
-    id.output_len = n;
+    if (u->conceal) { /* a fresh ephemeral key for every SUCI (TS 33.501 Annex C) */
+        uint8_t secret[32], hn_pub[64], eph[32], sealed[128];
+        size_t pl = 0, sl = 0;
+        memset(secret, 0x42, sizeof secret);
+        TK_ASSERT(g5c_suci_public_key(G5C_PROFILE_A, secret, hn_pub, sizeof hn_pub, &pl) == 0);
+        TK_ASSERT(RAND_bytes(eph, sizeof eph) == 1);
+        TK_ASSERT(g5c_suci_conceal(G5C_PROFILE_A, hn_pub, pl, eph, bcd, n, sealed, sizeof sealed, &sl) == 0 && sl <= sizeof id.output);
+        id.scheme = 1;
+        id.hn_key_id = 1;
+        memcpy(id.output, sealed, sl);
+        id.output_len = sl;
+    } else {
+        memcpy(id.output, bcd, n);
+        id.output_len = n;
+    }
     TK_ASSERT(nas_mobile_identity_encode(&id, out) == NAS_OK);
 }
 

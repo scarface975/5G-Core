@@ -8,15 +8,41 @@
 
 #include "g5c/pcf.h"
 
+/* the role a request needs (backlog F-03): reading, or changing policies and sessions */
+static unsigned role_for(const char *method, const char *path)
+{
+    if (strncmp(path, "/admin/", 7) != 0)
+        return 0;
+    if (strncmp(path, "/admin/v1/policies", 18) == 0 || strncmp(path, "/admin/v1/sessions", 18) == 0)
+        return strcmp(method, "GET") == 0 ? G5C_ROLE_READ : G5C_ROLE_POLICY;
+    return G5C_ROLE_ALL;
+}
+
+/* a tenant does not learn that a subscriber of another tenant exists */
+static bool outside_tenant(const pcf *p, const g5c_principal *who, const char *supi)
+{
+    return p->authz != NULL && !g5c_authz_supi_allowed(p->authz, who, supi);
+}
+
 int pcf_admin_guard(void *ctx, const g5c_req *req, g5c_resp *resp)
 {
     const pcf *p = ctx;
     const char *presented;
     if (strncmp(req->path, "/admin/", 7) != 0)
         return 0;
-    if (p->admin_token == NULL) {
+    if (p->admin_token == NULL && !g5c_authz_enabled(p->authz)) {
         g5c_resp_problem_simple(resp, 404, "RESOURCE_NOT_FOUND", NULL);
         return 1;
+    }
+    if (p->authz != NULL) {
+        g5c_principal who;
+        if (g5c_authz_check(p->authz, req, role_for, &who, resp) != 0)
+            return 1;
+        if (strncmp(req->path, "/admin/v1/policies/", 19) == 0 && strcmp(req->method, "PUT") != 0 && outside_tenant(p, &who, req->path + 19)) {
+            g5c_resp_problem_simple(resp, 404, "USER_NOT_FOUND", NULL); /* reading or deleting what is not the tenant's: it is not there */
+            return 1;
+        }
+        return 0;
     }
     presented = g5c_bearer_token(req);
     if (presented != NULL && strlen(presented) == strlen(p->admin_token) &&
@@ -56,8 +82,15 @@ static void put_policy(void *ctx, const g5c_req *req, g5c_resp *resp)
     pcf_policy pol;
     char err[200], field[200], reason[200];
     size_t notified;
+    g5c_principal who;
+    g5c_authz_who(p->authz, req, &who);
     if (!supi_ok(supi)) {
         bad(resp, "supi must be imsi-<digits>");
+        return;
+    }
+    if (outside_tenant(p, &who, supi)) {
+        G5C_LOGW("g5c_audit", "pcf admin: policy.put refused for %s: the SUPI is outside its tenant", who.name);
+        g5c_resp_problem_simple(resp, 403, "FORBIDDEN", "the SUPI is outside the ranges of the tenant");
         return;
     }
     j = g5c_req_json(req, resp);
@@ -81,7 +114,7 @@ static void put_policy(void *ctx, const g5c_req *req, g5c_resp *resp)
     }
     pcf_policy_free(&pol);
     notified = pcf_repush(p, supi);
-    G5C_LOGI("g5c_audit", "pcf admin: policy.put supi=%s notified_sessions=%zu", supi, notified);
+    G5C_LOGI("g5c_audit", "pcf admin: policy.put supi=%s notified_sessions=%zu by=%s", supi, notified, who.name);
     o = g5c_json_new_obj();
     g5c_json_set_str(o, "supi", supi);
     g5c_json_set_int(o, "notifiedSessions", (int64_t)notified);
@@ -112,9 +145,11 @@ static void delete_policy(void *ctx, const g5c_req *req, g5c_resp *resp)
 {
     pcf *p = ctx;
     int rc = pcf_store_delete(p, supi_param(req));
+    g5c_principal who;
+    g5c_authz_who(p->authz, req, &who);
     if (rc == 1) {
         pcf_repush(p, supi_param(req));
-        G5C_LOGI("g5c_audit", "pcf admin: policy.delete supi=%s", supi_param(req));
+        G5C_LOGI("g5c_audit", "pcf admin: policy.delete supi=%s by=%s", supi_param(req), who.name);
         g5c_resp_status(resp, 204);
     } else if (rc == 0) {
         g5c_resp_problem_simple(resp, 404, "USER_NOT_FOUND", NULL);
@@ -127,11 +162,15 @@ static void list_sessions(void *ctx, const g5c_req *req, g5c_resp *resp)
 {
     pcf *p = ctx;
     g5c_json *list = g5c_json_new_arr();
-    (void)req;
+    g5c_principal who;
+    g5c_authz_who(p->authz, req, &who);
     pthread_mutex_lock(&p->mu);
     for (size_t i = 0; i < p->nsessions; i++) {
         const pcf_sm_session *s = &p->sessions[i];
-        g5c_json *e = g5c_json_push(list, g5c_json_new_obj());
+        g5c_json *e;
+        if (outside_tenant(p, &who, s->supi))
+            continue; /* a tenant sees its own sessions */
+        e = g5c_json_push(list, g5c_json_new_obj());
         g5c_json_set_str(e, "smPolicyId", s->id);
         g5c_json_set_str(e, "supi", s->supi);
         g5c_json_set_str(e, "dnn", s->dnn);
@@ -147,8 +186,19 @@ static void terminate_session(void *ctx, const g5c_req *req, g5c_resp *resp)
 {
     pcf *p = ctx;
     const char *id = g5c_req_param(req, "smPolicyId");
-    if (pcf_terminate(p, id ? id : "")) {
-        G5C_LOGI("g5c_audit", "pcf admin: session.terminate smPolicyId=%s", id ? id : "");
+    g5c_principal who;
+    bool mine = true;
+    g5c_authz_who(p->authz, req, &who);
+    if (who.tenant[0] != '\0') { /* a tenant ends only its own sessions; another's id is not there for it */
+        pthread_mutex_lock(&p->mu);
+        mine = false;
+        for (size_t i = 0; id != NULL && i < p->nsessions; i++)
+            if (strcmp(p->sessions[i].id, id) == 0)
+                mine = !outside_tenant(p, &who, p->sessions[i].supi);
+        pthread_mutex_unlock(&p->mu);
+    }
+    if (mine && pcf_terminate(p, id ? id : "")) {
+        G5C_LOGI("g5c_audit", "pcf admin: session.terminate smPolicyId=%s by=%s", id ? id : "", who.name);
         g5c_resp_status(resp, 204);
     } else {
         g5c_resp_problem_simple(resp, 404, "CONTEXT_NOT_FOUND", NULL);

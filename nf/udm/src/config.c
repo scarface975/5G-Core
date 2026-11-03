@@ -16,6 +16,25 @@ static void seterr(char *err, size_t cap, const char *fmt, const char *a)
     (void)fmt; /* callers pass "%s" and the message as the argument */
 }
 
+/* configuration reload of `suci`: whether a SUCI in clear is accepted */
+static int udm_reload_suci(void *ctx, const g5c_json *from, const g5c_json *to, char *err, size_t errcap)
+{
+    udm *u = ctx;
+    const char *ns = g5c_json_get_str(to, "null_scheme");
+    (void)from;
+    if (to != NULL && !g5c_json_is(to, G5C_J_OBJECT)) {
+        seterr(err, errcap, "%s", "invalid config: `suci` must be a mapping");
+        return -1;
+    }
+    if (ns != NULL && strcmp(ns, "allow") != 0 && strcmp(ns, "reject") != 0) {
+        seterr(err, errcap, "%s", "invalid value for `suci.null_scheme`: must be allow or reject");
+        return -1;
+    }
+    atomic_store(&u->refuse_null_scheme, ns != NULL && strcmp(ns, "reject") == 0);
+    G5C_LOGI("g5c_udm", "suci.null_scheme is now %s", atomic_load(&u->refuse_null_scheme) ? "reject" : "allow");
+    return 0;
+}
+
 udm *udm_from_config(const g5c_json *cfg, g5c_nf *nf, char *err, size_t errcap)
 {
     static const char *const k_udr[] = {"uri", "token_file", NULL};
@@ -29,7 +48,7 @@ udm *udm_from_config(const g5c_json *cfg, g5c_nf *nf, char *err, size_t errcap)
     char ferr[200];
     const char *mk_file = g5c_json_get_str(cfg, "master_key_file"), *at_file = g5c_json_get_str(cfg, "admin_token_file");
 
-    bool discover_udr = false;
+    bool discover_udr = false, refuse_null = false;
     char *udr_token = NULL;
     if ((udr == NULL || (g5c_json_is(udr, G5C_J_OBJECT) && g5c_json_get_str(udr, "uri") == NULL)) && nf->common.nrf_uri != NULL) {
         discover_udr = true; /* no `udr.uri`: the UDR is found through the NRF */
@@ -126,6 +145,21 @@ udm *udm_from_config(const g5c_json *cfg, g5c_nf *nf, char *err, size_t errcap)
         }
     }
 
+    {
+        static const char *const k_suci[] = {"null_scheme", NULL};
+        const g5c_json *suci = g5c_json_get(cfg, "suci");
+        const char *ns = g5c_json_get_str(suci, "null_scheme");
+        if (suci != NULL && (!g5c_json_is(suci, G5C_J_OBJECT) || g5c_json_check_keys(suci, k_suci, "suci", err, errcap) != 0)) {
+            if (err && errcap && err[0] == 0)
+                seterr(err, errcap, "%s", "invalid config: `suci` must be a mapping");
+            goto bad;
+        }
+        if (ns != NULL && strcmp(ns, "allow") != 0 && strcmp(ns, "reject") != 0) {
+            seterr(err, errcap, "%s", "invalid value for `suci.null_scheme`: must be allow or reject");
+            goto bad;
+        }
+        refuse_null = ns != NULL && strcmp(ns, "reject") == 0;
+    }
     udr_token = g5c_secret_from_env_or_file("G5C_UDM_UDR_TOKEN", udr != NULL ? g5c_json_get_str(udr, "token_file") : NULL, ferr, sizeof ferr);
     if (udr_token == NULL && ferr[0]) {
         seterr(err, errcap, "%s", ferr);
@@ -134,6 +168,8 @@ udm *udm_from_config(const g5c_json *cfg, g5c_nf *nf, char *err, size_t errcap)
     snprintf(plmn, sizeof plmn, "%s%s", nf->common.mcc, nf->common.mnc);
     u = g5c_xcalloc(1, sizeof *u);
     udm_init(u, nf->client, discover_udr ? "http://unused" : g5c_json_get_str(udr, "uri"), &keys, hk, nhk, plmn, nf->instance_id, nf->metrics);
+    atomic_init(&u->refuse_null_scheme, refuse_null);
+    g5c_nf_on_reload(nf, "suci", udm_reload_suci, u);
     if (discover_udr)
         udm_udr_use_discovery(&u->udr, g5c_disc_new(nf->client, nf->common.nrf_uri, "UDM", nf->instance_id));
     OPENSSL_cleanse(&keys, sizeof keys);
@@ -181,6 +217,14 @@ udm *udm_from_config(const g5c_json *cfg, g5c_nf *nf, char *err, size_t errcap)
         udm_destroy(u);
         free(u);
         return NULL;
+    }
+    if (g5c_json_get_str(cfg, "admin_tokens_file") != NULL) { /* roles and tenants; the single token above stays the principal "admin" */
+        u->authz = g5c_authz_new(g5c_json_get_str(cfg, "admin_tokens_file"), u->admin_token, err, errcap);
+        if (u->authz == NULL) {
+            udm_destroy(u);
+            free(u);
+            return NULL;
+        }
     }
     return u;
 bad:

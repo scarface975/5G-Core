@@ -309,6 +309,13 @@ static _Atomic int cur_level = G5C_LOG_INFO; /* read without a lock by every log
 static bool log_json = false;
 static bool log_ready = false;
 static g5c_log_level base_level = G5C_LOG_INFO;
+static pthread_rwlock_t tap_lk = PTHREAD_RWLOCK_INITIALIZER; /* readers: the log calls that run the tap, writer: set / remove */
+static g5c_log_tap_fn tap_fn;
+static void *tap_user;
+static g5c_log_level tap_min;
+static bool tap_audit;
+static _Atomic bool tap_on;
+static _Thread_local bool in_tap;
 
 static const char *const level_names[] = {"ERROR", "WARN", "INFO", "DEBUG", "TRACE"};
 
@@ -460,7 +467,10 @@ void g5c_log(g5c_log_level l, const char *target, const char *fmt, ...)
     va_list ap;
     char *msg;
     g5c_bytes line;
-    if (!g5c_log_enabled(l))
+    bool enabled = g5c_log_enabled(l), want_tap = false;
+    if (atomic_load(&tap_on) && !in_tap)
+        want_tap = (int)l <= (int)tap_min || (tap_audit && strcmp(target, "g5c_audit") == 0);
+    if (!enabled && !want_tap)
         return;
     clock_gettime(CLOCK_REALTIME, &t);
     gmtime_r(&t.tv_sec, &tm);
@@ -470,7 +480,9 @@ void g5c_log(g5c_log_level l, const char *target, const char *fmt, ...)
     msg = g5c_xvasprintf(fmt, ap);
     va_end(ap);
     g5c_bytes_init(&line);
-    if (log_json) {
+    if (!enabled) {
+        /* only the tap wants this line */
+    } else if (log_json) {
         g5c_bytes_printf(&line, "{\"timestamp\":\"%s\",\"level\":\"%s\",\"target\":\"", ts, level_names[l]);
         json_escape(&line, target);
         g5c_bytes_append_str(&line, "\",\"message\":\"");
@@ -483,10 +495,38 @@ void g5c_log(g5c_log_level l, const char *target, const char *fmt, ...)
     } else {
         g5c_bytes_printf(&line, "%s %5s %s: %s\n", ts, level_names[l], target, msg);
     }
-    pthread_mutex_lock(&log_mu);
-    if (line.data != NULL)
-        (void)!fwrite(line.data, 1, line.len, stderr);
-    pthread_mutex_unlock(&log_mu);
+    if (enabled) {
+        pthread_mutex_lock(&log_mu);
+        if (line.data != NULL)
+            (void)!fwrite(line.data, 1, line.len, stderr);
+        pthread_mutex_unlock(&log_mu);
+    }
+    if (want_tap) {
+        pthread_rwlock_rdlock(&tap_lk);
+        if (tap_fn != NULL) {
+            in_tap = true;
+            tap_fn(tap_user, l, target, ts, msg);
+            in_tap = false;
+        }
+        pthread_rwlock_unlock(&tap_lk);
+    }
     g5c_bytes_free(&line);
     free(msg);
+}
+
+int g5c_log_set_tap(g5c_log_tap_fn fn, void *user, g5c_log_level min, bool audit)
+{
+    int rc = 0;
+    pthread_rwlock_wrlock(&tap_lk);
+    if (fn != NULL && tap_fn != NULL) {
+        rc = -1;
+    } else {
+        tap_fn = fn;
+        tap_user = user;
+        tap_min = min;
+        tap_audit = audit;
+        atomic_store(&tap_on, fn != NULL);
+    }
+    pthread_rwlock_unlock(&tap_lk);
+    return rc;
 }

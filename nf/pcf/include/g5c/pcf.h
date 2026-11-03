@@ -137,6 +137,7 @@ typedef struct pcf {
     g5c_disc *udr_disc;   /* NRF discovery client used when no UDR address is configured */
     g5c_registry *metrics; /* not owned */
     char *admin_token;    /* NULL: admin API disabled */
+    g5c_authz *authz;     /* `admin_tokens_file`: roles and tenants for the admin API; NULL: the single admin token */
     pthread_mutex_t mu;
     pcf_sm_session *sessions;
     size_t nsessions, capsessions;

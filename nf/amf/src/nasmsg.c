@@ -145,10 +145,17 @@ int nm_smc_eap(uint8_t int_alg, uint8_t enc_alg, uint8_t ngksi, const uint8_t *u
 
 int nm_reg_reject(uint8_t cause, g5c_bytes *out)
 {
+    return nm_reg_reject_t3346(cause, 0, out);
+}
+
+int nm_reg_reject_t3346(uint8_t cause, unsigned t3346_s, g5c_bytes *out)
+{
     nas_msg m;
     if (!nas_msg_init(&m, "Registration reject"))
         return -1;
     set1(&m, "5GMM cause", cause);
+    if (t3346_s > 0)
+        set1(&m, "T3346 value", nm_gprs_timer2(t3346_s));
     return finish(&m, out);
 }
 

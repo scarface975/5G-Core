@@ -48,6 +48,34 @@ static void set_body(uint8_t **dst, size_t *len, const void *p, size_t n)
 
 /* ---- request ---- */
 
+/* "Timestamp: ...; Load-Metric: 35%; ..." -> the number after the named parameter */
+static bool param_num(const char *v, const char *name, unsigned *out)
+{
+    const char *p = strstr(v, name);
+    char *e;
+    unsigned long n;
+    if (p == NULL)
+        return false;
+    p += strlen(name);
+    while (*p == ' ' || *p == ':')
+        p++;
+    n = strtoul(p, &e, 10);
+    if (e == p || n > 100000)
+        return false;
+    *out = (unsigned)n;
+    return true;
+}
+
+bool g5c_sbi_parse_lci(const char *value, unsigned *load_pct)
+{
+    return value != NULL && param_num(value, "Load-Metric", load_pct) && *load_pct <= 100;
+}
+
+bool g5c_sbi_parse_oci(const char *value, unsigned *validity_s, unsigned *reduction_pct)
+{
+    return value != NULL && param_num(value, "Period-of-Validity", validity_s) && param_num(value, "Overload-Reduction-Metric", reduction_pct) && *reduction_pct <= 100;
+}
+
 void g5c_req_init(g5c_req *r)
 {
     memset(r, 0, sizeof *r);

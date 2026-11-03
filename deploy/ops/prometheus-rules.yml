@@ -110,6 +110,22 @@ groups:
         annotations:
           summary: "the UPF drops {{ $value | humanize }} packets/s"
           runbook: "docs/ops/runbooks.md#capacity"
+  - name: g5c-overload
+    rules:
+      - alert: G5cRegistrationCongestion
+        expr: sum(rate(g5c_amf_registrations_total{result="congestion"}[5m])) > 0
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "the AMF refuses registrations with cause 22 (amf.overload): {{ $value | humanize }}/s"
+          runbook: "docs/ops/runbooks.md#overload-and-rate-control"
+      - alert: G5cSbiRateLimited
+        expr: sum by (job) (rate(g5c_overload_rejected_total[5m])) > 1
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $labels.job }} answers {{ $value | humanize }} requests/s with 429 (overload.rate_per_source)"
+          runbook: "docs/ops/runbooks.md#overload-and-rate-control"
   - name: g5c-recording
     rules:
       - record: g5c:registration_success_ratio:rate5m

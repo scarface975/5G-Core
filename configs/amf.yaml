@@ -5,6 +5,7 @@ sbi: { address: 0.0.0.0, port: 7777 }
 log: { level: info, json: true }
 nrf: { uri: 'http://nrf:7777' }
 amf:
+  # overload: { registrations_per_s: 200, per_gnb_per_s: 50, burst_s: 1, t3346_s: 30 }   # refuse registrations above this rate with cause #22 and a back-off timer
   self_uri: 'http://amf:7777'          # where the SMF, UDM and PCF reach the callbacks (default: the sbi address)
   name: amf-1
   guami: { region: 2, set: 1, pointer: 0 }

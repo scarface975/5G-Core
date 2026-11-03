@@ -1,0 +1,148 @@
+#!/usr/bin/env python3
+"""g5c-privacy: does a capture of N1 / N2 leak the subscriber? (backlog D-06; TS 33.501 5.2.5, 6.12.2, 6.12.3)
+
+  g5c-privacy CAPTURE.pcap[ng] [--msin DIGITS]... [--json] [--tsv]     needs tshark
+  g5c-privacy --from-tsv ROWS.tsv ...                                   the rows of `--tsv` (no tshark): CI, or somebody else's capture
+
+Findings (exit code 1 when there is a high one):
+  high    an IMSI decoded in clear in the NAS or NGAP of N1 / N2 (the SUPI itself, not a SUCI; the SBI and N4 carry it between the operator's own functions and are not judged here)
+  high    a SUCI with the null protection scheme: the MSIN is readable (the MSIN of a registered subscriber is the SUPI minus the network code)
+  high    a Registration Accept that assigns the 5G-GUTI the UE already used (no reallocation, 6.12.3)
+  medium  the same SUCI scheme output in two messages: the UE did not use a fresh ephemeral key, so the SUCIs link its registrations (6.12.2 / Annex C)
+  high    --msin: the digits of a subscriber identity found as ASCII or as packed BCD anywhere in the frames
+What cannot be checked is said so: NAS messages after the Security Mode Command are ciphered and only visible as NGAP transport (a core that runs NEA0 or a decrypting tool shows more)."""
+import argparse
+import json
+import subprocess
+import sys
+
+FIELDS = ["frame.number", "frame.time_relative", "ip.src", "ip.dst", "_ws.col.Protocol", "ngap.RAN_UE_NGAP_ID", "nas-5gs.mm.message_type", "nas-5gs.mm.type_id", "nas-5gs.mm.suci.scheme_id",
+          "nas-5gs.mm.suci.msin", "nas-5gs.mm.suci.scheme_output", "nas-5gs.5g_tmsi", "e212.imsi", "nas-5gs.security_header_type"]
+COLS = ["n", "t", "src", "dst", "proto", "ran", "msg", "idtype", "scheme", "msin", "output", "tmsi", "imsi", "sht"]
+REG_REQUEST, REG_ACCEPT = 65, 66
+
+
+def run_tshark(path, extra=None):
+    cmd = ["tshark", "-r", path, "-T", "fields", "-E", "separator=/t", "-E", "occurrence=f"]
+    for f in FIELDS:
+        cmd += ["-e", f]
+    if extra:
+        cmd += ["-Y", extra]
+    p = subprocess.run(cmd, capture_output=True, text=True)
+    if p.returncode != 0:
+        raise SystemExit("g5c-privacy: tshark failed: %s" % p.stderr.strip()[-200:])
+    return p.stdout
+
+
+def parse_rows(text):
+    rows = []
+    for line in text.splitlines():
+        parts = line.split("\t")
+        if not parts or not parts[0].isdigit():
+            continue
+        parts += [""] * (len(COLS) - len(parts))
+        r = dict(zip(COLS, parts))
+        r["n"] = int(r["n"])
+        for k in ("msg", "idtype", "scheme", "sht"):
+            r[k] = int(r[k], 0) if r[k] not in ("",) else None
+        r["tmsi"] = int(r["tmsi"], 0) if r["tmsi"] else None
+        rows.append(r)
+    return rows
+
+
+def bcd_patterns(digits):
+    """The identity digits as they appear on the wire: ASCII, and packed BCD (two digits to a byte, the earlier digit in the low nibble), as hex strings."""
+    d = digits + ("f" if len(digits) % 2 else "")
+    packed = "".join(d[i + 1] + d[i] for i in range(0, len(d), 2))
+    return {"ascii": digits.encode().hex(), "bcd": packed}
+
+
+def analyse(rows, notes=None):
+    """-> (findings, stats); a finding is (severity, text, frames)"""
+    f = []
+    stats = {"nas_messages": 0, "plain_identities": 0, "protected": 0}
+    null_frames, imsi_frames, outputs = [], [], {}
+    last_request_tmsi = {}
+    for r in rows:
+        if r["msg"] is not None:
+            stats["nas_messages"] += 1
+        if r["sht"] not in (None, 0):
+            stats["protected"] += 1
+        if r["imsi"] and ("NGAP" in r["proto"] or "NAS-5GS" in r["proto"]) and "HTTP2" not in r["proto"]:  # N1 / N2 only: the SBI and N4 carry the SUPI between the functions of the operator
+            imsi_frames.append(r["n"])
+        if r["scheme"] == 0 and r["msin"]:
+            null_frames.append(r["n"])
+        if r["output"]:
+            outputs.setdefault(r["output"], []).append(r["n"])
+        key = (r["src"], r["dst"], r["ran"])
+        if r["msg"] == REG_REQUEST and r["tmsi"] is not None:
+            last_request_tmsi[(r["src"], r["ran"])] = r["tmsi"]
+        if r["msg"] == REG_ACCEPT and r["tmsi"] is not None:
+            old = last_request_tmsi.get((r["dst"], r["ran"]))
+            if old is not None and old == r["tmsi"]:
+                f.append(("high", "Registration Accept assigns the 5G-TMSI %08x that the UE already used: no GUTI reallocation (TS 33.501 6.12.3)" % old, [r["n"]]))
+        del key
+    stats["plain_identities"] = len(imsi_frames) + len(null_frames)
+    if imsi_frames:
+        f.append(("high", "%d message(s) carry an IMSI in clear (not a SUCI)" % len(imsi_frames), imsi_frames[:10]))
+    if null_frames:
+        f.append(("high", "%d SUCI(s) use the null protection scheme: the MSIN is readable on N1 and N2" % len(null_frames), null_frames[:10]))
+    for out, frames in outputs.items():
+        if len(frames) > 1:
+            f.append(("medium", "the same SUCI scheme output (%s...) appears in %d messages: no fresh ephemeral key per SUCI, the registrations are linkable" % (out[:16], len(frames)), frames[:10]))
+    return f, stats
+
+
+def report(findings, stats, msin_hits, as_json):
+    for digits, hits in msin_hits.items():
+        for kind, n in hits.items():
+            if n:
+                findings.append(("high", "the digits %s are present as %s in %d frame(s)" % (digits, kind, n), []))
+    order = {"high": 0, "medium": 1, "low": 2}
+    findings.sort(key=lambda x: order[x[0]])
+    if as_json:
+        print(json.dumps({"findings": [{"severity": s, "text": t, "frames": fr} for s, t, fr in findings], "stats": stats}, indent=2))
+    else:
+        print("NAS messages seen: %d, protected (integrity/ciphered, not readable here): %d, identities in clear: %d" % (stats["nas_messages"], stats["protected"], stats["plain_identities"]))
+        if not findings:
+            print("no privacy finding")
+        for s, t, fr in findings:
+            print("[%s] %s%s" % (s, t, ("  (frames %s)" % ", ".join(map(str, fr))) if fr else ""))
+    return 1 if any(s == "high" for s, _, _ in findings) else 0
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="g5c-privacy", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("capture", nargs="?")
+    ap.add_argument("--from-tsv")
+    ap.add_argument("--msin", action="append", default=[], metavar="DIGITS", help="look for these identity digits as ASCII and packed BCD")
+    ap.add_argument("--json", action="store_true")
+    ap.add_argument("--tsv", action="store_true", help="print the rows read from the capture and stop")
+    a = ap.parse_args()
+    if not a.capture and not a.from_tsv:
+        ap.error("give a capture or --from-tsv")
+    for d in a.msin:
+        if not d.isdigit() or not 5 <= len(d) <= 15:
+            ap.error("--msin takes 5 to 15 digits")
+    if a.from_tsv:
+        text = open(a.from_tsv).read()
+    else:
+        text = run_tshark(a.capture)
+    if a.tsv:
+        sys.stdout.write(text)
+        return 0
+    findings, stats = analyse(parse_rows(text))
+    hits = {}
+    if a.msin and a.capture:
+        for d in a.msin:
+            hits[d] = {}
+            for kind, hexs in bcd_patterns(d).items():
+                out = run_tshark(a.capture, 'frame contains %s' % ":".join(hexs[i:i + 2] for i in range(0, len(hexs), 2)))
+                hits[d][kind] = len([ln for ln in out.splitlines() if ln.split("\t")[0].isdigit()])
+    elif a.msin:
+        ap.error("--msin needs a capture, not --from-tsv")
+    return report(findings, stats, hits, a.json)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -80,6 +80,16 @@ if(G5C_BASH AND UNIX)
            ${G5C_BASH} ${CMAKE_SOURCE_DIR}/deploy/run/g5c-cluster.sh ns scenario ${CMAKE_SOURCE_DIR}/scenarios/inject-amf-reject.yaml)
   set_tests_properties(cluster_inject_amf PROPERTIES ENVIRONMENT "${_direct_env};G5C_RUN=${CMAKE_BINARY_DIR}/cluster-run-inject-amf" TIMEOUT 300
                        LABELS "integration;cluster" SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
+  # signalling-storm protection (backlog D-04): the AMF holds the registration rate and refuses the rest with cause #22; it stays up and serves a normal wave afterwards
+  add_test(NAME cluster_overload_amf COMMAND /usr/bin/env "G5C_AMF_EXTRA=  overload: { registrations_per_s: 20, burst_s: 1, t3346_s: 10 }"
+           ${G5C_BASH} ${CMAKE_SOURCE_DIR}/deploy/run/g5c-cluster.sh ns scenario ${CMAKE_SOURCE_DIR}/scenarios/registration-storm.yaml)
+  set_tests_properties(cluster_overload_amf PROPERTIES ENVIRONMENT "${_direct_env};G5C_RUN=${CMAKE_BINARY_DIR}/cluster-run-overload-amf" TIMEOUT 300
+                       LABELS "integration;cluster" SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
+  # configuration hot reload (backlog F-06): SIGHUP changes the registration limit of a running AMF; an invalid change is refused and taken back
+  add_test(NAME cluster_reload_amf COMMAND /usr/bin/env "G5C_AMF_EXTRA=  overload: { registrations_per_s: 100000, burst_s: 1, t3346_s: 10 }"
+           ${G5C_BASH} ${CMAKE_SOURCE_DIR}/deploy/run/g5c-cluster.sh ns scenario ${CMAKE_SOURCE_DIR}/scenarios/reload-amf-overload.yaml)
+  set_tests_properties(cluster_reload_amf PROPERTIES ENVIRONMENT "${_direct_env};G5C_RUN=${CMAKE_BINARY_DIR}/cluster-run-reload-amf" TIMEOUT 300
+                       LABELS "integration;cluster" SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
   add_test(NAME cluster_inject_smf COMMAND /usr/bin/env "G5C_SMF_EXTRA=  inject: { n4_drop_responses_percent: 10 }"
            ${G5C_BASH} ${CMAKE_SOURCE_DIR}/deploy/run/g5c-cluster.sh ns scenario ${CMAKE_SOURCE_DIR}/scenarios/inject-n4-drop.yaml)
   set_tests_properties(cluster_inject_smf PROPERTIES ENVIRONMENT "${_direct_env};G5C_RUN=${CMAKE_BINARY_DIR}/cluster-run-inject-smf" TIMEOUT 300
@@ -127,6 +137,16 @@ if(G5C_BASH AND UNIX)
     set_tests_properties(console_tool PROPERTIES LABELS "unit")
     add_test(NAME kpi_tool COMMAND ${G5C_PYTHON} ${CMAKE_SOURCE_DIR}/tests/support/test_kpi.py)
     set_tests_properties(kpi_tool PROPERTIES LABELS "unit")
+    add_test(NAME privacy_tool COMMAND ${G5C_PYTHON} ${CMAKE_SOURCE_DIR}/tests/support/test_privacy.py)
+    set_tests_properties(privacy_tool PROPERTIES LABELS "unit;conformance")
+    add_test(NAME cdr_tool COMMAND ${G5C_PYTHON} ${CMAKE_SOURCE_DIR}/tests/support/test_cdr.py)
+    set_tests_properties(cdr_tool PROPERTIES LABELS "unit")
+    add_test(NAME why_tool COMMAND ${G5C_PYTHON} ${CMAKE_SOURCE_DIR}/tests/support/test_why.py)
+    set_tests_properties(why_tool PROPERTIES LABELS "unit")
+    add_test(NAME tokens_tool COMMAND ${G5C_PYTHON} ${CMAKE_SOURCE_DIR}/tests/support/test_tokens.py)
+    set_tests_properties(tokens_tool PROPERTIES LABELS "unit")
+    add_test(NAME alarms_tool COMMAND ${G5C_PYTHON} ${CMAKE_SOURCE_DIR}/tests/support/test_alarms.py)
+    set_tests_properties(alarms_tool PROPERTIES LABELS "unit" SKIP_RETURN_CODE 77)
     add_test(NAME api_docs_fresh COMMAND ${G5C_PYTHON} ${CMAKE_SOURCE_DIR}/tools/docs/gen_api_docs.py --check)
     set_tests_properties(api_docs_fresh PROPERTIES LABELS "unit")
     add_test(NAME licence_audit COMMAND ${G5C_PYTHON} ${CMAKE_SOURCE_DIR}/tools/release/licence_audit.py)

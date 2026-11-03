@@ -214,7 +214,7 @@ static void generate_auth_data(void *ctx, const g5c_req *req, g5c_resp *resp)
         return;
     }
     id = path_param(req, "supiOrSuci");
-    rc = udm_resolve(id, u->hn_keys, u->nhn_keys, supi, sizeof supi);
+    rc = udm_resolve_ex(id, u->hn_keys, u->nhn_keys, !u->refuse_null_scheme, supi, sizeof supi);
     if (rc == UDM_ID_MALFORMED) {
         vec_count(u, "bad_request");
         reject(resp, 400, "MANDATORY_IE_INCORRECT", "malformed SUPI or SUCI");
@@ -223,8 +223,8 @@ static void generate_auth_data(void *ctx, const g5c_req *req, g5c_resp *resp)
     }
     if (rc != 0) {
         vec_count(u, "reject");
-        G5C_LOGW("g5c_udm", "SUCI resolution failed (%d)", rc);
-        reject(resp, 403, "AUTHENTICATION_REJECTED", "cannot resolve subscriber identity");
+        G5C_LOGW("g5c_udm", "SUCI resolution failed (%d)%s", rc, rc == UDM_ID_NULL_SCHEME ? ": the null protection scheme is refused (suci.null_scheme)" : "");
+        reject(resp, 403, "AUTHENTICATION_REJECTED", rc == UDM_ID_NULL_SCHEME ? "the null protection scheme is not accepted" : "cannot resolve subscriber identity");
         g5c_json_free(ask);
         return;
     }
@@ -350,7 +350,7 @@ static void security_information_rg(void *ctx, const g5c_req *req, g5c_resp *res
     }
     authenticated = strcmp(ind, "true") == 0;
     free(ind);
-    rc = udm_resolve(path_param(req, "supiOrSuci"), u->hn_keys, u->nhn_keys, supi, sizeof supi);
+    rc = udm_resolve_ex(path_param(req, "supiOrSuci"), u->hn_keys, u->nhn_keys, !u->refuse_null_scheme, supi, sizeof supi);
     if (rc == UDM_ID_MALFORMED) {
         reject(resp, 400, "MANDATORY_IE_INCORRECT", "malformed SUPI or SUCI");
         return;

@@ -17,6 +17,8 @@
  *   G5C_LOAD_BASE      offset added to the IMSI number (to keep a run apart from earlier ones)
  *   G5C_LOAD_CHAOS_SECONDS  chaos mode: loop register / session / de-register cycles for this long, counting failures instead of stopping (used while
  *                      deploy/run/g5c-cluster.sh kills and restarts network functions)
+ *   G5C_LOAD_STORM_SECONDS  storm mode: every gNB sends Registration Requests back to back for this long (no waiting for the core to keep up) and counts what comes back: challenged
+ *                      (admitted), refused with cause #22 congestion (amf.overload), or anything else. The challenged UEs are left to the AMF's timers. The run fails when a reply is neither
  *   G5C_LOAD_CHECK_MEM 0: do not assert that RSS stops growing between waves (sanitizer builds)
  *   G5C_LOAD_TRAFFIC_MBPS  user plane (backlog B-02): once every UE has its session, each UE sends uplink GTP-U at this rate (Mbit/s, may be fractional) for G5C_LOAD_TRAFFIC_MS
  *   G5C_LOAD_ECHO      an echo server behind the UPF (tools/cli/g5c-dn --echo 7 on the data network gateway): the uplink packets are addressed to it and come back as downlink through
@@ -466,6 +468,102 @@ static int one_cycle(gnb_t *g, unsigned imsi_n, uint32_t ran_id)
     return stage;
 }
 
+/* storm mode: one Registration Request; 1 the AMF challenged the UE (admitted), 2 refused it with cause #22, 3 anything else */
+static atomic_long s_tried, s_admitted, s_congested, s_other;
+
+static int one_attempt(gnb_t *g, unsigned imsi_n, uint32_t ran_id)
+{
+    jmp_buf jb;
+    volatile int rc = 3;
+    ue_t u;
+    char imsi[16];
+    g5c_bytes req, plain;
+    tl_jb = &jb;
+    if (setjmp(jb) != 0) {
+        tl_jb = NULL;
+        return 3;
+    }
+    imsi_of(imsi, sizeof imsi, imsi_n);
+    ue_init(&u, imsi, ran_id);
+    g5c_bytes_init(&req);
+    build_reg_request(&u, 1, false, &req);
+    gnb_initial_ue(g, &u, req.data, req.len, 1, false);
+    g5c_bytes_free(&req);
+    plain = dl_nas(g, &u);
+    if (plain.len >= 4 && plain.data[2] == 0x44 && plain.data[3] == 22)
+        rc = 2;
+    else if (plain.len >= 3 && plain.data[2] == 0x56)
+        rc = 1;
+    g5c_bytes_free(&plain);
+    if (rc == 2)
+        gnb_confirm_release(g, &u);
+    tl_jb = NULL;
+    return rc;
+}
+
+static void *storm_thread(void *arg)
+{
+    worker_t *w = arg;
+    gnb_t g;
+    uint32_t seq = 1;
+    unsigned i = 0;
+    memset(&g, 0, sizeof g);
+    g.fd = -1;
+    if (!gnb_connect(&g, w->idx, 50))
+        return NULL;
+    while (now_s() < chaos_deadline) {
+        int r = one_attempt(&g, w->first + i % w->count, seq++);
+        i++;
+        atomic_fetch_add(&s_tried, 1);
+        if (r == 1) {
+            atomic_fetch_add(&s_admitted, 1);
+        } else if (r == 2) {
+            atomic_fetch_add(&s_congested, 1);
+        } else {
+            atomic_fetch_add(&s_other, 1);
+            gnb_close(&g); /* unknown state: a new association */
+            if (!gnb_connect(&g, w->idx, 100))
+                break;
+        }
+    }
+    gnb_close(&g);
+    return NULL;
+}
+
+static int storm_main(unsigned n_ues, unsigned n_gnbs, unsigned seconds)
+{
+    pthread_t *th = g5c_xmalloc(sizeof *th * n_gnbs);
+    worker_t *w = g5c_xmalloc(sizeof *w * n_gnbs);
+    unsigned per = n_ues / n_gnbs, rem = n_ues % n_gnbs, next = 0;
+    double t0;
+    long tried;
+    printf("storm: %u gNBs send Registration Requests back to back for %u s\n", n_gnbs, seconds);
+    fflush(stdout);
+    for (unsigned i = 0; i < n_ues; i++) {
+        char imsi[16], js[200];
+        imsi_of(imsi, sizeof imsi, i);
+        snprintf(js, sizeof js, "{\"supi\":\"imsi-%s\",\"k\":\"" K_HEX "\",\"op\":\"" OP_HEX "\"}", imsi);
+        provision(js);
+    }
+    t0 = now_s();
+    chaos_deadline = t0 + seconds;
+    for (unsigned i = 0; i < n_gnbs; i++) {
+        w[i].idx = i;
+        w[i].first = next;
+        w[i].count = per + (i < rem ? 1 : 0);
+        next += w[i].count;
+        TK_ASSERT(pthread_create(&th[i], NULL, storm_thread, &w[i]) == 0);
+    }
+    for (unsigned i = 0; i < n_gnbs; i++)
+        pthread_join(th[i], NULL);
+    tried = atomic_load(&s_tried);
+    printf("storm: %ld registrations in %.1f s (%.0f/s): %ld admitted, %ld refused with congestion (#22), %ld other\n", tried, now_s() - t0, (double)tried / (now_s() - t0),
+           atomic_load(&s_admitted), atomic_load(&s_congested), atomic_load(&s_other));
+    free(th);
+    free(w);
+    return tried > 0 && atomic_load(&s_other) == 0 ? 0 : 1;
+}
+
 static void *chaos_thread(void *arg)
 {
     worker_t *w = arg;
@@ -617,6 +715,8 @@ int main(void)
             TK_ASSERT(n_gnbs <= 2); /* each gNB thread owns an N3 address */
         }
     }
+    if (env_uint("G5C_LOAD_STORM_SECONDS", 0) != 0)
+        return storm_main(n_ues, n_gnbs, env_uint("G5C_LOAD_STORM_SECONDS", 0));
     if (env_uint("G5C_LOAD_CHAOS_SECONDS", 0) != 0)
         return chaos_main(n_ues, n_gnbs, env_uint("G5C_LOAD_CHAOS_SECONDS", 0));
     fds0 = open_fds();

@@ -267,6 +267,8 @@ void scp_proxy(void *ctx, const g5c_req *req, g5c_resp *resp)
     int model = target != NULL ? (callback ? M_CB : M_C) : (callback ? M_CB : M_D), st;
     fwd_t f;
     bool done = false;
+    unsigned overloaded = 0; /* candidates the client did not even ask: they had asked their consumers to back off */
+    bool hard_fail = false;
     memset(&list, 0, sizeof list);
     if (atomic_fetch_add(&s->inflight, 1) >= cfg->max_inflight) {
         scp_problem(s, resp, 503, "NF_CONGESTION", "the SCP is handling the most requests it may", NULL);
@@ -402,7 +404,7 @@ void scp_proxy(void *ctx, const g5c_req *req, g5c_resp *resp)
         auth = authority_of(cand->apiroot);
         tried++;
         forward(s, req, cand->apiroot, cand->apiroot, stripped, req->query, to_next, &f);
-        if (f.rc == 0 && !(cfg->retry_503 && f.r.status == 503 && i + 1 < list.n)) {
+        if (f.rc == 0 && !(cfg->retry_503 && (f.r.status == 503 || f.r.status == 429) && i + 1 < list.n)) {
             scp_report(s, to_next ? "next-hop" : auth, f.r.status != 503 && f.r.status != 504);
             g5c_counter_inc(s->c_attempt[A_OK]);
             relay(s, resp, &f, cand, by_scp, requested);
@@ -412,8 +414,9 @@ void scp_proxy(void *ctx, const g5c_req *req, g5c_resp *resp)
             break;
         }
         if (f.rc == 0) {
-            /* 503: the producer refuses for now; the next candidate is tried, the answer is kept if there is none */
-            scp_report(s, auth, false);
+            /* 503 or 429: the producer refuses for now; the next candidate is tried, the answer is kept if there is none. A producer that is busy is not a producer that is broken: only 503 counts against it */
+            if (f.r.status != 429)
+                scp_report(s, auth, false);
             g5c_counter_inc(s->c_attempt[A_RETRIED]);
             if (i + 1 >= list.n || tried >= cfg->attempts) {
                 relay(s, resp, &f, cand, by_scp, requested);
@@ -427,6 +430,15 @@ void scp_proxy(void *ctx, const g5c_req *req, g5c_resp *resp)
             continue;
         }
         /* no answer */
+        if (f.rc == G5C_SBI_E_OVERLOAD) { /* not sent: this producer asked its consumers to back off (TS 29.500 6.4); another one may take the request */
+            overloaded++;
+            g5c_counter_inc(s->c_attempt[A_RETRIED]);
+            free(auth);
+            if (to_next)
+                break;
+            continue;
+        }
+        hard_fail = true;
         scp_report(s, to_next ? "next-hop" : auth, false);
         if (cache_key != NULL)
             scp_cache_forget(s, cache_key);
@@ -443,7 +455,11 @@ void scp_proxy(void *ctx, const g5c_req *req, g5c_resp *resp)
         if (to_next)
             break;
     }
-    if (!done) {
+    if (!done && overloaded > 0 && !hard_fail) { /* every candidate is asking for relief: the consumer is told the same, not that the producers are gone */
+        g5c_counter_inc(s->c_attempt[A_FAILED]);
+        scp_problem(s, resp, 429, "TOO_MANY_REQUESTS", "every producer of the service asked its consumers to back off", NULL);
+        g5c_resp_header(resp, "retry-after", "1");
+    } else if (!done) {
         g5c_counter_inc(s->c_attempt[A_FAILED]);
         scp_problem(s, resp, 504, "TARGET_NF_NOT_REACHABLE", "neither the target NF nor an alternative is reachable", NULL);
     }

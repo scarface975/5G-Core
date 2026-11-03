@@ -707,11 +707,59 @@ static void cfg_free(amf_cfg *c)
     free(c->state_file);
 }
 
+/* `overload: { registrations_per_s, per_gnb_per_s, burst_s, t3346_s }` into cf (NULL: off) */
+static int parse_overload(const g5c_json *ov, amf_cfg *cf, char *err, size_t cap)
+{
+    static const char *const k_ov[] = {"registrations_per_s", "per_gnb_per_s", "burst_s", "t3346_s", NULL};
+    cf->ov_regs_per_s = cf->ov_gnb_regs_per_s = 0;
+    cf->ov_burst_s = 1;
+    cf->ov_t3346 = 30;
+    if (ov == NULL)
+        return 0;
+    if (!g5c_json_is(ov, G5C_J_OBJECT) || g5c_json_check_keys(ov, k_ov, "amf.overload", err, cap) != 0) {
+        if (err[0] == 0)
+            snprintf(err, cap, "invalid config: `amf.overload` must be a mapping");
+        return -1;
+    }
+    if (get_uint(ov, "registrations_per_s", 1, 1000000, &cf->ov_regs_per_s, "amf.overload", err, cap) != 0 ||
+        get_uint(ov, "per_gnb_per_s", 1, 1000000, &cf->ov_gnb_regs_per_s, "amf.overload", err, cap) != 0 ||
+        get_uint(ov, "burst_s", 1, 60, &cf->ov_burst_s, "amf.overload", err, cap) != 0 ||
+        get_uint(ov, "t3346_s", 2, 11160, &cf->ov_t3346, "amf.overload", err, cap) != 0)
+        return -1;
+    if (cf->ov_regs_per_s == 0 && cf->ov_gnb_regs_per_s == 0) {
+        snprintf(err, cap, "invalid config: `amf.overload` needs `registrations_per_s` or `per_gnb_per_s`");
+        return -1;
+    }
+    return 0;
+}
+
+/* configuration reload of `amf.overload`: the new limits apply from the next registration, with full buckets */
+static int amf_reload_overload(void *ctx, const g5c_json *from, const g5c_json *to, char *err, size_t cap)
+{
+    amf *a = ctx;
+    amf_cfg tmp;
+    (void)from;
+    memset(&tmp, 0, sizeof tmp);
+    if (parse_overload(to, &tmp, err, cap) != 0)
+        return -1;
+    pthread_mutex_lock(&a->tmu);
+    a->cfg.ov_regs_per_s = tmp.ov_regs_per_s;
+    a->cfg.ov_gnb_regs_per_s = tmp.ov_gnb_regs_per_s;
+    a->cfg.ov_burst_s = tmp.ov_burst_s;
+    a->cfg.ov_t3346 = tmp.ov_t3346;
+    a->ov_tokens = a->ov_last = 0;
+    for (size_t i = 0; i < AMF_MAX_GNB; i++)
+        a->gnbs[i].ov_tokens = a->gnbs[i].ov_last = 0;
+    pthread_mutex_unlock(&a->tmu);
+    G5C_LOGI(AMF_LOG, "amf.overload is now %u/s for the AMF, %u/s for each gNB", tmp.ov_regs_per_s, tmp.ov_gnb_regs_per_s);
+    return 0;
+}
+
 amf *amf_from_config(const g5c_json *root, g5c_nf *nf, char *err, size_t cap)
 {
     static const char *const k_amf[] = {"name", "guami", "ngap", "capacity", "tais", "slices", "security", "ausf", "udm", "pcf", "smf", "nssf", "default_dnn",
                                         "network_name", "timers", "paging_tries", "workers", "self_uri", "state_file", "reachable_grace",
-                                        "max_unauthenticated", "inject", NULL};
+                                        "max_unauthenticated", "inject", "overload", NULL};
     static const char *const k_guami[] = {"region", "set", "pointer", NULL};
     static const char *const k_ngap[] = {"address", "port", NULL};
     static const char *const k_sec[] = {"integrity", "ciphering", NULL};
@@ -974,6 +1022,9 @@ amf *amf_from_config(const g5c_json *root, g5c_nf *nf, char *err, size_t cap)
         get_uint(c, "max_unauthenticated", 1, 1000000, &cf->unauth_ue_max, "amf", err, cap) != 0)
         goto fail;
     (void)u;
+    if (parse_overload(g5c_json_get(c, "overload"), cf, err, cap) != 0)
+        goto fail;
+    g5c_nf_on_reload(nf, "amf.overload", amf_reload_overload, a);
     if (g5c_json_get(c, "inject") != NULL) { /* `inject: { registration_reject: [{ supi: imsi-0010100, cause: 11 }], accept_delay_ms */
         static const char *const k_inj[] = {"registration_reject", "accept_delay_ms", NULL}, *const k_rej[] = {"supi", "cause", NULL};
         const g5c_json *inj = g5c_json_get(c, "inject"), *rl = g5c_json_get(inj, "registration_reject");

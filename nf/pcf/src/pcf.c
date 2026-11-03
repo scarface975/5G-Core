@@ -66,6 +66,7 @@ void pcf_destroy(pcf *p)
     pcf_policy_free(&p->cfg);
     free(p->udr);
     g5c_disc_free(p->udr_disc);
+    g5c_authz_free(p->authz);
     if (p->admin_token) {
         OPENSSL_cleanse(p->admin_token, strlen(p->admin_token));
         free(p->admin_token);
@@ -227,6 +228,14 @@ pcf *pcf_from_config(const g5c_json *cfg, g5c_nf *nf, char *err, size_t errcap)
         pcf_destroy(p);
         free(p);
         return NULL;
+    }
+    if (g5c_json_get_str(cfg, "admin_tokens_file") != NULL) { /* roles and tenants; the single token above stays the principal "admin" */
+        p->authz = g5c_authz_new(g5c_json_get_str(cfg, "admin_tokens_file"), p->admin_token, err, errcap);
+        if (p->authz == NULL) {
+            pcf_destroy(p);
+            free(p);
+            return NULL;
+        }
     }
     return p;
 }

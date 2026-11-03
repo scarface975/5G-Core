@@ -88,6 +88,22 @@ static void test_builders(void)
     g5c_bytes_free(&b);
 }
 
+/* Registration reject with the back-off timer (TS 24.501 8.2.9): cause #22 and T3346 */
+static void test_reg_reject_t3346(void)
+{
+    g5c_bytes b;
+    g5c_bytes_init(&b);
+    TK_ASSERT(nm_reg_reject_t3346(22, 60, &b) == 0);
+    TK_ASSERT(b.len == 7 && b.data[2] == 0x44 && b.data[3] == 22 && b.data[4] == 0x5f && b.data[5] == 1 && b.data[6] == 30); /* 60 s: units of 2 s */
+    g5c_bytes_free(&b);
+    g5c_bytes_init(&b);
+    TK_ASSERT(nm_reg_reject_t3346(22, 600, &b) == 0 && b.data[6] == (1 << 5 | 10)); /* 10 minutes */
+    g5c_bytes_free(&b);
+    g5c_bytes_init(&b);
+    TK_ASSERT(nm_reg_reject_t3346(11, 0, &b) == 0 && b.len == 4); /* no timer */
+    g5c_bytes_free(&b);
+}
+
 static void test_registration_accept(void)
 {
     nm_regacc ra;
@@ -429,6 +445,16 @@ static void test_config(void)
     amf_destroy(a);
     g5c_nf_free(nf);
 
+    {   /* amf.overload */
+        static const char y[] = "name: a\nplmn: { mcc: '001', mnc: '01' }\nsbi: { address: 127.0.0.1, port: 1 }\n"
+                                "amf: { overload: { registrations_per_s: 50, per_gnb_per_s: 20, burst_s: 3, t3346_s: 120 }, ausf: { uri: 'http://a:1' }, udm: { uri: 'http://u:1' }, smf: { uri: 'http://s:1' } }\n";
+        nf = NULL;
+        a = load(y, err, sizeof err, &nf);
+        TK_ASSERT(a != NULL && a->cfg.ov_regs_per_s == 50 && a->cfg.ov_gnb_regs_per_s == 20 && a->cfg.ov_burst_s == 3 && a->cfg.ov_t3346 == 120);
+        amf_destroy(a);
+        g5c_nf_free(nf);
+    }
+
     /* every one of these must be refused, with the setting named */
     {
         static const char *const bad[][2] = {
@@ -437,6 +463,11 @@ static void test_config(void)
             {"amf.tais", "amf: { tais: [], ausf: { uri: 'http://a:1' }, udm: { uri: 'http://u:1' }, smf: { uri: 'http://s:1' } }"},
             {"required", "amf: { ausf: { uri: 'http://a:1' } }"},
             {"amf.timers.t3560", "amf: { timers: { t3560: 99999 }, ausf: { uri: 'http://a:1' }, udm: { uri: 'http://u:1' }, smf: { uri: 'http://s:1' } }"},
+            {"needs `registrations_per_s` or `per_gnb_per_s`", "amf: { overload: { burst_s: 2 }, ausf: { uri: 'http://a:1' }, udm: { uri: 'http://u:1' }, smf: { uri: 'http://s:1' } }"},
+            {"amf.overload.registrations_per_s", "amf: { overload: { registrations_per_s: 0 }, ausf: { uri: 'http://a:1' }, udm: { uri: 'http://u:1' }, smf: { uri: 'http://s:1' } }"},
+            {"amf.overload.t3346_s", "amf: { overload: { per_gnb_per_s: 5, t3346_s: 1 }, ausf: { uri: 'http://a:1' }, udm: { uri: 'http://u:1' }, smf: { uri: 'http://s:1' } }"},
+            {"amf.overload", "amf: { overload: { per_gnb_per_s: 5, surprise: 1 }, ausf: { uri: 'http://a:1' }, udm: { uri: 'http://u:1' }, smf: { uri: 'http://s:1' } }"},
+            {"must be a mapping", "amf: { overload: 7, ausf: { uri: 'http://a:1' }, udm: { uri: 'http://u:1' }, smf: { uri: 'http://s:1' } }"},
         };
         for (size_t i = 0; i < sizeof bad / sizeof bad[0]; i++) {
             char y[900];
@@ -457,6 +488,7 @@ int main(void)
     test_gprs_timers();
     test_builders();
     test_registration_accept();
+    test_reg_reject_t3346();
     test_security();
     test_algorithm_selection();
     test_maps();

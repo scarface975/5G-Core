@@ -733,6 +733,24 @@ load_env() {
          G5C_LOAD_SMF_SBI="$(sbi_of smf)" G5C_LOAD_UPF_SBI="$(sbi_of upf)" G5C_LOAD_CHECK_MEM=0 # the load process is not what is measured
 }
 
+# reload FUNCTION [FROM TO]: replace the text FROM by TO in the function's configuration (when given), send it SIGHUP and print the line of the log that says what became of the configuration
+cmd_reload() {
+  local nf="${1:?function}" from="${2:-}" to="${3:-}" f="$RUN/conf/${1}.yaml" log="$RUN/log/${1}.log" before pid i
+  [ -f "$f" ] || { echo "reload: no configuration for $nf in $RUN/conf" >&2; return 1; }
+  if [ -n "$from" ]; then
+    grep -qF -- "$from" "$f" || { echo "reload: '$from' is not in $f" >&2; return 1; }
+    python3 -c 'import sys; p, a, b = sys.argv[1:4]; t = open(p).read(); open(p, "w").write(t.replace(a, b, 1))' "$f" "$from" "$to" || return 1
+  fi
+  pid="$(pid_of "$nf")"; [ -n "$pid" ] || { echo "reload: $nf is not running" >&2; return 1; }
+  before="$(grep -c 'SIGHUP: configuration' "$log")"
+  kill -HUP "$pid" || return 1
+  for i in $(seq 1 100); do
+    [ "$(grep -c 'SIGHUP: configuration' "$log")" -gt "$before" ] && break
+    sleep 0.1
+  done
+  grep 'SIGHUP: configuration' "$log" | tail -1
+}
+
 do_load() {
   local ues="${1:-200}" gnbs="${2:-16}" waves="${3:-1}"
   load_env
@@ -740,7 +758,7 @@ do_load() {
   G5C_LOAD_UES="$ues" G5C_LOAD_GNBS="$gnbs" G5C_LOAD_WAVES="$waves" G5C_LOAD_WAVE_HOOK="$0 rss" "$LOAD" >&2
   local rc=$?
   echo "RSS after:  $(cmd_rss)" >&2
-  if [ "${G5C_AMF_NSSF:-1}" = 1 ]; then
+  if [ "${G5C_AMF_NSSF:-1}" = 1 ] && [ -z "${G5C_LOAD_STORM_SECONDS:-}" ]; then # a storm leaves the admitted UEs unfinished: nothing reaches the NSSF
     local nok nun
     nok="$(gauge "$(sbi_of amf)" 'g5c_amf_nssf_selections_total{result="ok"}')"; nun="$(gauge "$(sbi_of amf)" 'g5c_amf_nssf_selections_total{result="unavailable"}')"
     echo "AMF slice selections by the NSSF: ok=${nok:-0} unavailable=${nun:-0}" >&2
@@ -874,6 +892,7 @@ case "${1:-}" in
   run) shift; nf="${1:?nf name}"; gen_conf_once; exec "$(bin_of "$nf")" "$RUN/conf/$nf.yaml";;
   start) shift; start_nf "${1:?nf name}";;
   restart) shift; stop_nf "${1:?nf name}"; start_nf "$1";;
+  reload) shift; cmd_reload "$@";;
   kill) shift; kill -9 "$(cat "$(pidfile "${1:?nf name}")")"; rm -f "$(pidfile "$1")";;
   ns) shift; cmd_ns "$@";;
   *) sed -n 2,22p "$0"; exit 2;;

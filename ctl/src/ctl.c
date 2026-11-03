@@ -1,13 +1,14 @@
 /* SPDX-License-Identifier: LicenseRef-Proprietary */
 /* g5c-ctl: subscriber provisioning (UDM) and policy / session operations (PCF) over their /admin/v1 APIs.
  *
- *   g5c-ctl [--udm URL] [--pcf URL] [--token-file FILE] <command>
+ *   g5c-ctl [--udm URL] [--pcf URL] [--url URL] [--token-file FILE] <command>
  *     subscriber add --supi S --k HEX (--op HEX | --opc HEX) [--amf HEX] [--sqn HEX] [--slice SST[:SD]]... [--dnn NAME]...
  *     subscriber add --json FILE|-          (the raw /admin/v1/subscribers body)
  *     subscriber bulk FILE|-                (a JSON array of subscribers, up to 1000: /admin/v1/subscribers-bulk)
  *     subscriber get SUPI | list | delete SUPI
  *     policy get SUPI | delete SUPI | put SUPI FILE|-   (JSON or YAML policy document)
  *     session list | terminate SMPOLICYID
+ *     reload [--dry-run | status]           read the configuration file of the function at --url (G5C_URL) again: what is valid is applied, the report says what and what needs a restart
  *
  * The admin token is read from --token-file or G5C_ADMIN_TOKEN; it is never printed. */
 #define _DEFAULT_SOURCE
@@ -29,6 +30,7 @@ typedef struct {
     char *token;
     FILE *out, *err;
     g5c_client *client;
+    const char *url; /* any function with a reload token: --url / G5C_URL */
 } ctl;
 
 static int usage(ctl *c, const char *why)
@@ -41,7 +43,8 @@ static int usage(ctl *c, const char *why)
           "  subscriber bulk FILE|-          (a JSON array of up to 1000 subscriber records)\n"
           "  subscriber get SUPI | list | delete SUPI\n"
           "  policy get SUPI | delete SUPI | put SUPI FILE|-\n"
-          "  session list | terminate SMPOLICYID\n",
+          "  session list | terminate SMPOLICYID\n"
+          "  reload [--dry-run | status]     (the function at --url or G5C_URL)\n",
           c->err);
     return RC_USAGE;
 }
@@ -259,10 +262,23 @@ static int cmd_session(ctl *c, int argc, char **argv)
     return usage(c, "unknown session command");
 }
 
+static int cmd_reload(ctl *c, int argc, char **argv)
+{
+    if (c->url == NULL)
+        return usage(c, "reload: --url (or G5C_URL) names the function");
+    if (argc == 0)
+        return call(c, "POST", c->url, "/admin/v1/reload", NULL);
+    if (argc == 1 && strcmp(argv[0], "--dry-run") == 0)
+        return call(c, "POST", c->url, "/admin/v1/reload?dry-run=true", NULL);
+    if (argc == 1 && strcmp(argv[0], "status") == 0)
+        return call(c, "GET", c->url, "/admin/v1/reload", NULL);
+    return usage(c, "unknown reload command");
+}
+
 int g5c_ctl_main(int argc, char **argv, FILE *out, FILE *err)
 {
     ctl c = {getenv("G5C_UDM_URL") ? getenv("G5C_UDM_URL") : "http://127.0.0.1:7773",
-             getenv("G5C_PCF_URL") ? getenv("G5C_PCF_URL") : "http://127.0.0.1:7777", NULL, out, err, NULL};
+             getenv("G5C_PCF_URL") ? getenv("G5C_PCF_URL") : "http://127.0.0.1:7777", NULL, out, err, NULL, getenv("G5C_URL")};
     const char *token_file = NULL;
     char ferr[200], tlserr[200];
     int i = 1, rc;
@@ -271,6 +287,8 @@ int g5c_ctl_main(int argc, char **argv, FILE *out, FILE *err)
             c.udm = argv[i + 1];
         else if (strcmp(argv[i], "--pcf") == 0)
             c.pcf = argv[i + 1];
+        else if (strcmp(argv[i], "--url") == 0)
+            c.url = argv[i + 1];
         else if (strcmp(argv[i], "--token-file") == 0)
             token_file = argv[i + 1];
         else
@@ -294,6 +312,8 @@ int g5c_ctl_main(int argc, char **argv, FILE *out, FILE *err)
         rc = cmd_policy(&c, argc - i - 1, argv + i + 1);
     else if (strcmp(argv[i], "session") == 0)
         rc = cmd_session(&c, argc - i - 1, argv + i + 1);
+    else if (strcmp(argv[i], "reload") == 0)
+        rc = cmd_reload(&c, argc - i - 1, argv + i + 1);
     else
         rc = usage(&c, "unknown command");
     g5c_client_free(c.client);

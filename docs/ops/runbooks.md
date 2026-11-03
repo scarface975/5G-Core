@@ -48,6 +48,19 @@ re-establish their sessions on their next service request or when they register 
 `G5cNoGnbConnected`. The gNB's NG Setup did not reach the AMF: its `amf_addr` must be the AMF's `amf.ngap.address` (SCTP port 38412), its PLMN and TAC in the AMF's `tais`, and the
 address reachable. The AMF log shows `N2 association ... accepted` and `NG Setup from ...`, or the reject cause (`unknown-PLMN` is a TAC / PLMN mismatch).
 
+## Configuration reload
+`kill -HUP <pid>` (or `g5c-ctl --url <function> reload`). The log and `GET /admin/v1/reload` give the report. `rejected`: the file is invalid (the message names the setting) and nothing changed. `rolled-back`: a section
+could not be applied or the function suffered after the change (not ready, or three 5xx in the watch time); the old values are back and the report says why. `restart-required` / `restartRequired`: those settings
+only take effect at the next start (`systemctl restart g5c@<function>`); `--dry-run` shows the plan before anything happens. A reload that is `applied` with a list of `restartRequired` entries is partial: the file
+and the running function differ until the restart.
+
+## Overload and rate control
+`G5cRegistrationCongestion` / `G5cSbiRateLimited`. The AMF turns registrations away with 5GMM cause #22 and the back-off timer T3346 when `amf.overload` (`registrations_per_s`, `per_gnb_per_s`) is exceeded: `g5c_amf_registrations_total{result="congestion"}`.
+A storm from one gNB shows in the AMF log (`the registration rate is above amf.overload`); a rate that is too low for real traffic shows on every gNB at once (raise `registrations_per_s`, or find the cause of the
+surge: a gNB or a cell that restarted brings all its UEs back together). On the SBI a function with `overload.rate_per_source` answers a client above its rate with 429, `Retry-After` and `3gpp-Sbi-Oci`
+(`g5c_overload_rejected_total`); the clients of this core stop sending to it for that time (`g5c_sbi_client_backoff_total`), the SCP takes the request to another instance or says 429 itself. Through an SCP all consumers
+share the SCP's address, so a limit per source is a limit for the SCP: size it for the sum, or limit at the producers' own consumers. `3gpp-Sbi-Lci` (with `overload.capacity_rps`) shows how full a function is.
+
 ## Capacity
 `G5cUeAddressPoolHigh` / `G5cUpfDroppedPackets`. The UE pool is the `dnns[].ipv4_pool` of the SMF; a larger pool or a second UPF with its own pool. UPF drops: `g5c_upf_dropped_packets_total{reason}`.
 

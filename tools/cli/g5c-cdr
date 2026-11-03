@@ -1,0 +1,197 @@
+#!/usr/bin/env python3
+"""g5c-cdr: usage, quality and roaming reports from the charging records of the SMF (`smf.cdr` file, one JSON record per released PDU session; backlog C-08).
+
+  g5c-cdr report CDRFILE... [--home 00101] [--by dnn|slice|upf|hour|day|supi] [--from ISO] [--to ISO] [--top 10] [--json] [--csv OUT]
+  g5c-cdr export CDRFILE... --csv OUT [--from ISO] [--to ISO]        every record as one CSV line, for the operator's own tools
+
+The report: sessions, subscribers, volume, session length, throughput; the same per DNN, slice, UPF, hour, day or subscriber; why sessions ended; the share of inbound roamers when a home PLMN is
+given (SUPIs whose MCC+MNC differ); the heaviest subscribers; and the quality of the data itself: records missing from the sequence of an SMF instance, duplicates, and sessions with no usage
+measurement. Exit code 1 when the data quality checks find a problem. Runs from cron: --from / --to bound the period, the output goes to a file."""
+import argparse
+import csv
+import json
+import sys
+from collections import Counter, defaultdict
+from datetime import datetime, timezone
+
+FIELDS = ["recordSequenceNumber", "smfInstanceId", "supi", "pduSessionId", "dnn", "snssai", "ueIpv4Address", "upf", "startTime", "endTime", "duration", "usageReported", "uplinkOctets", "downlinkOctets",
+          "totalOctets", "uplinkPackets", "downlinkPackets", "closeCause"]
+
+
+def when(s):
+    return datetime.strptime(s, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+
+
+def snssai_str(r):
+    s = r.get("snssai") or {}
+    return "%s-%s" % (s.get("sst", "?"), s["sd"]) if s.get("sd") else str(s.get("sst", "?"))
+
+
+def load(paths, t_from=None, t_to=None):
+    recs, bad = [], 0
+    for p in paths:
+        with open(p, errors="replace") as f:
+            for ln in f:
+                ln = ln.strip()
+                if not ln:
+                    continue
+                try:
+                    r = json.loads(ln)
+                    r["_start"] = when(r["startTime"])
+                    r["_end"] = when(r["endTime"])
+                except (ValueError, KeyError):
+                    bad += 1
+                    continue
+                if (t_from and r["_end"] < t_from) or (t_to and r["_end"] >= t_to):
+                    continue
+                recs.append(r)
+    return recs, bad
+
+
+def pct(v, p):
+    v = sorted(v)
+    return v[int((len(v) - 1) * p)] if v else 0
+
+
+def key_of(r, by):
+    if by == "dnn":
+        return r.get("dnn", "?")
+    if by == "slice":
+        return snssai_str(r)
+    if by == "upf":
+        return r.get("upf", "?")
+    if by == "hour":
+        return r["_end"].strftime("%Y-%m-%d %H:00")
+    if by == "day":
+        return r["_end"].strftime("%Y-%m-%d")
+    return r.get("supi", "?")
+
+
+def plmn_of(supi):
+    d = supi[5:]
+    return d[:5] if len(d) >= 5 else ""
+
+
+def summary(rs):
+    dur = [r.get("duration", 0) for r in rs]
+    ul = sum(r.get("uplinkOctets", 0) for r in rs)
+    dl = sum(r.get("downlinkOctets", 0) for r in rs)
+    secs = sum(dur)
+    return {"sessions": len(rs), "subscribers": len({r.get("supi") for r in rs}), "uplinkOctets": ul, "downlinkOctets": dl, "totalOctets": ul + dl, "sessionSeconds": secs,
+            "durationAvg": round(secs / len(rs), 1) if rs else 0, "durationP50": pct(dur, 0.5), "durationP95": pct(dur, 0.95),
+            "avgThroughputKbps": round((ul + dl) * 8 / 1000 / secs, 1) if secs else 0.0}
+
+
+def quality(recs, bad):
+    by_inst = defaultdict(list)
+    for r in recs:
+        by_inst[r.get("smfInstanceId", "?")].append(r.get("recordSequenceNumber"))
+    missing, dup = 0, 0
+    for inst, seqs in by_inst.items():
+        seqs = sorted(s for s in seqs if isinstance(s, int))
+        dup += len(seqs) - len(set(seqs))
+        u = sorted(set(seqs))
+        if u:
+            missing += (u[-1] - u[0] + 1) - len(u)
+    unmeasured = sum(1 for r in recs if not r.get("usageReported", False))
+    return {"unreadableLines": bad, "missingRecords": missing, "duplicateRecords": dup, "withoutUsageMeasurement": unmeasured,
+            "zeroTrafficSessions": sum(1 for r in recs if r.get("totalOctets", 0) == 0), "shortSessions": sum(1 for r in recs if r.get("duration", 0) < 5)}
+
+
+def report(recs, bad, by, home, top):
+    rep = {"period": {"from": min((r["_start"] for r in recs), default=None), "to": max((r["_end"] for r in recs), default=None)}, "totals": summary(recs)}
+    rep["period"] = {k: v.strftime("%Y-%m-%dT%H:%M:%SZ") if v else None for k, v in rep["period"].items()}
+    groups = defaultdict(list)
+    for r in recs:
+        groups[key_of(r, by)].append(r)
+    rep["by"] = by
+    rep["groups"] = {k: summary(v) for k, v in sorted(groups.items())}
+    rep["closeCauses"] = dict(Counter(r.get("closeCause", "?") for r in recs).most_common())
+    if home:
+        roam = [r for r in recs if plmn_of(r.get("supi", "")) != home]
+        rep["roaming"] = {"homePlmn": home, "inboundSessions": len(roam), "inboundSubscribers": len({r["supi"] for r in roam}),
+                          "inboundShare": round(100.0 * len(roam) / len(recs), 1) if recs else 0.0, "byPlmn": dict(Counter(plmn_of(r.get("supi", "")) for r in roam).most_common())}
+    vol = Counter()
+    for r in recs:
+        vol[r.get("supi", "?")] += r.get("totalOctets", 0)
+    rep["topSubscribers"] = [{"supi": s, "totalOctets": v} for s, v in vol.most_common(top)]
+    rep["quality"] = quality(recs, bad)
+    return rep
+
+
+def human(n):
+    for u in ("B", "kB", "MB", "GB", "TB"):
+        if n < 1000 or u == "TB":
+            return "%d %s" % (n, u) if u == "B" else "%.1f %s" % (n, u)
+        n /= 1000.0
+
+
+def render(rep):
+    t = rep["totals"]
+    out = ["period %s .. %s" % (rep["period"]["from"], rep["period"]["to"]),
+           "%d sessions of %d subscribers, %s up / %s down, %d s of sessions (avg %.1f, p50 %d, p95 %d), %.1f kbit/s average" % (t["sessions"], t["subscribers"], human(t["uplinkOctets"]), human(t["downlinkOctets"]),
+                                                                                                                           t["sessionSeconds"], t["durationAvg"], t["durationP50"], t["durationP95"], t["avgThroughputKbps"]),
+           "", "by %s:" % rep["by"]]
+    out.append("  %-26s %9s %6s %12s %9s" % (rep["by"], "sessions", "subs", "volume", "avg s"))
+    for k, g in rep["groups"].items():
+        out.append("  %-26s %9d %6d %12s %9.1f" % (k[:26], g["sessions"], g["subscribers"], human(g["totalOctets"]), g["durationAvg"]))
+    out += ["", "why sessions ended:"] + ["  %6d  %s" % (n, c) for c, n in rep["closeCauses"].items()]
+    if "roaming" in rep:
+        r = rep["roaming"]
+        out += ["", "roaming (home PLMN %s): %d sessions of %d subscribers from other networks (%.1f %%)" % (r["homePlmn"], r["inboundSessions"], r["inboundSubscribers"], r["inboundShare"])]
+        out += ["  %s: %d sessions" % (p, n) for p, n in r["byPlmn"].items()]
+    out += ["", "heaviest subscribers:"] + ["  %-24s %s" % (x["supi"], human(x["totalOctets"])) for x in rep["topSubscribers"]]
+    q = rep["quality"]
+    out += ["", "data quality: %d unreadable line(s), %d missing record(s), %d duplicate(s), %d session(s) without a usage measurement; %d zero-traffic, %d shorter than 5 s" %
+            (q["unreadableLines"], q["missingRecords"], q["duplicateRecords"], q["withoutUsageMeasurement"], q["zeroTrafficSessions"], q["shortSessions"])]
+    return "\n".join(out)
+
+
+def to_csv(path, recs):
+    with open(path, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(FIELDS)
+        for r in recs:
+            w.writerow([snssai_str(r) if k == "snssai" else r.get(k, "") for k in FIELDS])
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(prog="g5c-cdr", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    for name in ("report", "export"):
+        s = sub.add_parser(name)
+        s.add_argument("files", nargs="+")
+        s.add_argument("--from", dest="t_from")
+        s.add_argument("--to", dest="t_to")
+        s.add_argument("--csv")
+        if name == "report":
+            s.add_argument("--home")
+            s.add_argument("--by", default="dnn", choices=["dnn", "slice", "upf", "hour", "day", "supi"])
+            s.add_argument("--top", type=int, default=10)
+            s.add_argument("--json", action="store_true")
+    a = ap.parse_args(argv)
+    try:
+        t_from = when(a.t_from) if a.t_from else None
+        t_to = when(a.t_to) if a.t_to else None
+    except ValueError:
+        ap.error("--from and --to are like 2026-11-03T00:00:00Z")
+    recs, bad = load(a.files, t_from, t_to)
+    if a.cmd == "export":
+        if not a.csv:
+            ap.error("export needs --csv OUT")
+        to_csv(a.csv, recs)
+        print("g5c-cdr: %d records written to %s" % (len(recs), a.csv))
+        return 0
+    if not recs:
+        print("g5c-cdr: no records in the period")
+        return 0
+    rep = report(recs, bad, a.by, a.home, a.top)
+    if a.csv:
+        to_csv(a.csv, recs)
+    print(json.dumps(rep, indent=2) if a.json else render(rep))
+    q = rep["quality"]
+    return 1 if q["missingRecords"] or q["duplicateRecords"] or q["unreadableLines"] else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

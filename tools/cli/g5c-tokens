@@ -1,0 +1,113 @@
+#!/usr/bin/env python3
+"""g5c-tokens: the admin tokens file with roles and tenants (`admin_tokens_file` of the UDM and PCF; backlog F-03).
+
+  g5c-tokens FILE new NAME --roles read,provision [--tenant T]      makes a token, prints it ONCE, stores only its SHA-256
+  g5c-tokens FILE tenant T --prefix imsi-0010199 [--prefix ...]     defines a tenant: the SUPI ranges it may see and change
+  g5c-tokens FILE list                                               names, roles and tenants (never a token)
+  g5c-tokens FILE revoke NAME                                        removes a token (the functions read the file again when it changes)
+  g5c-tokens hash                                                    the SHA-256 of a token read from standard input (to put a token you made elsewhere into the file)
+
+Roles: read (list and show subscribers, policies, sessions), provision (create, change and delete subscribers), policy (change policies, end sessions), key-admin (re-wrap the credential keys;
+never for a tenant). The file is written with mode 0600, atomically."""
+import argparse
+import hashlib
+import json
+import os
+import re
+import secrets
+import sys
+import tempfile
+
+ROLES = ("read", "provision", "policy", "key-admin")
+NAME = re.compile(r"^[A-Za-z0-9._-]{1,47}$")
+PREFIX = re.compile(r"^imsi-[0-9]{4,15}$")
+
+
+def load(path):
+    if not os.path.exists(path):
+        return {"tokens": [], "tenants": {}}
+    with open(path) as f:
+        doc = json.load(f)
+    doc.setdefault("tokens", [])
+    doc.setdefault("tenants", {})
+    return doc
+
+
+def save(path, doc):
+    d = os.path.dirname(os.path.abspath(path))
+    fd, tmp = tempfile.mkstemp(dir=d, prefix=".tokens-")
+    with os.fdopen(fd, "w") as f:
+        json.dump(doc, f, indent=2, sort_keys=True)
+        f.write("\n")
+    os.chmod(tmp, 0o600)
+    os.replace(tmp, path)
+
+
+def sha(token):
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(prog="g5c-tokens", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("file")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    n = sub.add_parser("new")
+    n.add_argument("name")
+    n.add_argument("--roles", required=True)
+    n.add_argument("--tenant")
+    t = sub.add_parser("tenant")
+    t.add_argument("name")
+    t.add_argument("--prefix", action="append", required=True)
+    sub.add_parser("list")
+    r = sub.add_parser("revoke")
+    r.add_argument("name")
+    argv = sys.argv[1:] if argv is None else argv
+    if argv[:1] == ["hash"]:
+        print(sha(sys.stdin.read().strip()))
+        return 0
+    a = ap.parse_args(argv)
+    doc = load(a.file)
+    if a.cmd == "new":
+        roles = [x for x in a.roles.split(",") if x]
+        if not NAME.match(a.name):
+            ap.error("the name is letters, digits, . _ - (up to 47)")
+        if not roles or any(x not in ROLES for x in roles):
+            ap.error("roles are %s" % ", ".join(ROLES))
+        if any(e["name"] == a.name for e in doc["tokens"]):
+            ap.error("a token named %s exists" % a.name)
+        if a.tenant and a.tenant not in doc["tenants"]:
+            ap.error("define the tenant first: g5c-tokens %s tenant %s --prefix imsi-..." % (a.file, a.tenant))
+        if a.tenant and "key-admin" in roles:
+            ap.error("key-admin affects every subscriber and cannot belong to a tenant")
+        token = "g5c_" + secrets.token_urlsafe(32)
+        entry = {"name": a.name, "sha256": sha(token), "roles": sorted(set(roles), key=ROLES.index)}
+        if a.tenant:
+            entry["tenant"] = a.tenant
+        doc["tokens"].append(entry)
+        save(a.file, doc)
+        print(token)
+        print("g5c-tokens: %s stored (hash only); this is the only time the token is shown" % a.name, file=sys.stderr)
+    elif a.cmd == "tenant":
+        if not NAME.match(a.name):
+            ap.error("the name is letters, digits, . _ -")
+        if any(not PREFIX.match(p) for p in a.prefix):
+            ap.error("a prefix is imsi- and 4 to 15 digits")
+        doc["tenants"][a.name] = {"supi_prefixes": sorted(set(a.prefix))}
+        save(a.file, doc)
+    elif a.cmd == "list":
+        for e in doc["tokens"]:
+            print("%-24s %-28s %s" % (e["name"], ",".join(e["roles"]), ("tenant " + e["tenant"]) if e.get("tenant") else "all subscribers"))
+        for name, ten in sorted(doc["tenants"].items()):
+            print("tenant %-17s %s" % (name, " ".join(ten["supi_prefixes"])))
+    elif a.cmd == "revoke":
+        before = len(doc["tokens"])
+        doc["tokens"] = [e for e in doc["tokens"] if e["name"] != a.name]
+        if len(doc["tokens"]) == before:
+            print("g5c-tokens: no token named %s" % a.name, file=sys.stderr)
+            return 1
+        save(a.file, doc)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

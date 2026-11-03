@@ -63,6 +63,7 @@ typedef struct {
     unsigned workers;
     unsigned reach_grace; /* seconds added to T3512 for the mobile reachable timer */
     unsigned unauth_ue_max; /* connections that have not completed registration */
+    unsigned ov_regs_per_s, ov_gnb_regs_per_s, ov_burst_s, ov_t3346; /* `amf.overload`: registrations admitted per second (all, and per gNB), the burst in seconds, the back-off timer T3346 given to a rejected UE */
     struct {
         char supi[32]; /* prefix */
         uint8_t cause; /* 5GMM cause of the Registration Reject */
@@ -305,6 +306,7 @@ typedef struct {
     amf_tai tas[AMF_MAX_TAI];
     size_t ntas;
     unsigned nconns;
+    double ov_tokens, ov_last; /* the registration bucket of this gNB (amf.overload) */
     uint8_t *rxbuf;
     size_t rxlen;
 } amf_gnb;
@@ -374,6 +376,7 @@ struct amf {
     amf_ue *ues;
     amf_conn *conns;
     size_t nues, nconns, npreauth; /* npreauth: connections that have not (yet) passed authentication */
+    double ov_tokens, ov_last;     /* the registration bucket of the AMF (amf.overload), under tmu */
     uint64_t next_amf_id, next_uid;
     amf_gnb gnbs[AMF_MAX_GNB];
 
@@ -570,6 +573,7 @@ enum {
     MM_CAUSE_TA_NOT_ALLOWED = 12,
     MM_CAUSE_MAC_FAILURE = 20,
     MM_CAUSE_SYNCH_FAILURE = 21,
+    MM_CAUSE_CONGESTION = 22,
     MM_CAUSE_UE_SECURITY_CAP_MISMATCH = 23,
     MM_CAUSE_NO_SLICES_AVAILABLE = 62,
     MM_CAUSE_PAYLOAD_NOT_FORWARDED = 90,

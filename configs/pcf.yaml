@@ -5,6 +5,7 @@ sbi: { address: 0.0.0.0, port: 7777 }
 log: { level: info, json: true }
 nrf: { uri: 'http://nrf:7777' }
 udr: { uri: 'http://udr:7790' }
+# admin_tokens_file: /etc/g5c/keys/admin-tokens.json   # roles and tenants for /admin/v1 (tools/cli/g5c-tokens)
 admin_token_file: /etc/g5c/keys/pcf-admin.token
 policy:
   rfsp: 1

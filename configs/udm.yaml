@@ -8,6 +8,9 @@ sbi:
 log: { level: info, json: true }
 nrf: { uri: 'http://nrf:7777' }
 udr: { uri: 'http://udr:7790' }
+# admin_tokens_file: /etc/g5c/keys/admin-tokens.json   # roles and tenants for /admin/v1 (tools/cli/g5c-tokens); admin_token_file stays the principal `admin`
+# reload: { token_file: /etc/g5c/keys/reload.token, settle_ms: 1000 }  # POST /admin/v1/reload (SIGHUP always reloads); a change is undone if the function suffers within settle_ms
+# suci: { null_scheme: reject }                     # refuse a SUCI sent in clear (scheme 0); default allow (TS 33.501 5.2.5)
 hn_keys:
   - { id: 1, scheme: profile-a, private_key_file: /etc/g5c/keys/hn-1.key }
 master_key_file: /etc/g5c/keys/udm-master.key     # 64 hex chars; encrypts K/OPc at rest in the UDR

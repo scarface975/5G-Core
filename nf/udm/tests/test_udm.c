@@ -888,6 +888,42 @@ static void test_ueau(bool encrypt)
     teardown(&t);
 }
 
+/* suci.null_scheme: reject (TS 33.501 5.2.5): a SUCI in clear is refused, a concealed one and a SUPI on the SBI still work */
+static void test_null_scheme_policy(void)
+{
+    T t;
+    udm_hnkey k = {.id = 1, .profile = G5C_PROFILE_A};
+    uint8_t eph[32], hn_pub[64], msin[16], out[128];
+    size_t pl = 0, ml = 0, ol = 0;
+    char *hex, path[400], supi[32];
+    const char *body = "{\"servingNetworkName\":\"5G:mnc001.mcc001.3gppnetwork.org\"}";
+    const char *clear = "/nudm-ueau/v1/suci-0-001-01-0000-0-0-0000000001/security-information/generate-auth-data";
+    g5c_json *v = NULL;
+    setup(&t, false);
+    memset(k.secret, 0x42, 32);
+    t.u.hn_keys = &k;
+    t.u.nhn_keys = 1;
+    TK_ASSERT(rq(&t, "POST", clear, body, false, &v, NULL) == 200); /* the default accepts it */
+    g5c_json_free(v);
+    t.u.refuse_null_scheme = true;
+    TK_ASSERT(rq(&t, "POST", clear, body, false, &v, NULL) == 403);
+    TK_ASSERT(strcmp(g5c_json_get_str(v, "cause"), "AUTHENTICATION_REJECTED") == 0 && strstr(g5c_json_get_str(v, "detail"), "null protection scheme") != NULL);
+    g5c_json_free(v);
+    TK_ASSERT(rq(&t, "POST", "/nudm-ueau/v1/" SUPI "/security-information/generate-auth-data", body, false, NULL, NULL) == 200); /* a SUPI between functions is not a SUCI */
+    memset(eph, 0x77, 32);
+    TK_ASSERT(g5c_suci_public_key(G5C_PROFILE_A, k.secret, hn_pub, sizeof hn_pub, &pl) == 0);
+    TK_ASSERT(g5c_msin_to_bcd("0000000001", msin, sizeof msin, &ml) == 0);
+    TK_ASSERT(g5c_suci_conceal(G5C_PROFILE_A, hn_pub, pl, eph, msin, ml, out, sizeof out, &ol) == 0);
+    hex = g5c_hex_encode(out, ol);
+    snprintf(path, sizeof path, "/nudm-ueau/v1/suci-0-001-01-0000-1-1-%s/security-information/generate-auth-data", hex);
+    free(hex);
+    TK_ASSERT(rq(&t, "POST", path, body, false, NULL, NULL) == 200); /* a concealed SUCI is not affected */
+    TK_ASSERT(udm_resolve_ex("suci-0-001-01-0000-0-0-0000000001", NULL, 0, false, supi, sizeof supi) == UDM_ID_NULL_SCHEME);
+    t.u.hn_keys = NULL; /* the stack array is not the UDM's to free */
+    t.u.nhn_keys = 0;
+    teardown(&t);
+}
+
 /* EAP-AKA' (TS 33.501 6.1.3.1 step 1 and 2) */
 static void test_ueau_eap(void)
 {
@@ -1046,14 +1082,164 @@ static void test_admin(void)
         unsetenv("G5C_UDM_MASTER_KEY");
         u = udm_from_config(cfg, nf, err, sizeof err);
         TK_ASSERT(u != NULL && u->admin_token != NULL && strcmp(u->admin_token, ADMIN) == 0);
-        unsetenv("G5C_UDM_ADMIN_TOKEN");
         udm_destroy(u);
         free(u);
+        {   /* suci.null_scheme */
+            g5c_json *c1 = J("{\"udr\":{\"uri\":\"http://127.0.0.1:1\"},\"suci\":{\"null_scheme\":\"reject\"}}"), *c2 = J("{\"udr\":{\"uri\":\"http://127.0.0.1:1\"},\"suci\":{\"null_scheme\":\"maybe\"}}"),
+                     *c3 = J("{\"udr\":{\"uri\":\"http://127.0.0.1:1\"},\"suci\":{\"surprise\":1}}");
+            u = udm_from_config(c1, nf, err, sizeof err);
+            TK_ASSERT(u != NULL && u->refuse_null_scheme);
+            udm_destroy(u);
+            free(u);
+            TK_ASSERT(udm_from_config(c2, nf, err, sizeof err) == NULL && strstr(err, "suci.null_scheme") != NULL);
+            TK_ASSERT(udm_from_config(c3, nf, err, sizeof err) == NULL && strstr(err, "suci") != NULL);
+            g5c_json_free(c1);
+            g5c_json_free(c2);
+            g5c_json_free(c3);
+        }
+        unsetenv("G5C_UDM_ADMIN_TOKEN");
         g5c_nf_free(nf);
         g5c_json_free(root);
         g5c_json_free(cfg);
         free(ycfg);
     }
+    teardown(&t);
+}
+
+/* ---- roles and tenants of the admin API (backlog F-03) ---- */
+
+static int rq_as(T *t, const char *method, const char *path, const char *body, const char *token, g5c_json **out)
+{
+    char *url = g5c_xasprintf("%s%s", t->base, path), auth[96], err[160];
+    g5c_kv hdr = {"authorization", auth};
+    g5c_resp r;
+    int st;
+    snprintf(auth, sizeof auth, "Bearer %s", token);
+    TK_ASSERT(g5c_client_request(t->client, method, url, &hdr, 1, G5C_JSON_TYPE, body, body ? strlen(body) : 0, &r, err, sizeof err) == 0);
+    free(url);
+    st = r.status;
+    if (out)
+        *out = g5c_resp_parse_json(&r);
+    g5c_resp_free(&r);
+    return st;
+}
+
+static char *sub_json(const char *supi)
+{
+    return g5c_xasprintf("{\"supi\":\"%s\",\"k\":\"" K_HEX "\",\"op\":\"" OP_HEX "\"}", supi);
+}
+
+static bool list_has_supi(const g5c_json *l, const char *supi)
+{
+    for (size_t i = 0; l != NULL && i < g5c_json_len(l); i++) {
+        const g5c_json *e = g5c_json_at(l, i);
+        const char *s = g5c_json_str(e) != NULL ? g5c_json_str(e) : g5c_json_get_str(e, "supi");
+        if (s != NULL && strcmp(s, supi) == 0)
+            return true;
+    }
+    return false;
+}
+
+static void test_roles_and_tenants(void)
+{
+    T t;
+    char dir[] = "/tmp/g5c-udm-roles-XXXXXX", file[96], err[200], h[4][65], *body;
+    const char *tok[4] = {"noc-token-0123456789ab", "acme-token-0123456789a", "beta-token-0123456789a", "keys-token-0123456789a"};
+    FILE *f;
+    g5c_json *v = NULL;
+    setup(&t, false); /* imsi-001010000000001 exists */
+    TK_ASSERT(mkdtemp(dir) != NULL);
+    snprintf(file, sizeof file, "%s/tokens.json", dir);
+    for (int i = 0; i < 4; i++)
+        g5c_authz_hash(tok[i], h[i]);
+    f = fopen(file, "w");
+    TK_ASSERT(f != NULL);
+    fprintf(f,
+            "{\"tokens\":[{\"name\":\"noc\",\"sha256\":\"%s\",\"roles\":[\"read\"]},"
+            "{\"name\":\"acme\",\"sha256\":\"%s\",\"roles\":[\"read\",\"provision\"],\"tenant\":\"acme\"},"
+            "{\"name\":\"beta\",\"sha256\":\"%s\",\"roles\":[\"read\",\"provision\"],\"tenant\":\"beta\"},"
+            "{\"name\":\"keys\",\"sha256\":\"%s\",\"roles\":[\"key-admin\"]}],"
+            "\"tenants\":{\"acme\":{\"supi_prefixes\":[\"imsi-0010199\"]},\"beta\":{\"supi_prefixes\":[\"imsi-0010288\"]}}}",
+            h[0], h[1], h[2], h[3]);
+    fclose(f);
+    t.u.authz = g5c_authz_new(file, ADMIN, err, sizeof err);
+    TK_ASSERT(t.u.authz != NULL);
+
+    /* nobody, a stranger, a read-only operator */
+    TK_ASSERT(rq_as(&t, "GET", "/admin/v1/subscribers", NULL, "stranger-token-0123456", NULL) == 401);
+    TK_ASSERT(rq(&t, "GET", "/admin/v1/subscribers", NULL, false, NULL, NULL) == 401);
+    TK_ASSERT(rq_as(&t, "GET", "/admin/v1/subscribers", NULL, tok[0], &v) == 200 && list_has_supi(v, SUPI)); /* read sees everything */
+    g5c_json_free(v);
+    body = sub_json("imsi-001019900000001");
+    TK_ASSERT(rq_as(&t, "POST", "/admin/v1/subscribers", body, tok[0], &v) == 403 && strstr(g5c_json_get_str(v, "detail"), "provision") != NULL); /* the answer names the role that is missing */
+    g5c_json_free(v);
+    TK_ASSERT(rq_as(&t, "DELETE", "/admin/v1/subscribers/" SUPI, NULL, tok[0], NULL) == 403);
+    TK_ASSERT(rq_as(&t, "POST", "/admin/v1/subscribers-bulk", "[]", tok[0], NULL) == 403);
+    TK_ASSERT(rq_as(&t, "POST", "/admin/v1/keys/rewrap", NULL, tok[1], NULL) == 403); /* a tenant never re-wraps keys */
+    {
+        int st = rq_as(&t, "POST", "/admin/v1/keys/rewrap", NULL, tok[3], NULL);
+        TK_ASSERT(st != 401 && st != 403); /* key-admin gets through to the handler (which says there is no master key here) */
+    }
+    TK_ASSERT(rq_as(&t, "GET", "/admin/v1/subscribers", NULL, tok[3], NULL) == 403); /* ... and can do nothing else */
+    TK_ASSERT(rq(&t, "GET", "/admin/v1/subscribers", NULL, true, NULL, NULL) == 200); /* the single admin token is still every role */
+    free(body);
+
+    /* a tenant provisions inside its ranges and nowhere else */
+    body = sub_json("imsi-001019900000001");
+    TK_ASSERT(rq_as(&t, "POST", "/admin/v1/subscribers", body, tok[1], NULL) == 201);
+    free(body);
+    body = sub_json("imsi-001028800000001");
+    TK_ASSERT(rq_as(&t, "POST", "/admin/v1/subscribers", body, tok[1], &v) == 403 && strstr(g5c_json_get_str(v, "detail"), "tenant") != NULL);
+    g5c_json_free(v);
+    TK_ASSERT(rq_as(&t, "POST", "/admin/v1/subscribers", body, tok[2], NULL) == 201); /* it is beta's range */
+    free(body);
+    body = sub_json("imsi-001010000000009");
+    TK_ASSERT(rq_as(&t, "POST", "/admin/v1/subscribers", body, tok[1], NULL) == 403 && rq_as(&t, "POST", "/admin/v1/subscribers", body, tok[2], NULL) == 403);
+    free(body);
+
+    /* what is not the tenant's is not there for it: not a 403 that would say it exists */
+    TK_ASSERT(rq_as(&t, "GET", "/admin/v1/subscribers/imsi-001019900000001", NULL, tok[1], NULL) == 200);
+    TK_ASSERT(rq_as(&t, "GET", "/admin/v1/subscribers/imsi-001028800000001", NULL, tok[1], NULL) == 404);
+    TK_ASSERT(rq_as(&t, "GET", "/admin/v1/subscribers/" SUPI, NULL, tok[1], NULL) == 404);
+    TK_ASSERT(rq_as(&t, "GET", "/admin/v1/subscribers/imsi-001028800000001", NULL, tok[0], NULL) == 200); /* the read-only operator sees it */
+    TK_ASSERT(rq_as(&t, "DELETE", "/admin/v1/subscribers/imsi-001028800000001", NULL, tok[1], NULL) == 404);
+    TK_ASSERT(rq_as(&t, "GET", "/admin/v1/subscribers/imsi-001028800000001", NULL, tok[0], NULL) == 200); /* and it is still there */
+
+    /* a tenant lists only its own */
+    TK_ASSERT(rq_as(&t, "GET", "/admin/v1/subscribers", NULL, tok[1], &v) == 200);
+    TK_ASSERT(g5c_json_len(v) == 1 && list_has_supi(v, "imsi-001019900000001"));
+    g5c_json_free(v);
+    TK_ASSERT(rq_as(&t, "GET", "/admin/v1/subscribers", NULL, tok[0], &v) == 200 && g5c_json_len(v) >= 3);
+    g5c_json_free(v);
+
+    /* bulk: each record is judged on its own */
+    TK_ASSERT(rq_as(&t, "POST", "/admin/v1/subscribers-bulk",
+                    "[{\"supi\":\"imsi-001019900000002\",\"k\":\"" K_HEX "\",\"op\":\"" OP_HEX "\"},"
+                    "{\"supi\":\"imsi-001028800000003\",\"k\":\"" K_HEX "\",\"op\":\"" OP_HEX "\"},"
+                    "{\"supi\":\"imsi-001019900000004\",\"k\":\"" K_HEX "\",\"op\":\"" OP_HEX "\"}]",
+                    tok[1], &v) == 200);
+    {
+        int64_t created = 0, failed = 0, s2 = 0;
+        TK_ASSERT(g5c_json_get_int(v, "created", &created) && g5c_json_get_int(v, "failed", &failed) && created == 2 && failed == 1);
+        TK_ASSERT(g5c_json_get_int(g5c_json_at(g5c_json_get(v, "results"), 1), "status", &s2) && s2 == 403);
+    }
+    g5c_json_free(v);
+    TK_ASSERT(rq_as(&t, "GET", "/admin/v1/subscribers/imsi-001028800000003", NULL, tok[0], NULL) == 404); /* the refused one was not created */
+
+    /* a tenant deletes its own */
+    TK_ASSERT(rq_as(&t, "DELETE", "/admin/v1/subscribers/imsi-001019900000002", NULL, tok[1], NULL) == 204);
+
+    /* revoking a token works without a restart */
+    sleep(1);
+    f = fopen(file, "w");
+    TK_ASSERT(f != NULL);
+    fprintf(f, "{\"tokens\":[{\"name\":\"noc\",\"sha256\":\"%s\",\"roles\":[\"read\"]}]}", h[0]);
+    fclose(f);
+    sleep(2);
+    TK_ASSERT(rq_as(&t, "GET", "/admin/v1/subscribers", NULL, tok[1], NULL) == 401);
+    TK_ASSERT(rq_as(&t, "GET", "/admin/v1/subscribers", NULL, tok[0], NULL) == 200);
+    unlink(file);
+    rmdir(dir);
     teardown(&t);
 }
 
@@ -1377,7 +1563,9 @@ int main(void)
     test_ueau(false);
     test_ueau(true);
     test_ueau_eap();
+    test_null_scheme_policy();
     test_admin();
+    test_roles_and_tenants();
     test_udr_provisioning_token();
     test_admin_validation();
     test_protocol_abuse();

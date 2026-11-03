@@ -226,11 +226,24 @@ g5c_nf *g5c_nf_new(g5c_common *common, char *err, size_t errcap)
     nf->client = g5c_client_new(5000, tls);
     g5c_client_set_scp(nf->client, nf->common.scp_uri, nf->common.nrf_uri); /* the NRF is reached directly */
     nf->metrics = g5c_registry_new();
+    g5c_client_set_backoff_counter(nf->client, g5c_counter_get(nf->metrics, "g5c_sbi_client_backoff_total", "Requests not sent because the producer asked for back-off.", NULL, 0));
     {   /* what runs: the version of the release and the function */
         g5c_label bi[] = {{"version", G5C_VERSION}, {"function", nf->common.name != NULL ? nf->common.name : ""}};
         g5c_gauge_set(g5c_gauge_get(nf->metrics, "g5c_build_info", "Version of the release that runs.", bi, 2), 1);
         G5C_LOGI("g5c_nfcore", "g5c %s: %s starting", G5C_VERSION, nf->common.name != NULL ? nf->common.name : "function");
     }
+    if (nf->common.events.enabled) {
+        nf->events = g5c_events_start(&nf->common.events, nf->common.name, nf->instance_id, nf->metrics, err, errcap);
+        if (nf->events == NULL) {
+            g5c_client_free(nf->client);
+            g5c_registry_free(nf->metrics);
+            g5c_common_free(&nf->common);
+            free(nf);
+            return NULL;
+        }
+    }
+    nf->overload = g5c_overload_new(&nf->common.overload, nf->instance_id, nf->metrics);
+    g5c_reload_init(nf);
     return nf;
 }
 
@@ -238,6 +251,9 @@ void g5c_nf_free(g5c_nf *nf)
 {
     if (nf == NULL)
         return;
+    g5c_reload_free(nf);
+    g5c_overload_free(nf->overload);
+    g5c_events_stop(nf->events); /* before the registry and the configuration it points into */
     g5c_client_set_token_provider(nf->client, NULL, NULL, NULL);
     g5c_oauth_client_free(nf->oauth_client);
     g5c_client_free(nf->client);
@@ -353,6 +369,8 @@ static void observe(void *ctx, const char *method, const char *route, int status
     char st[8];
     g5c_label l3[3], l1[1];
     snprintf(st, sizeof st, "%d", status);
+    if (status >= 500)
+        atomic_fetch_add(&nf->server_errors, 1);
     l3[0] = (g5c_label){"method", method};
     l3[1] = (g5c_label){"route", route};
     l3[2] = (g5c_label){"status", st};
@@ -434,6 +452,8 @@ g5c_nf_inst *g5c_nf_start(g5c_nf *nf, g5c_router *nf_routes, const g5c_nrf_reg *
         if (!c->has_tls)
             G5C_LOGW("g5c_nfcore", "%s requires access tokens but its SBI has no TLS: TS 33.501 13.3.2.1 wants transport protection with token based authorization", c->name);
     }
+    g5c_overload_attach(nf->overload, r->router); /* outermost: a rejected request costs no token check */
+    g5c_reload_routes(nf, base);
     g5c_router_route(base, "GET", "/health/live", h_live, nf);
     g5c_router_route(base, "GET", "/health/ready", h_ready, nf);
     g5c_router_route(base, "GET", "/metrics", h_metrics, nf);
@@ -581,6 +601,13 @@ int g5c_nf_run(g5c_nf *nf, g5c_router *nf_routes, const g5c_nrf_reg *reg, char *
             G5C_LOGI("g5c_nfcore", "%s: SIGHUP: certificates reloaded", nf->common.name);
         else
             G5C_LOGE("g5c_nfcore", "%s: SIGHUP: certificate reload failed, the old ones stay in use: %s", nf->common.name, rerr);
+        {   /* the configuration file: validated, diffed, applied where it can be, watched, taken back if the function suffers */
+            g5c_json *rep = g5c_nf_reload(nf, false);
+            const char *res = g5c_json_get_str(rep, "result");
+            G5C_LOGI("g5c_nfcore", "%s: SIGHUP: configuration %s%s%s", nf->common.name, res != NULL ? res : "?", g5c_json_get_str(rep, "error") != NULL ? ": " : "",
+                     g5c_json_get_str(rep, "error") != NULL ? g5c_json_get_str(rep, "error") : "");
+            g5c_json_free(rep);
+        }
     }
     G5C_LOGI("g5c_nfcore", "signal %d received, shutting down", sig);
     g5c_nf_stop(r);

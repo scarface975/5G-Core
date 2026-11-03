@@ -48,6 +48,8 @@ static void prod_handler(void *ctx, const g5c_req *req, g5c_resp *resp)
     g5c_resp_json(resp, st, body);
     g5c_json_free(body);
     g5c_resp_header(resp, "x-from", p->name);
+    if (st == 429)
+        g5c_resp_header(resp, "retry-after", "2");
     if (g5c_req_header(req, "if-match") != NULL)
         g5c_resp_header(resp, "x-echo", g5c_req_header(req, "if-match"));
     if (st == 201) {
@@ -707,6 +709,77 @@ static void test_retries_and_health(void)
     g5c_client_free(cl);
 }
 
+/* a producer that asks for relief (429 with Retry-After): the SCP takes the request to another one, does not count it as broken, stops asking it for the time given, and tells the consumer
+ * the same when every producer is asking (TS 29.500 5.2.7.2, 6.4) */
+static void test_overload_backpressure(void)
+{
+    prod_t p1, p2;
+    nrf_t nrf;
+    scp_env e;
+    g5c_client *cl = g5c_client_new(5000, NULL);
+    reply_t x;
+    char url[200], *i1, *i2, *both;
+    const char *h[] = {"3gpp-sbi-discovery-target-nf-type", "UDM", "3gpp-sbi-discovery-service-names", "nudm-sdm", "user-agent", "AMF-abc", NULL};
+    int c1, c2;
+    prod_start(&p1, "p1");
+    prod_start(&p2, "p2");
+    nrf_start(&nrf);
+    scp_env_start(&e, "scp1.test", nrf.root, "scp:\n  routing: { attempts: 3, timeout_ms: 400, quarantine: { failures: 2, seconds: 1 } }\n");
+    i1 = profile(&p1, 1, 100, 0);
+    i2 = profile(&p2, 2, 100, 0);
+    both = g5c_xasprintf("[%s,%s]", i1, i2);
+    nrf_set(&nrf, both);
+    snprintf(url, sizeof url, "%s/nudm-sdm/v2/x/nssai", e.base);
+
+    p1.status = 429;
+    x = call(cl, "GET", url, h, NULL);
+    EXPECT(x, 200); /* the better producer said 429: the other one answered */
+    TK_ASSERT(strcmp(g5c_json_get_str(x.json, "producer"), "p2") == 0 && prod_calls(&p1) == 1);
+    reply_free(&x);
+    TK_ASSERT(scp_quarantined(e.s) == 0); /* busy is not broken */
+    c1 = prod_calls(&p1);
+    for (int i = 0; i < 3; i++) { /* for the two seconds it asked for, nothing is sent to it */
+        x = call(cl, "GET", url, h, NULL);
+        EXPECT(x, 200);
+        TK_ASSERT(strcmp(g5c_json_get_str(x.json, "producer"), "p2") == 0);
+        reply_free(&x);
+    }
+    TK_ASSERT(prod_calls(&p1) == c1);
+
+    p2.status = 429; /* the second asks for relief too: the last answer is the producer's own 429, with its Retry-After */
+    x = call(cl, "GET", url, h, NULL);
+    EXPECT(x, 429);
+    TK_ASSERT(rh(&x, "retry-after") != NULL && strcmp(rh(&x, "retry-after"), "2") == 0);
+    reply_free(&x);
+    g5c_client_free(cl); /* this client now honours the Retry-After it was given: a new consumer asks */
+    cl = g5c_client_new(5000, NULL);
+    c1 = prod_calls(&p1);
+    c2 = prod_calls(&p2);
+    x = call(cl, "GET", url, h, NULL); /* now neither is asked: the SCP answers itself, 429 and not 504 */
+    EXPECT(x, 429);
+    TK_ASSERT(strcmp(cause_of(&x), "TOO_MANY_REQUESTS") == 0 && rh(&x, "retry-after") != NULL);
+    reply_free(&x);
+    TK_ASSERT(prod_calls(&p1) == c1 && prod_calls(&p2) == c2 && scp_quarantined(e.s) == 0);
+    g5c_client_free(cl);
+    cl = g5c_client_new(5000, NULL);
+
+    p1.status = 200;
+    p2.status = 200;
+    sleep(3); /* the periods are over */
+    x = call(cl, "GET", url, h, NULL);
+    EXPECT(x, 200);
+    TK_ASSERT(strcmp(g5c_json_get_str(x.json, "producer"), "p1") == 0); /* the better one again */
+    reply_free(&x);
+    free(i1);
+    free(i2);
+    free(both);
+    scp_env_stop(&e);
+    nrf_stop(&nrf);
+    prod_stop(&p1);
+    prod_stop(&p2);
+    g5c_client_free(cl);
+}
+
 static void test_chain(void)
 {
     prod_t p;
@@ -873,6 +946,7 @@ int main(void)
     test_limits_and_targets();
     test_model_d();
     test_retries_and_health();
+    test_overload_backpressure();
     test_chain();
     test_client_side();
     test_metrics_and_concurrency();

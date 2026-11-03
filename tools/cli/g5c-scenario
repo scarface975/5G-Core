@@ -37,7 +37,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 OPS = {">=": lambda a, b: a >= b, "<=": lambda a, b: a <= b, ">": lambda a, b: a > b, "<": lambda a, b: a < b, "==": lambda a, b: a == b}
-STEPS = {"load", "join", "impair", "kill", "restart", "start", "wait", "assert", "kpi", "http", "log"}
+STEPS = {"load", "join", "impair", "kill", "restart", "start", "reload", "wait", "assert", "kpi", "http", "log"}
 
 
 def load_doc(path):
@@ -123,7 +123,7 @@ class ClusterRunner:
         """Traffic profile of the load step (B-02): traffic_mbps per UE for traffic_ms with packets of traffic_size octets; expect_mbps is the per-UE rate the session AMBR allows."""
         env = dict(os.environ)
         for key, var in (("traffic_mbps", "G5C_LOAD_TRAFFIC_MBPS"), ("traffic_ms", "G5C_LOAD_TRAFFIC_MS"), ("traffic_size", "G5C_LOAD_TRAFFIC_SIZE"), ("expect_mbps", "G5C_LOAD_EXPECT_MBPS"),
-                         ("expect_dl_mbps", "G5C_LOAD_EXPECT_DL_MBPS"), ("max_loss_pct", "G5C_LOAD_ECHO_MAX_LOSS_PCT")):
+                         ("expect_dl_mbps", "G5C_LOAD_EXPECT_DL_MBPS"), ("max_loss_pct", "G5C_LOAD_ECHO_MAX_LOSS_PCT"), ("storm_seconds", "G5C_LOAD_STORM_SECONDS")):
             if key in a:
                 env[var] = str(a[key])
         if a.get("echo"):
@@ -147,7 +147,7 @@ class ClusterRunner:
             self.ensure_echo()
         p = subprocess.run(self._load_cmd(a), capture_output=True, text=True, env=self._load_env(a))
         for line in p.stderr.splitlines():
-            if line.startswith("traffic:"):
+            if line.startswith(("traffic:", "storm:")):
                 print("    " + line)
         return p.stdout.strip().splitlines()[-1:] == ["0"]
 
@@ -175,6 +175,12 @@ class ClusterRunner:
 
     def start(self, nf):
         self.sh_run("start", nf)
+
+    def reload(self, a):
+        """Replace `from` by `to` in the function's configuration (optional), send it SIGHUP and report what the function logged: ok when it says `configuration <result>`."""
+        p = self.sh_run("reload", a["nf"], a.get("from", ""), a.get("to", ""), check=False)
+        line = (p.stdout.strip().splitlines() or [p.stderr.strip()[-200:]])[-1]
+        return ("SIGHUP: configuration %s" % a.get("result", "applied")) in line, line
 
     def sleep(self, s):
         time.sleep(s)
@@ -244,6 +250,9 @@ def run_step(r, st):
     if "impair" in st:
         r.impair(st["impair"])
         return True, "clear" if st["impair"] == "clear" else "%s" % st["impair"]
+    if "reload" in st:
+        ok, line = r.reload(st["reload"])
+        return meets(ok), line.split("SIGHUP: ", 1)[-1][:160]
     for k in ("kill", "restart", "start"):
         if k in st:
             getattr(r, k)(st[k])

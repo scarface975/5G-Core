@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <arpa/inet.h>
 #include <nghttp2/nghttp2.h>
 #include <openssl/err.h>
 #include <uv.h>
@@ -389,6 +390,16 @@ static int cb_begin_headers(nghttp2_session *s, const nghttp2_frame *f, void *ud
         c->streams->prev = st;
     c->streams = st;
     st->req.scheme = g5c_xstrdup(c->ssl ? "https" : "http");
+    {
+        struct sockaddr_storage ss;
+        int sl = (int)sizeof ss;
+        if (uv_tcp_getpeername(&c->tcp, (struct sockaddr *)&ss, &sl) == 0) {
+            if (ss.ss_family == AF_INET)
+                inet_ntop(AF_INET, &((struct sockaddr_in *)&ss)->sin_addr, st->req.peer, sizeof st->req.peer);
+            else if (ss.ss_family == AF_INET6)
+                inet_ntop(AF_INET6, &((struct sockaddr_in6 *)&ss)->sin6_addr, st->req.peer, sizeof st->req.peer);
+        }
+    }
     nghttp2_session_set_stream_user_data(s, st->id, st);
     return 0;
 }

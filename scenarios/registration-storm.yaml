@@ -1,0 +1,11 @@
+# Signalling-storm protection (run with G5C_AMF_EXTRA='  overload: { registrations_per_s: 20, burst_s: 1, t3346_s: 10 }'): eight gNBs send Registration Requests back to back for
+# four seconds. The AMF admits about twenty a second and refuses the rest at once with 5GMM cause #22 and the back-off timer; it stays ready, and a normal wave goes through after the storm.
+name: registration storm against amf.overload
+steps:
+  - load: {ues: 400, gnbs: 8, storm_seconds: 4}
+  - assert: {metric: "amf:g5c_amf_registrations_total{result=congestion}", ">=": 100}
+  - http: {nf: amf, path: /health/ready, expect: 200}
+  - wait: 3
+  - load: {ues: 10, gnbs: 2}
+  - assert: {metric: "amf:g5c_amf_registrations_total{result=accepted}", ">=": 10}
+  - http: {nf: amf, path: /health/ready, expect: 200}

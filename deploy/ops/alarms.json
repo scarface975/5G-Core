@@ -1,0 +1,141 @@
+{
+  "alarms": {
+    "G5cAuthenticationFailures": {
+      "eventType": "securityAlarm",
+      "perceivedSeverity": "minor",
+      "probableCause": "authenticationFailure",
+      "prometheusSeverity": "warning",
+      "repairAction": "docs/ops/runbooks.md#authentication-failures",
+      "specificProblem": "more than 20% of 5G-AKA runs fail"
+    },
+    "G5cFunctionDown": {
+      "eventType": "communicationsAlarm",
+      "perceivedSeverity": "critical",
+      "probableCause": "functionNotResponding",
+      "prometheusSeverity": "critical",
+      "repairAction": "docs/ops/runbooks.md#function-down",
+      "specificProblem": "{{ $labels.job }} on {{ $labels.instance }} does not answer its metrics endpoint"
+    },
+    "G5cN4Timeouts": {
+      "eventType": "communicationsAlarm",
+      "perceivedSeverity": "major",
+      "probableCause": "n4RequestTimeout",
+      "prometheusSeverity": "warning",
+      "repairAction": "docs/ops/runbooks.md#upf-lost",
+      "specificProblem": "PFCP requests of the SMF time out"
+    },
+    "G5cNasIntegrityFailures": {
+      "eventType": "securityAlarm",
+      "perceivedSeverity": "major",
+      "probableCause": "integrityViolation",
+      "prometheusSeverity": "warning",
+      "repairAction": "docs/ops/runbooks.md#nas-integrity-failures",
+      "specificProblem": "the AMF saw {{ $value }} NAS integrity failures in 10 minutes"
+    },
+    "G5cNoGnbConnected": {
+      "eventType": "communicationsAlarm",
+      "perceivedSeverity": "major",
+      "probableCause": "n2AssociationLost",
+      "prometheusSeverity": "warning",
+      "repairAction": "docs/ops/runbooks.md#no-gnb",
+      "specificProblem": "no gNB is connected to the AMF"
+    },
+    "G5cNrfRegisteredFunctionsLow": {
+      "eventType": "processingErrorAlarm",
+      "perceivedSeverity": "major",
+      "probableCause": "underlyingResourceUnavailable",
+      "prometheusSeverity": "warning",
+      "repairAction": "docs/ops/runbooks.md#nrf-registrations",
+      "specificProblem": "fewer than 11 functions are registered at the NRF ({{ $value }})"
+    },
+    "G5cNrfSuspendedFunctions": {
+      "eventType": "communicationsAlarm",
+      "perceivedSeverity": "minor",
+      "probableCause": "heartbeatLost",
+      "prometheusSeverity": "warning",
+      "repairAction": "docs/ops/runbooks.md#nrf-registrations",
+      "specificProblem": "the NRF suspended a function after missed heart-beats"
+    },
+    "G5cPduSessionsDropToZero": {
+      "eventType": "qualityOfServiceAlarm",
+      "perceivedSeverity": "major",
+      "probableCause": "sessionsLost",
+      "prometheusSeverity": "warning",
+      "repairAction": "docs/ops/runbooks.md#upf-lost",
+      "specificProblem": "all PDU sessions are gone while there were some in the last hour"
+    },
+    "G5cRegistrationCongestion": {
+      "eventType": "qualityOfServiceAlarm",
+      "perceivedSeverity": "major",
+      "probableCause": "congestion",
+      "prometheusSeverity": "warning",
+      "repairAction": "docs/ops/runbooks.md#overload-and-rate-control",
+      "specificProblem": "the AMF refuses registrations with cause 22 (amf.overload): {{ $value | humanize }}/s"
+    },
+    "G5cRegistrationsRejected": {
+      "eventType": "qualityOfServiceAlarm",
+      "perceivedSeverity": "critical",
+      "probableCause": "serviceDegraded",
+      "prometheusSeverity": "critical",
+      "repairAction": "docs/ops/runbooks.md#registrations-rejected",
+      "specificProblem": "more than 10% of registrations are rejected"
+    },
+    "G5cSbiLatencyHigh": {
+      "eventType": "qualityOfServiceAlarm",
+      "perceivedSeverity": "minor",
+      "probableCause": "responseTimeExcessive",
+      "prometheusSeverity": "warning",
+      "repairAction": "docs/ops/runbooks.md#sbi-errors",
+      "specificProblem": "{{ $labels.job }}: p99 SBI latency above 500 ms"
+    },
+    "G5cSbiRateLimited": {
+      "eventType": "qualityOfServiceAlarm",
+      "perceivedSeverity": "minor",
+      "probableCause": "congestion",
+      "prometheusSeverity": "warning",
+      "repairAction": "docs/ops/runbooks.md#overload-and-rate-control",
+      "specificProblem": "{{ $labels.job }} answers {{ $value | humanize }} requests/s with 429 (overload.rate_per_source)"
+    },
+    "G5cSbiServerErrors": {
+      "eventType": "processingErrorAlarm",
+      "perceivedSeverity": "critical",
+      "probableCause": "applicationSubsystemFailure",
+      "prometheusSeverity": "critical",
+      "repairAction": "docs/ops/runbooks.md#sbi-errors",
+      "specificProblem": "{{ $labels.job }}: more than 2% of SBI requests end in a 5xx"
+    },
+    "G5cTokenChecksRejected": {
+      "eventType": "securityAlarm",
+      "perceivedSeverity": "minor",
+      "probableCause": "accessTokenRejected",
+      "prometheusSeverity": "warning",
+      "repairAction": "docs/ops/runbooks.md#access-token-refusals",
+      "specificProblem": "{{ $labels.job }} refuses {{ $value | humanize }} requests/s for a missing or invalid access token"
+    },
+    "G5cUeAddressPoolHigh": {
+      "eventType": "qualityOfServiceAlarm",
+      "perceivedSeverity": "warning",
+      "probableCause": "thresholdCrossed",
+      "prometheusSeverity": "warning",
+      "repairAction": "docs/ops/runbooks.md#capacity",
+      "specificProblem": "more than 80% of a /16 UE address pool is in use"
+    },
+    "G5cUpfDroppedPackets": {
+      "eventType": "qualityOfServiceAlarm",
+      "perceivedSeverity": "warning",
+      "probableCause": "packetDropRateHigh",
+      "prometheusSeverity": "warning",
+      "repairAction": "docs/ops/runbooks.md#capacity",
+      "specificProblem": "the UPF drops {{ $value | humanize }} packets/s"
+    },
+    "G5cUpfLost": {
+      "eventType": "communicationsAlarm",
+      "perceivedSeverity": "critical",
+      "probableCause": "n4AssociationLost",
+      "prometheusSeverity": "critical",
+      "repairAction": "docs/ops/runbooks.md#upf-lost",
+      "specificProblem": "the SMF lost its association with a UPF"
+    }
+  },
+  "standard": "ITU-T X.733"
+}

@@ -42,15 +42,44 @@ accept's rejected NSSAI; a PDU session on it is refused. The SMF's `smf.dnns` gi
 * **Secrets** are files (mode 600) named in the configuration; `exec:<absolute command>` reads one from a vault or KMS client instead. Nothing secret is written to a log (`g5c-cluster.sh ns secrets` checks).
 * **Master key rotation (UDM)**: put the new key in `master_key_file` and the old one in `master_key_previous_file`, restart the UDM (credentials stored under the old key still open), `POST /admin/v1/keys/rewrap`
   (re-protects every stored credential under the new key; the answer counts `rewrapped`, `alreadyCurrent`, `failed`), remove `master_key_previous_file`, restart. Tested by `g5c-cluster.sh ns ops`.
+* **SUCI privacy**: `hn_keys` (Profile A / B) conceal the subscriber identity on the radio path; `suci: { null_scheme: reject }` at the UDM refuses a SUCI sent in clear (403 `AUTHENTICATION_REJECTED`; the default `allow`
+  keeps labs and the UERANSIM default working). `tools/cli/g5c-privacy CAPTURE` reads a capture of N1 / N2 and reports a null-scheme SUCI, an IMSI in clear, a SUCI scheme output that repeats, a Registration Accept that
+  does not reallocate the 5G-GUTI, and with `--msin DIGITS` the subscriber digits found as ASCII or packed BCD anywhere; exit 1 on a high finding. Messages after the Security Mode Command are ciphered and are not read.
+* **Roles and tenants for the admin APIs**: `admin_tokens_file` (UDM and PCF) lists who may do what: each token has a name, the SHA-256 of the token (the file never holds a token), roles and optionally a tenant. Roles:
+  `read` (list and show subscribers, policies, sessions), `provision` (create, change and delete subscribers, single and bulk), `policy` (change policies, end sessions) and `key-admin` (re-wrap the credential keys; not for a
+  tenant). A tenant has SUPI prefixes (`"tenants": {"acme": {"supi_prefixes": ["imsi-0010199"]}}`) and its tokens see and change only the subscribers, policies and sessions inside them: what lies outside is simply not
+  there (404, never a 403 that would say it exists), a request to create one outside is 403, and a bulk request judges each record. Too few roles is 403 and names the missing role; no or an unknown token is 401. Every
+  audit line names who did it (`by=<token name>`). `tools/cli/g5c-tokens FILE new NAME --roles read,provision --tenant acme` makes a token and prints it once; `tenant`, `list` and `revoke` maintain the file, which is
+  read again when it changes (a revoked token stops working within a second, no signal needed; a file that no longer parses leaves the old tokens in force and is logged). The single `admin_token_file` keeps working
+  as the principal `admin` with every role, next to the file or alone.
 * **Admin tokens** are bearer secrets: one per operator system, rotate by replacing the file and restarting the function.
 
 ## Operating
 * **Logs**: one line per significant event on standard output (journald under systemd), `log: { level: info, json: true }` for structured output. **SIGUSR1** raises a running function to debug level, **SIGUSR2**
   puts it back (no restart); every start logs the release version. Provisioning and policy changes carry the tag `g5c_audit`.
 * **Metrics**: `GET /metrics` on every function (Prometheus text); `deploy/ops/prometheus-rules.yml` has the alert rules, `grafana-g5c.json` the dashboard.
+* **Configuration reload**: **SIGHUP** (and `POST /admin/v1/reload`, `g5c-ctl --url BASE reload [--dry-run | status]`) makes a function read the file it was started from again. The new file is validated like at
+  start-up (a bad one changes nothing: `rejected`), compared with what is in force, and the sections that changed are applied one after the other where the function can do it live: `overload`, `events` and
+  `log.level` in every function, `suci` at the UDM, `amf.overload` at the AMF. Whatever else changed (a slice list, a TAC, the SBI address, a policy file) is listed as `restartRequired` and stays listed on every later
+  reload until the function is restarted. If a section cannot be applied the ones before it are put back (`rolled-back`, `failedSection`). After the change the function is watched for `reload.settle_ms` (default
+  1000 ms): if it stops being ready or answers three server errors, everything is put back too. `reload: { token_file: /etc/g5c/keys/reload.token, settle_ms: 1000 }` enables the endpoint (bearer token; HTTP
+  200 `applied` / `unchanged` / `dry-run` / `restart-required`, 400 `rejected`, 409 `rolled-back`; `GET` returns the last report); `g5c_config_reloads_total{result}` counts the outcomes and every reload leaves a
+  `g5c_audit` line (and so an event, if `events` is on). Certificates are still reloaded by the same SIGHUP.
+* **Overload and rate control**: `amf: { overload: { registrations_per_s, per_gnb_per_s, burst_s, t3346_s } }` makes the AMF refuse registrations above the rate (for all gNBs and for each) with 5GMM cause #22 and the
+  back-off timer T3346 (default 30 s) instead of queueing them; `overload: { rate_per_source, burst, retry_after_s, capacity_rps }` (top level, any function) limits each client address on the SBI: above the rate a
+  request gets 429 with `Retry-After` and `3gpp-Sbi-Oci` (TS 29.500 6.4), health and metrics are never limited, and `capacity_rps` makes every answer carry `3gpp-Sbi-Lci` with the load. The SBI client of every function
+  honours `Retry-After` and the overload reduction metric (it does not send to that producer for the period, or only the share not reduced); the SCP reselects another producer, does not count a busy one as broken,
+  and answers 429 itself when all are busy. Behind an SCP the producers see the SCP's address as the source. `cluster_overload_amf` runs a storm (`load_core` with `G5C_LOAD_STORM_SECONDS`): about 22,000 registrations in
+  4 s against 20 admitted a second, all the rest refused with #22, the AMF ready throughout and a normal wave served afterwards.
+* **Alarm and event streaming**: `events: { min_level: warn, syslog: { host, port, proto: udp|tcp|tls, ca, facility }, http: { uri, ca, batch } }` sends every warning and error and every `g5c_audit` line (whatever the log level)
+  to a collector as JSON: RFC 5424 syslog (octet-counted over tcp and tls; `tls` verifies the collector against `ca`) and/or a POST of a JSON array. An event has `time`, `function`, `instance`, `host`, `kind` (`alarm` or
+  `audit`), `source`, `text`, and for alarms the ITU-T X.733 fields `perceivedSeverity` (error: major, warning: minor), `eventType`, `probableCause`. A queue of 2048 events and one worker keep the function from waiting on the
+  network; an unreachable collector is retried for about five seconds per batch, then the events are counted in `g5c_events_dropped_total{reason="send"}` (a full queue drops the oldest, `reason="queue"`); delivered events
+  are in `g5c_events_sent_total{sink}`. One stream per process. The Prometheus alerts become alarms in the same schema: `deploy/ops/alarms.json` (generated, `tools/gen/gen_alarms.py`) gives each alert rule its
+  severity, event type, probable cause and runbook link, and `tools/cli/g5c-alarms serve --syslog HOST:PORT` is an Alertmanager webhook receiver that forwards them (a resolved alert is a `cleared` alarm).
 * **Charging data records**: with `smf.cdr: { file: /var/lib/g5c/cdr.jsonl }` the SMF writes one JSON line per released PDU session: `supi`, `pduSessionId`, `dnn`, `snssai`, `ueIpv4Address`, `upf`, `startTime`,
   `endTime`, `duration`, `uplinkOctets`, `downlinkOctets`, packets, `usageReported`, `closeCause`, `recordSequenceNumber`, `smfInstanceId`. The UPF measures (a usage reporting rule installed with the session);
-  the file is opened for every record, so rotating by rename needs no signal. The records are the integration point for a charging system (an Nchf client is not part of this release).
+  the file is opened for every record, so rotating by rename needs no signal. `tools/cli/g5c-cdr report` turns the file into usage, quality and roaming reports and checks the file itself for lost or duplicated records. The records are the integration point for a charging system (an Nchf client is not part of this release).
 * **KPIs**: `deploy/ops/kpis.json` defines the service KPIs once (registration, authentication, service request, PDU session and handover success rates, latency, throughput, drops, session and UE counts).
   `tools/cli/g5c-kpi URL...` computes them from live `/metrics`, `--interval 60` gives the last minute, `--baseline OLD NEW --elapsed S` the period between two saved samples, and `--check` exits 1 when a KPI misses its target
   (usable as a lab gate). `deploy/ops/prometheus-kpi-rules.yml` holds the Prometheus recording rules generated from the same file (`g5c-kpi --rules`), so a dashboard and a lab report use the same arithmetic.
@@ -73,8 +102,12 @@ accept's rejected NSSAI; a PDU session on it is refused. The SMF's `smf.dnns` gi
 | `tools/cli/g5c-api` | The same runs from CI or a notebook over HTTP with a bearer token (start, status, stop, list). |
 | `tools/cli/g5c-dn` | The data network behind N6 for scenarios: DNS, HTTP (`/bytes/N`, `/delay/MS`), UDP echo, a RADIUS server for slice authentication. |
 | `tools/cli/g5c-ladder` | A capture as one call-flow ladder per UE and per N4 session, with red flags (no Security Mode Command, unanswered requests, malformed PFCP, retransmissions); needs `tshark`. |
+| `tools/cli/g5c-privacy` | A capture of N1 / N2 checked for subscriber identities in clear, null-scheme SUCIs, repeated SUCIs and GUTIs that were not reallocated (`--msin` searches the wire for given digits). |
+| `tools/cli/g5c-cdr` | Reports from the SMF charging records (`smf.cdr`): usage by DNN, slice, UPF, hour, day or subscriber, session length and throughput, why sessions ended, the share of inbound roamers against a home PLMN, the heaviest subscribers, and data-quality checks (records missing from the sequence, duplicates, unreadable lines, sessions without a usage measurement; exit 1 on a problem). `--csv` exports for the operator's own tools; `--from` / `--to` make it a cron job. |
+| `tools/cli/g5c-why` | Why a subscriber failed: reads the logs of the functions (a directory, files or standard input, text or JSON), explains each failure in plain words with the likely cause, the function and clause, what to check and the runbook entry, and joins lines of one trace across functions (`--supi`, `--json`, `--all`). |
+| `tools/cli/g5c-alarms` | Prometheus alerts as X.733 alarms: `convert` a webhook body, or `serve` as an Alertmanager receiver that forwards to syslog and HTTP collectors (catalog: `deploy/ops/alarms.json`). |
 | `tools/cli/g5c-trace` | The logs of all functions joined by trace id: one timeline per procedure (`traceparent` is carried over the SBI; the AMF starts one trace per UE connection; N4 carries none). |
-| `tools/release/g5c-dossier` | The conformance report (HTML, CSV, JUnit) and the release dossier (report, test results, SBOM, licence audit, threat model, guides, hashes) in one folder and one zip. |
+| `tools/release/g5c-dossier` | The conformance report (HTML, CSV, JUnit), the security assurance report (`security`: the 17 named cases of `docs/conformance/security-suite.json` with their results and the security rows of the matrices; `--regex` is the `ctest -R` expression that runs exactly the suite) and the release dossier (reports, test results, SBOM, licence audit, threat model, guides, hashes) in one folder and one zip. |
 | `tools/cli/g5c-sdk` | A Python client and a Postman collection generated from the `/openapi.json` every function serves. |
 | `tools/release/perf_history.py` | Performance per release, regressions against the earlier releases, a chart. |
 

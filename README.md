@@ -90,7 +90,7 @@ Every function is a single binary configured by one YAML file, started as `<name
 
 | Folder | Role |
 |--------|------|
-| `cli/` | Operator and tester commands: `g5c-api` (SBI explorer), `g5c-sdk` (generates a client from live `/openapi.json`), `g5c-subscribers` (Open5GS/free5GC/CSV import and export), `g5c-scenario`, `g5c-kpi`, `g5c-trace` (cross-function trace stitching), `g5c-ladder` (message-flow ladders and anomaly detection from packet captures), `g5c-capture`, `g5c-diag` (support bundle with redaction), `g5c-redact`, `g5c-dn`. |
+| `cli/` | Operator and tester commands: `g5c-api` (SBI explorer), `g5c-sdk` (generates a client from live `/openapi.json`), `g5c-subscribers` (Open5GS/free5GC/CSV import and export), `g5c-scenario`, `g5c-kpi`, `g5c-trace` (cross-function trace stitching), `g5c-ladder` (message-flow ladders and anomaly detection from packet captures), `g5c-capture`, `g5c-diag` (support bundle with redaction), `g5c-redact`, `g5c-dn`, `g5c-why` (explains from the logs why a subscriber failed), `g5c-privacy` (finds subscriber identities in clear in an N1/N2 capture), `g5c-cdr` (usage, quality and roaming reports from charging records), `g5c-alarms` (Prometheus alerts as X.733 alarms), `g5c-tokens` (admin tokens with roles and tenants). |
 | `spec/` | Fetches the pinned 3GPP documents, extracts ASN.1, NAS tables and OpenAPI files, and generates the NGAP schema, NAS definitions and per-function API tables. |
 | `gen/` | Reproducible generators for test vectors, fuzz seeds, conformance matrices, the web console and the Grafana dashboard. |
 | `check/` | Consistency gates for matrices, operations files and service-level objectives. |

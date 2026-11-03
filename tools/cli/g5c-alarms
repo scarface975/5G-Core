@@ -1,0 +1,130 @@
+#!/usr/bin/env python3
+"""g5c-alarms: Prometheus alerts as alarms in the schema the functions' own event stream uses (docs: the `events` section of the configuration).
+  g5c-alarms convert [FILE]                    an Alertmanager webhook body (stdin by default) -> one event per line
+  g5c-alarms serve --port 9099 [--syslog HOST:PORT[/udp|tcp]] [--http URI] [--facility 16]
+                                                a webhook receiver for Alertmanager that forwards what convert makes
+Severities, event types and probable causes come from deploy/ops/alarms.json; a resolved alert becomes a `cleared` alarm."""
+import argparse
+import json
+import socket
+import sys
+import urllib.request
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
+
+CATALOG = Path(__file__).resolve().parent.parent.parent / "deploy" / "ops" / "alarms.json"
+SYSLOG_SEVERITY = {"critical": 2, "major": 3, "minor": 4, "warning": 4, "indeterminate": 5, "cleared": 6}
+PROM_TO_X733 = {"critical": "critical", "warning": "minor"}
+
+
+def load_catalog(path=CATALOG):
+    try:
+        return json.loads(Path(path).read_text())["alarms"]
+    except (OSError, ValueError, KeyError):
+        return {}
+
+
+def to_events(body, catalog):
+    events = []
+    for a in body.get("alerts", []):
+        labels, notes = a.get("labels", {}), a.get("annotations", {})
+        name = labels.get("alertname", "unknown")
+        known = catalog.get(name)
+        resolved = a.get("status") == "resolved"
+        sev = (known or {}).get("perceivedSeverity") or PROM_TO_X733.get(labels.get("severity", ""), "indeterminate")
+        job = labels.get("job", "")
+        events.append({
+            "time": a.get("endsAt") if resolved else a.get("startsAt"),
+            "function": job[4:] if job.startswith("g5c-") else job,
+            "instance": labels.get("instance", ""),
+            "host": labels.get("instance", "").rsplit(":", 1)[0],
+            "kind": "alarm",
+            "source": "prometheus",
+            "text": notes.get("summary", name),
+            "alarm": {
+                "alarmId": "%s/%s" % (name, a.get("fingerprint", labels.get("instance", ""))),
+                "alertName": name,
+                "perceivedSeverity": "cleared" if resolved else sev,
+                "eventType": (known or {}).get("eventType", "processingErrorAlarm"),
+                "probableCause": (known or {}).get("probableCause", "unknown"),
+                "specificProblem": notes.get("summary", ""),
+                "repairAction": notes.get("runbook") or (known or {}).get("repairAction", ""),
+            },
+        })
+    return events
+
+
+def send_syslog(events, target, facility):
+    hostport, _, proto = target.partition("/")
+    host, _, port = hostport.rpartition(":")
+    proto = proto or "udp"
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM if proto == "udp" else socket.SOCK_STREAM)
+    try:
+        sock.settimeout(3)
+        sock.connect((host, int(port)))
+        for e in events:
+            ts = (e["time"] or "-").replace("+00:00", "Z")
+            msg = "<%d>1 %s %s g5c-alarms %d ALARM - %s" % (facility * 8 + SYSLOG_SEVERITY[e["alarm"]["perceivedSeverity"]], ts, e["host"] or "-", 0, json.dumps(e, separators=(",", ":")))
+            data = msg.encode()
+            sock.send(data if proto == "udp" else b"%d %s" % (len(data), data))
+    finally:
+        sock.close()
+
+
+def send_http(events, uri):
+    req = urllib.request.Request(uri, data=json.dumps(events).encode(), headers={"Content-Type": "application/json"}, method="POST")
+    urllib.request.urlopen(req, timeout=5).read()
+
+
+def serve(args):
+    catalog = load_catalog()
+
+    class H(BaseHTTPRequestHandler):
+        def do_POST(self):
+            try:
+                body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))))
+                events = to_events(body, catalog)
+                if args.syslog:
+                    send_syslog(events, args.syslog, args.facility)
+                if args.http:
+                    send_http(events, args.http)
+                self.send_response(200)
+            except Exception as ex:  # a bad body or an unreachable collector: Alertmanager retries on a 5xx
+                print("g5c-alarms:", ex, file=sys.stderr)
+                self.send_response(502)
+            self.end_headers()
+
+        def log_message(self, *a):
+            pass
+
+    HTTPServer(("0.0.0.0", args.port), H).serve_forever()
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="g5c-alarms", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    c = sub.add_parser("convert")
+    c.add_argument("file", nargs="?")
+    s = sub.add_parser("serve")
+    s.add_argument("--port", type=int, default=9099)
+    s.add_argument("--syslog")
+    s.add_argument("--http")
+    s.add_argument("--facility", type=int, default=16)
+    args = ap.parse_args()
+    if args.cmd == "serve":
+        if not args.syslog and not args.http:
+            ap.error("serve needs --syslog or --http")
+        serve(args)
+        return 0
+    try:
+        body = json.loads(open(args.file).read() if args.file else sys.stdin.read())
+    except (OSError, ValueError) as ex:
+        print("g5c-alarms: cannot read the webhook body:", ex, file=sys.stderr)
+        return 2
+    for e in to_events(body, load_catalog()):
+        print(json.dumps(e, separators=(",", ":")))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

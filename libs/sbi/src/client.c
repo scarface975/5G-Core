@@ -40,6 +40,13 @@ struct g5c_client {
     cconn_t *idle;
     char *scp_root, *scp_prefix, *scp_authority, *direct_authority, *ua; /* indirect communication, under mu */
     g5c_token_fn token_fn;                                                /* under mu */
+    struct {
+        char authority[96];
+        double until;       /* monotonic seconds */
+        unsigned reduction; /* percent of the requests not to send until then */
+    } bo[32];                                                             /* producers that asked for back-off, under mu */
+    uint64_t rng;
+    g5c_counter *backoff_count;
     g5c_token_reject_fn token_reject;
     void *token_user;
 };
@@ -784,9 +791,9 @@ void g5c_client_set_user_agent(g5c_client *c, const char *ua)
     pthread_mutex_unlock(&c->mu);
 }
 
-int g5c_client_request(g5c_client *c, const char *method, const char *url, const g5c_kv *headers, size_t nheaders,
-                       const char *content_type, const void *body, size_t body_len, g5c_resp *out, char *err,
-                       size_t errcap)
+static int client_request_core(g5c_client *c, const char *method, const char *url, const g5c_kv *headers, size_t nheaders,
+                               const char *content_type, const void *body, size_t body_len, g5c_resp *out, char *err,
+                               size_t errcap)
 {
     char trace_hdr[64];
     char *scp_root, *scp_prefix, *scp_auth, *direct, *ua, *via_url = NULL, *target_root = NULL, *token = NULL, *token_hdr = NULL;
@@ -884,6 +891,97 @@ done:
     free(scp_auth);
     free(direct);
     free(ua);
+    return rc;
+}
+
+/* ---- back-off: 429 / 503 with Retry-After and the overload control header (TS 29.500 5.2.7.2, 6.4) ---- */
+
+static double mono_s(void)
+{
+    struct timespec t;
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    return (double)t.tv_sec + (double)t.tv_nsec / 1e9;
+}
+
+void g5c_client_set_backoff_counter(g5c_client *c, g5c_counter *k)
+{
+    pthread_mutex_lock(&c->mu);
+    c->backoff_count = k;
+    pthread_mutex_unlock(&c->mu);
+}
+
+static bool backoff_blocks(g5c_client *c, const char *authority)
+{
+    double now = mono_s();
+    bool block = false;
+    g5c_counter *k = NULL;
+    pthread_mutex_lock(&c->mu);
+    for (size_t i = 0; i < sizeof c->bo / sizeof *c->bo; i++) {
+        if (c->bo[i].until > now && strcmp(c->bo[i].authority, authority) == 0) {
+            c->rng = c->rng * 6364136223846793005ULL + 1442695040888963407ULL + (uint64_t)(now * 1e6);
+            block = c->bo[i].reduction >= 100 || (unsigned)((c->rng >> 33) % 100) < c->bo[i].reduction;
+            break;
+        }
+    }
+    if (block)
+        k = c->backoff_count;
+    pthread_mutex_unlock(&c->mu);
+    if (k != NULL)
+        g5c_counter_inc(k);
+    return block;
+}
+
+static void backoff_learn(g5c_client *c, const char *authority, const g5c_resp *r)
+{
+    const char *oci = g5c_resp_header_get(r, "3gpp-sbi-oci"), *ra = g5c_resp_header_get(r, "retry-after");
+    unsigned validity = 0, reduction = 0;
+    double now = mono_s(), until;
+    size_t slot = 0;
+    if (oci != NULL && g5c_sbi_parse_oci(oci, &validity, &reduction)) {
+        if (reduction == 0)
+            validity = 0;
+    } else if ((r->status == 429 || r->status == 503) && ra != NULL && strtoul(ra, NULL, 10) > 0) {
+        validity = (unsigned)strtoul(ra, NULL, 10);
+        reduction = 100;
+    } else {
+        return;
+    }
+    if (validity > 60)
+        validity = 60; /* an unreasonable value must not silence a producer for long */
+    until = now + validity;
+    pthread_mutex_lock(&c->mu);
+    for (size_t i = 0; i < sizeof c->bo / sizeof *c->bo; i++) {
+        if (strcmp(c->bo[i].authority, authority) == 0) {
+            slot = i;
+            break;
+        }
+        if (c->bo[i].until < c->bo[slot].until)
+            slot = i;
+    }
+    snprintf(c->bo[slot].authority, sizeof c->bo[slot].authority, "%s", authority);
+    c->bo[slot].until = until;
+    c->bo[slot].reduction = reduction;
+    pthread_mutex_unlock(&c->mu);
+}
+
+int g5c_client_request(g5c_client *c, const char *method, const char *url, const g5c_kv *headers, size_t nheaders,
+                       const char *content_type, const void *body, size_t body_len, g5c_resp *out, char *err,
+                       size_t errcap)
+{
+    url_t u;
+    char authority[96] = "";
+    int rc;
+    if (url_parse(url, &u) == 0) {
+        snprintf(authority, sizeof authority, "%s", u.authority);
+        url_free(&u);
+    }
+    if (authority[0] != '\0' && backoff_blocks(c, authority)) {
+        seterr(err, errcap, "%s asked its consumers to back off", authority);
+        return G5C_SBI_E_OVERLOAD;
+    }
+    rc = client_request_core(c, method, url, headers, nheaders, content_type, body, body_len, out, err, errcap);
+    if (rc == 0 && authority[0] != '\0')
+        backoff_learn(c, authority, out);
     return rc;
 }
 

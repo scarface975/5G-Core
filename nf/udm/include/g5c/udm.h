@@ -10,6 +10,7 @@
 #define G5C_UDM_H
 
 #include <pthread.h>
+#include <stdatomic.h>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -90,11 +91,14 @@ typedef enum {
     UDM_ID_MALFORMED = -1,
     UDM_ID_UNSUPPORTED = -2,
     UDM_ID_UNKNOWN_KEY = -3,
-    UDM_ID_DECONCEAL = -4
+    UDM_ID_DECONCEAL = -4,
+    UDM_ID_NULL_SCHEME = -5 /* a SUCI sent in clear (scheme 0) while `suci.null_scheme: reject` */
 } udm_id_err;
 
 /* supi_out must hold at least 32 bytes ("imsi-" + up to 15 digits + NUL). */
 int udm_resolve(const char *id, const udm_hnkey *keys, size_t nkeys, char *supi_out, size_t cap);
+/* The same; allow_null false refuses the null protection scheme (TS 33.501 5.2.5: the home network decides whether a SUCI in clear is acceptable). */
+int udm_resolve_ex(const char *id, const udm_hnkey *keys, size_t nkeys, bool allow_null, char *supi_out, size_t cap);
 
 /* ---- util ---- */
 
@@ -165,6 +169,8 @@ typedef struct udm {
     udm_keys keys;
     udm_hnkey *hn_keys;
     size_t nhn_keys;
+    g5c_authz *authz; /* `admin_tokens_file`: roles and tenants for the admin API; NULL: the single admin token */
+    atomic_bool refuse_null_scheme; /* `suci.null_scheme: reject`; a configuration reload changes it */
     char plmn[8]; /* mcc+mnc, e.g. "00101" */
     char instance_id[37];
     g5c_registry *metrics;

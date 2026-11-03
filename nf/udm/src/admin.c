@@ -12,15 +12,43 @@
 #include "console_html.h"
 
 /* Guard for everything under /admin/: 404 when disabled, 401 without the right bearer token. Other paths pass. */
+/* the role a request needs (backlog F-03): reading, provisioning, re-wrapping keys; anything else under /admin/ needs every role */
+static unsigned role_for(const char *method, const char *path)
+{
+    if (strncmp(path, "/admin/", 7) != 0)
+        return 0;
+    if (strcmp(path, "/admin/v1/keys/rewrap") == 0)
+        return G5C_ROLE_KEY_ADMIN;
+    if (strncmp(path, "/admin/v1/subscribers", 21) == 0)
+        return strcmp(method, "GET") == 0 ? G5C_ROLE_READ : G5C_ROLE_PROVISION;
+    return G5C_ROLE_ALL;
+}
+
+/* a tenant does not learn that a subscriber of another tenant exists: for it the SUPI is simply not there */
+static bool outside_tenant(const udm *u, const g5c_principal *who, const char *supi)
+{
+    return u->authz != NULL && !g5c_authz_supi_allowed(u->authz, who, supi);
+}
+
 int udm_admin_guard(void *ctx, const g5c_req *req, g5c_resp *resp)
 {
     const udm *u = ctx;
     const char *presented;
     if (strncmp(req->path, "/admin/", 7) != 0)
         return 0;
-    if (u->admin_token == NULL) {
+    if (u->admin_token == NULL && !g5c_authz_enabled(u->authz)) {
         g5c_resp_problem_simple(resp, 404, "RESOURCE_NOT_FOUND", NULL);
         return 1;
+    }
+    if (u->authz != NULL) {
+        g5c_principal who;
+        if (g5c_authz_check(u->authz, req, role_for, &who, resp) != 0)
+            return 1;
+        if (strncmp(req->path, "/admin/v1/subscribers/", 22) == 0 && outside_tenant(u, &who, req->path + 22)) {
+            g5c_resp_problem_simple(resp, 404, "USER_NOT_FOUND", NULL);
+            return 1;
+        }
+        return 0;
     }
     presented = g5c_bearer_token(req);
     if (presented != NULL && strlen(presented) == strlen(u->admin_token) &&
@@ -433,12 +461,20 @@ static void post_subscriber(void *ctx, const g5c_req *req, g5c_resp *resp)
     udm *u = ctx;
     g5c_json *s = g5c_req_json(req, resp), *o;
     const char *supi = NULL;
+    g5c_principal who;
     if (s == NULL)
         return;
+    g5c_authz_who(u->authz, req, &who);
+    if (outside_tenant(u, &who, g5c_json_get_str(s, "supi"))) {
+        G5C_LOGW("g5c_audit", "udm admin: subscriber.provision refused for %s: the SUPI is outside its tenant", who.name);
+        g5c_resp_problem_simple(resp, 403, "FORBIDDEN", "the SUPI is outside the ranges of the tenant");
+        g5c_json_free(s);
+        return;
+    }
     if (provision(u, s, &supi, resp)) {
         char *path = g5c_xasprintf("/admin/v1/subscribers/%s", supi), *loc = g5c_req_url(req, path);
         G5C_LOGI("g5c_udm", "subscriber %s provisioned", supi);
-        G5C_LOGI("g5c_audit", "udm admin: subscriber.provision supi=%s", supi);
+        G5C_LOGI("g5c_audit", "udm admin: subscriber.provision supi=%s by=%s", supi, who.name);
         udm_sdm_notify_change(u, supi); /* consumers holding an sdm-subscription for this SUPI learn about the change */
         o = g5c_json_new_obj();
         g5c_json_set_str(o, "supi", supi);
@@ -460,8 +496,10 @@ static void post_bulk(void *ctx, const g5c_req *req, g5c_resp *resp)
     g5c_json *in = g5c_req_json(req, resp), *out, *results;
     const g5c_json *list;
     size_t created = 0, failed = 0, n;
+    g5c_principal who;
     if (in == NULL)
         return;
+    g5c_authz_who(u->authz, req, &who);
     list = g5c_json_is(in, G5C_J_ARRAY) ? in : g5c_json_get(in, "subscribers");
     n = g5c_json_len(list);
     if (!g5c_json_is(list, G5C_J_ARRAY) || n == 0 || n > UDM_BULK_MAX) {
@@ -477,8 +515,14 @@ static void post_bulk(void *ctx, const g5c_req *req, g5c_resp *resp)
         g5c_resp one;
         const char *supi = NULL;
         g5c_resp_init(&one);
-        if (provision(u, s, &supi, &one)) {
-            G5C_LOGI("g5c_audit", "udm admin: subscriber.provision supi=%s (bulk)", supi);
+        if (outside_tenant(u, &who, g5c_json_get_str(s, "supi"))) {
+            const char *given = g5c_json_get_str(s, "supi");
+            g5c_json_set_str(r, "supi", given != NULL ? given : "");
+            g5c_json_set_int(r, "status", 403);
+            g5c_json_set_str(r, "detail", "the SUPI is outside the ranges of the tenant");
+            failed++;
+        } else if (provision(u, s, &supi, &one)) {
+            G5C_LOGI("g5c_audit", "udm admin: subscriber.provision supi=%s by=%s (bulk)", supi, who.name);
             udm_sdm_notify_change(u, supi);
             g5c_json_set_str(r, "supi", supi);
             g5c_json_set_int(r, "status", 201);
@@ -497,7 +541,7 @@ static void post_bulk(void *ctx, const g5c_req *req, g5c_resp *resp)
     g5c_json_set_int(out, "total", (int64_t)n);
     g5c_json_set_int(out, "created", (int64_t)created);
     g5c_json_set_int(out, "failed", (int64_t)failed);
-    G5C_LOGI("g5c_audit", "udm admin: subscriber.bulk total=%zu created=%zu failed=%zu", n, created, failed);
+    G5C_LOGI("g5c_audit", "udm admin: subscriber.bulk total=%zu created=%zu failed=%zu by=%s", n, created, failed, who.name);
     g5c_resp_json(resp, 200, out);
     g5c_json_free(out);
     g5c_json_free(in);
@@ -508,8 +552,20 @@ static void list_subscribers(void *ctx, const g5c_req *req, g5c_resp *resp)
     udm *u = ctx;
     g5c_json *l = NULL;
     udr_result r = udm_udr_list_subscribers(&u->udr, &l);
-    (void)req;
+    g5c_principal who;
+    g5c_authz_who(u->authz, req, &who);
     if (r.kind == UDR_OK) {
+        if (who.tenant[0] != '\0' && g5c_json_is(l, G5C_J_ARRAY)) { /* a tenant lists its own subscribers only */
+            g5c_json *mine = g5c_json_new_arr();
+            for (size_t i = 0; i < g5c_json_len(l); i++) {
+                const g5c_json *e = g5c_json_at(l, i);
+                const char *s = g5c_json_str(e) != NULL ? g5c_json_str(e) : g5c_json_get_str(e, "supi");
+                if (s != NULL && !outside_tenant(u, &who, s))
+                    g5c_json_push(mine, g5c_json_dup(e));
+            }
+            g5c_json_free(l);
+            l = mine;
+        }
         g5c_resp_json(resp, 200, l);
         g5c_json_free(l);
     } else {
@@ -560,8 +616,10 @@ static void delete_subscriber(void *ctx, const g5c_req *req, g5c_resp *resp)
     udm *u = ctx;
     const char *supi = g5c_req_param(req, "supi");
     udr_result r = udm_udr_delete_subscriber(&u->udr, supi ? supi : "");
+    g5c_principal who;
+    g5c_authz_who(u->authz, req, &who);
     if (r.kind == UDR_OK) {
-        G5C_LOGI("g5c_audit", "udm admin: subscriber.delete supi=%s", supi ? supi : "");
+        G5C_LOGI("g5c_audit", "udm admin: subscriber.delete supi=%s by=%s", supi ? supi : "", who.name);
         g5c_resp_status(resp, 204);
     } else {
         udm_udr_fail(&r, "USER_NOT_FOUND", resp);
@@ -575,7 +633,8 @@ static void rewrap(void *ctx, const g5c_req *req, g5c_resp *resp)
     g5c_json *list = NULL, *out;
     udr_result r;
     size_t done = 0, current = 0, failed = 0;
-    (void)req;
+    g5c_principal who;
+    g5c_authz_who(u->authz, req, &who);
     if (!u->keys.has_master) {
         bad(resp, "no master key is configured");
         return;
@@ -636,7 +695,7 @@ static void rewrap(void *ctx, const g5c_req *req, g5c_resp *resp)
             g5c_json_free(patch);
             if (ur.kind == UDR_OK) {
                 done++;
-                G5C_LOGI("g5c_audit", "udm admin: keys.rewrap supi=%s", supi);
+                G5C_LOGI("g5c_audit", "udm admin: keys.rewrap supi=%s by=%s", supi, who.name);
             } else {
                 failed++;
             }

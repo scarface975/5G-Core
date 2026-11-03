@@ -59,6 +59,34 @@ static int ctl(const char *udm_base, const char *pcf_base, char **out, char **er
 
 #define CTL(rc_want, ...)                                                                                                  do {                                                                                                                       free(o);                                                                                                               free(e);                                                                                                               TK_ASSERT(ctl(udm_url, pcf_url, &o, &e, (int)(sizeof((char *[]){__VA_ARGS__}) / sizeof(char *)), __VA_ARGS__) == (rc_want));     } while (0)
 
+static int reload_seen_dry, reload_seen_get, reload_seen_post;
+
+static void h_reload_post(void *ctx, const g5c_req *req, g5c_resp *resp)
+{
+    char *q = g5c_req_query_decoded(req, "dry-run");
+    g5c_json *j = g5c_json_new_obj();
+    (void)ctx;
+    TK_ASSERT(g5c_req_header(req, "authorization") != NULL && strcmp(g5c_req_header(req, "authorization"), "Bearer " TOKEN) == 0);
+    reload_seen_post++;
+    if (q != NULL && strcmp(q, "true") == 0)
+        reload_seen_dry++;
+    free(q);
+    g5c_json_set_str(j, "result", "applied");
+    g5c_resp_json(resp, 200, j);
+    g5c_json_free(j);
+}
+
+static void h_reload_get(void *ctx, const g5c_req *req, g5c_resp *resp)
+{
+    g5c_json *j = g5c_json_new_obj();
+    (void)ctx;
+    (void)req;
+    reload_seen_get++;
+    g5c_json_set_str(j, "result", "applied");
+    g5c_resp_json(resp, 200, j);
+    g5c_json_free(j);
+}
+
 int main(void)
 {
     g5c_server_cfg cfg = {"127.0.0.1", 0, NULL};
@@ -134,6 +162,37 @@ int main(void)
     remove("ctl_policy_test.yaml");
     CTL(0, "session", "list");
     CTL(1, "session", "terminate", "no-such-session");
+
+    /* reload: the path, the query and the token reach the function named by --url */
+    {
+        g5c_router *rr = g5c_router_new();
+        g5c_server *rs;
+        char rurl[96];
+        reload_seen_dry = reload_seen_get = reload_seen_post = 0;
+        g5c_router_route(rr, "POST", "/admin/v1/reload", h_reload_post, NULL);
+        g5c_router_route(rr, "GET", "/admin/v1/reload", h_reload_get, NULL);
+        rs = g5c_server_start(&cfg, rr, err, sizeof err);
+        TK_ASSERT(rs != NULL);
+        snprintf(rurl, sizeof rurl, "http://127.0.0.1:%u", g5c_server_port(rs));
+        CTL(2, "reload");                      /* no --url */
+        TK_ASSERT(strstr(e, "--url") != NULL);
+        free(o);
+        free(e);
+        {
+            FILE *fo = tmpfile(), *fe = tmpfile();
+            char *argv1[] = {"g5c-ctl", "--url", rurl, "reload"}, *argv2[] = {"g5c-ctl", "--url", rurl, "reload", "--dry-run"}, *argv3[] = {"g5c-ctl", "--url", rurl, "reload", "status"},
+                 *argv4[] = {"g5c-ctl", "--url", rurl, "reload", "now"};
+            TK_ASSERT(g5c_ctl_main(4, argv1, fo, fe) == 0 && reload_seen_post == 1 && reload_seen_dry == 0);
+            TK_ASSERT(g5c_ctl_main(5, argv2, fo, fe) == 0 && reload_seen_post == 2 && reload_seen_dry == 1);
+            TK_ASSERT(g5c_ctl_main(5, argv3, fo, fe) == 0 && reload_seen_get == 1);
+            TK_ASSERT(g5c_ctl_main(5, argv4, fo, fe) == 2);
+            fclose(fo);
+            fclose(fe);
+        }
+        o = e = NULL;
+        g5c_server_stop(rs);
+        g5c_router_free(rr);
+    }
 
     /* unreachable server */
     free(o);
