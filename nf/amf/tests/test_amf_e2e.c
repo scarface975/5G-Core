@@ -2267,6 +2267,50 @@ static void test_network_name(void)
     start_amf(NULL);
 }
 
+/* time warp (backlog B-12): the T3560 sequence of five transmissions takes 5 s of the AMF's clock; at a warp of 25 the test sees it in about a fifth of a second */
+static void test_time_warp(void)
+{
+    gnb_t g;
+    ue_t u;
+    g5c_bytes req;
+    g5c_json *p;
+    int rx = 0;
+    double t0, took;
+    ue_init(&u, "001010000000061", 61);
+    ue_provision(&u, NULL);
+    gnb_setup_ok(&g, 0, 1, 1);
+    g5c_time_warp_set(25);
+    TK_ASSERT(g5c_time_warp() == 25.0);
+    t0 = now_s();
+    g5c_bytes_init(&req);
+    build_reg_request(&u, 1, false, &req);
+    gnb_initial_ue(&g, &u, req.data, req.len, 1, false);
+    g5c_bytes_free(&req);
+    for (;;) {
+        p = gnb_rx(&g, 3000);
+        TK_ASSERT(p != NULL);
+        if (proc_of(p) == NGAP_PROC_UEContextRelease) {
+            g5c_json_free(p);
+            break;
+        }
+        learn_ids(&u, p);
+        g5c_json_free(p);
+        rx++;
+    }
+    took = now_s() - t0;
+    g5c_time_warp_set(1);
+    TK_ASSERT(rx == 5);   /* the same behaviour: the request and four retransmissions, then the release */
+    TK_ASSERT(took < 1.5); /* ... in a fraction of the 5 s it takes in real time */
+    {
+        g5c_json *rc = new_pdu("successfulOutcome", NGAP_PROC_UEContextRelease, "reject");
+        add_ie(rc, NGAP_IE_AMF_UE_NGAP_ID, "ignore", g5c_json_new_int((int64_t)u.amf_id));
+        add_ie(rc, NGAP_IE_RAN_UE_NGAP_ID, "ignore", g5c_json_new_int(u.ran_id));
+        gnb_tx(&g, rc, 1);
+    }
+    TK_ASSERT(wait_ue_gone(u.supi));
+    gnb_close(&g);
+}
+
 static void test_timers(void)
 {
     gnb_t g;
@@ -2495,6 +2539,7 @@ int main(void)
     test_uplink_protection();
     test_registration_update_and_replacement();
     test_network_name();
+    test_time_warp();
     test_timers();
     test_implicit_deregistration();
     test_persistence();

@@ -37,7 +37,7 @@ def rule(pattern, **kw):
 RB = "docs/ops/runbooks.md#"
 RULES = [
     # --- the AMF's own words ---
-    rule(r"injected failure \(amf\.inject\)|refused with \d+ on purpose \(smf\.inject\)", id="injected", what="the failure was injected on purpose", why="amf.inject or smf.inject is configured for this subscriber",
+    rule(r"refused with \d+ on purpose \(smf\.inject\)", id="injected", what="the failure was injected on purpose", why="amf.inject or smf.inject is configured for this subscriber",
          where="the function's own configuration", check="remove the `inject` section of the function and restart it", clause="", runbook=RB + "registrations-rejected"),
     rule(r"registration of (\S+) rejected, cause #(\d+) \((.*)\)$", id="registration", handler="registration"),
     rule(r"authentication of (\S+) failed: (.*)$", id="auth", what="authentication failed", why="the UE answered the challenge with a result the network does not accept: usually a SIM whose K or OPc differs from what is provisioned",

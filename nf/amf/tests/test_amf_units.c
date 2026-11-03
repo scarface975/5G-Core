@@ -445,6 +445,18 @@ static void test_config(void)
     amf_destroy(a);
     g5c_nf_free(nf);
 
+    {   /* the default timers are the values of TS 24.501 Table 10.2.2 (timer conformance, backlog B-12) and every one of them can be set */
+        static const char y[] = "name: a\nplmn: { mcc: '001', mnc: '01' }\nsbi: { address: 127.0.0.1, port: 1 }\n"
+                                "amf: { ausf: { uri: 'http://a:1' }, udm: { uri: 'http://u:1' }, smf: { uri: 'http://s:1' } }\n";
+        nf = NULL;
+        a = load(y, err, sizeof err, &nf);
+        TK_ASSERT(a != NULL);
+        TK_ASSERT(a->cfg.t3510 == 15 && a->cfg.t3513 == 6 && a->cfg.t3522 == 6 && a->cfg.t3550 == 6 && a->cfg.t3555 == 6 && a->cfg.t3560 == 6 && a->cfg.t3570 == 6);
+        TK_ASSERT(a->cfg.t3512 == 3240 && a->cfg.t3502 == 720); /* 54 minutes and 12 minutes */
+        TK_ASSERT(a->cfg.paging_tries == 4);                    /* T3513 expires four times before paging is given up (TS 24.501 5.6.2.2.2) */
+        amf_destroy(a);
+        g5c_nf_free(nf);
+    }
     {   /* amf.overload */
         static const char y[] = "name: a\nplmn: { mcc: '001', mnc: '01' }\nsbi: { address: 127.0.0.1, port: 1 }\n"
                                 "amf: { overload: { registrations_per_s: 50, per_gnb_per_s: 20, burst_s: 3, t3346_s: 120 }, ausf: { uri: 'http://a:1' }, udm: { uri: 'http://u:1' }, smf: { uri: 'http://s:1' } }\n";

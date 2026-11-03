@@ -37,7 +37,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 OPS = {">=": lambda a, b: a >= b, "<=": lambda a, b: a <= b, ">": lambda a, b: a > b, "<": lambda a, b: a < b, "==": lambda a, b: a == b}
-STEPS = {"load", "join", "impair", "kill", "restart", "start", "reload", "wait", "assert", "kpi", "http", "log"}
+STEPS = {"load", "join", "impair", "kill", "restart", "start", "reload", "replay", "mutate", "why", "wait", "assert", "kpi", "http", "log"}
 
 
 def load_doc(path):
@@ -176,6 +176,40 @@ class ClusterRunner:
     def start(self, nf):
         self.sh_run("start", nf)
 
+    def why(self, a):
+        """What tools/cli/g5c-why says about the logs of the cluster: ok when its explanation contains every text of `contains` (and, with `none: true`, when it finds nothing)."""
+        logs = self.sh_run("logdir").stdout.strip()
+        cmd = [sys.executable, str(ROOT / "tools" / "cli" / "g5c-why"), logs] + (["--supi", a["supi"]] if a.get("supi") else []) + (["--all"] if a.get("all") else [])
+        p = subprocess.run(cmd, capture_output=True, text=True)
+        want = a.get("contains", [])
+        want = [want] if isinstance(want, str) else want
+        if a.get("none"):
+            return p.returncode == 0, "nothing explained" if p.returncode == 0 else p.stdout.splitlines()[0]
+        missing = [w for w in want if w not in p.stdout]
+        return not missing and p.returncode == 1, ("explained: " + p.stdout.splitlines()[1].strip()) if not missing and p.stdout.splitlines()[1:] else "missing from the explanation: %s" % ", ".join(missing)
+
+    def mutate(self, a):
+        """Negative testing (tools/cli/g5c-mutate): hostile requests to the routes of a function (`nf`, optional `only` prefix and `max_routes`), or corrupted messages of a capture to the AMF (`capture`)."""
+        tool = [sys.executable, str(ROOT / "tools" / "cli" / "g5c-mutate")]
+        if "capture" in a:
+            cap = a["capture"] if os.path.isabs(a["capture"]) else str(ROOT / a["capture"])
+            cmd = tool + ["n2", cap, "--amf", os.environ.get("G5C_LOAD_AMF_NGAP", "127.2.0.5:38412"), "--sbi", self.url("amf")]
+        else:
+            cmd = tool + ["sbi", self.url(a["nf"]), "--max-routes", str(a.get("max_routes", 0)), "--only", a.get("only", "")]
+        p = subprocess.run(cmd, capture_output=True, text=True, env=dict(os.environ))
+        lines = [ln for ln in p.stdout.splitlines() if ln.strip()]
+        fails = [ln for ln in lines if ln.startswith("FAIL")]
+        summary = fails[0] if fails else next((ln for ln in reversed(lines) if "routes," in ln or "corruptions" in ln), p.stderr.strip()[-160:])
+        return p.returncode == 0, " ".join(summary.split())[:160]
+
+    def replay(self, a):
+        """Replay the N2 exchange of a capture (tools/cli/g5c-replay) against the AMF: ok when our core answers like the recorded one."""
+        cap = a["capture"] if os.path.isabs(a["capture"]) else str(ROOT / a["capture"])
+        p = subprocess.run([sys.executable, str(ROOT / "tools" / "cli" / "g5c-replay"), "run", cap, "--amf", os.environ.get("G5C_LOAD_AMF_NGAP", "127.2.0.5:38412")], capture_output=True, text=True)
+        lines = [ln.strip() for ln in p.stdout.splitlines() if ln.strip()]
+        diff = [ln for ln in lines if "DIFFERENT" in ln]
+        return p.returncode == 0, (diff[0] if diff else (lines[-1] if lines else p.stderr.strip()[-160:]))
+
     def reload(self, a):
         """Replace `from` by `to` in the function's configuration (optional), send it SIGHUP and report what the function logged: ok when it says `configuration <result>`."""
         p = self.sh_run("reload", a["nf"], a.get("from", ""), a.get("to", ""), check=False)
@@ -250,6 +284,15 @@ def run_step(r, st):
     if "impair" in st:
         r.impair(st["impair"])
         return True, "clear" if st["impair"] == "clear" else "%s" % st["impair"]
+    if "why" in st:
+        ok, line = r.why(st["why"])
+        return meets(ok), line[:140]
+    if "mutate" in st:
+        ok, line = r.mutate(st["mutate"])
+        return meets(ok), line
+    if "replay" in st:
+        ok, line = r.replay(st["replay"])
+        return meets(ok), ("replay matches the recorded core: " if ok else "replay differs: ") + " ".join(line.split())[:140]
     if "reload" in st:
         ok, line = r.reload(st["reload"])
         return meets(ok), line.split("SIGHUP: ", 1)[-1][:160]

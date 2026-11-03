@@ -90,6 +90,17 @@ if(G5C_BASH AND UNIX)
            ${G5C_BASH} ${CMAKE_SOURCE_DIR}/deploy/run/g5c-cluster.sh ns scenario ${CMAKE_SOURCE_DIR}/scenarios/reload-amf-overload.yaml)
   set_tests_properties(cluster_reload_amf PROPERTIES ENVIRONMENT "${_direct_env};G5C_RUN=${CMAKE_BINARY_DIR}/cluster-run-reload-amf" TIMEOUT 300
                        LABELS "integration;cluster" SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
+  # replay of a capture (backlog B-11): our core differs from the recorded one for an unknown subscriber and matches it once the subscriber exists
+  add_test(NAME cluster_replay COMMAND ${G5C_BASH} ${CMAKE_SOURCE_DIR}/deploy/run/g5c-cluster.sh ns scenario ${CMAKE_SOURCE_DIR}/scenarios/replay-registration.yaml)
+  set_tests_properties(cluster_replay PROPERTIES ENVIRONMENT "${_direct_env};G5C_RUN=${CMAKE_BINARY_DIR}/cluster-run-replay" TIMEOUT 300
+                       LABELS "integration;cluster" SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
+  # negative testing (backlog B-05): hostile requests to the routes and corrupted N2 messages; no 5xx, no silence, every function ready afterwards
+  add_test(NAME cluster_mutation COMMAND /usr/bin/env "G5C_OAUTH2=0" ${G5C_BASH} ${CMAKE_SOURCE_DIR}/deploy/run/g5c-cluster.sh ns scenario ${CMAKE_SOURCE_DIR}/scenarios/mutation-sweep.yaml)
+  set_tests_properties(cluster_mutation PROPERTIES ENVIRONMENT "${_direct_env};G5C_RUN=${CMAKE_BINARY_DIR}/cluster-run-mutation" TIMEOUT 600
+                       LABELS "integration;cluster" SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
+  # the training lab (backlog G-04): exercise 3 is the one with a scenario of its own; `g5c-lab check all` runs every exercise
+  add_test(NAME cluster_lab_03 COMMAND ${G5C_PYTHON} ${CMAKE_SOURCE_DIR}/tools/cli/g5c-lab check 03)
+  set_tests_properties(cluster_lab_03 PROPERTIES ENVIRONMENT "G5C_BUILD_DIR=${CMAKE_BINARY_DIR};G5C_LOAD_BIN=$<TARGET_FILE:load_core>" TIMEOUT 300 LABELS "integration;cluster" SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
   add_test(NAME cluster_inject_smf COMMAND /usr/bin/env "G5C_SMF_EXTRA=  inject: { n4_drop_responses_percent: 10 }"
            ${G5C_BASH} ${CMAKE_SOURCE_DIR}/deploy/run/g5c-cluster.sh ns scenario ${CMAKE_SOURCE_DIR}/scenarios/inject-n4-drop.yaml)
   set_tests_properties(cluster_inject_smf PROPERTIES ENVIRONMENT "${_direct_env};G5C_RUN=${CMAKE_BINARY_DIR}/cluster-run-inject-smf" TIMEOUT 300
@@ -139,6 +150,18 @@ if(G5C_BASH AND UNIX)
     set_tests_properties(kpi_tool PROPERTIES LABELS "unit")
     add_test(NAME privacy_tool COMMAND ${G5C_PYTHON} ${CMAKE_SOURCE_DIR}/tests/support/test_privacy.py)
     set_tests_properties(privacy_tool PROPERTIES LABELS "unit;conformance")
+    add_test(NAME k8s_manifests COMMAND ${G5C_PYTHON} ${CMAKE_SOURCE_DIR}/tests/support/test_k8s.py)
+    set_tests_properties(k8s_manifests PROPERTIES LABELS "unit" SKIP_RETURN_CODE 77)
+    add_test(NAME compat_tool COMMAND ${G5C_PYTHON} ${CMAKE_SOURCE_DIR}/tests/support/test_compat.py)
+    set_tests_properties(compat_tool PROPERTIES LABELS "unit")
+    add_test(NAME atlas_live_tool COMMAND ${G5C_PYTHON} ${CMAKE_SOURCE_DIR}/tests/support/test_atlas_live.py)
+    set_tests_properties(atlas_live_tool PROPERTIES LABELS "unit")
+    add_test(NAME lab_tool COMMAND ${G5C_PYTHON} ${CMAKE_SOURCE_DIR}/tests/support/test_lab.py)
+    set_tests_properties(lab_tool PROPERTIES LABELS "unit")
+    add_test(NAME mutate_tool COMMAND ${G5C_PYTHON} ${CMAKE_SOURCE_DIR}/tests/support/test_mutate.py)
+    set_tests_properties(mutate_tool PROPERTIES LABELS "unit")
+    add_test(NAME replay_tool COMMAND ${G5C_PYTHON} ${CMAKE_SOURCE_DIR}/tests/support/test_replay.py)
+    set_tests_properties(replay_tool PROPERTIES LABELS "unit" SKIP_RETURN_CODE 77)
     add_test(NAME cdr_tool COMMAND ${G5C_PYTHON} ${CMAKE_SOURCE_DIR}/tests/support/test_cdr.py)
     set_tests_properties(cdr_tool PROPERTIES LABELS "unit")
     add_test(NAME why_tool COMMAND ${G5C_PYTHON} ${CMAKE_SOURCE_DIR}/tests/support/test_why.py)

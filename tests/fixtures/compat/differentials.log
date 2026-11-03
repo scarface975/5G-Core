@@ -1,0 +1,193 @@
+    Start 107: pfcp_differential
+SMF requests, first session lifecycle:
+  with Open5GS UPF: ['Session Establishment Request', 'Session Modification Request', 'Session Deletion Request']
+  with our UPF:     ['Session Establishment Request', 'Session Modification Request', 'Session Deletion Request']
+  identical sequence
+
+UPF answers, by message type (first occurrence of each):
+  PFCP Association Setup Response            only Open5GS's UPF sent this
+  PFCP Session Establishment Response        6 elements; ours matches
+  PFCP Session Modification Response         1 elements; ours matches
+  PFCP Session Deletion Response             10 elements; ours differs
+      extra in ours:   Usage Report (Session Deletion Response) > Start Time
+
+PFCP differential: OK
+    Start 108: pfcp_differential_smf
+SMF requests, first session lifecycle:
+  Open5GS SMF: ['Session Establishment Request', 'Session Modification Request', 'Session Deletion Request']
+  our SMF:     ['Session Establishment Request', 'Session Modification Request', 'Session Deletion Request']
+  identical sequence
+
+SMF requests, by message type (first occurrence of each):
+  PFCP Session Establishment Request         42 elements; ours differs
+      missing in ours: Create FAR > Forwarding Parameters > Outer Header Creation  (allowed: in Create FAR this is Open5GS's FAR that forwards IPv6 Router Solicitations to the SMF; the IPv6 router / RA path is not built yet)
+      missing in ours: Create PDR > PDI > QFI  (allowed: Open5GS restricts the default uplink PDR to QFI 1; ours accepts any QFI of the tunnel)
+      missing in ours: Create PDR > PDI > SDF Filter  (allowed: Open5GS restricts its default PDRs with a match-all filter; ours match every flow without one (PCC rules carry real filters))
+      missing in ours: Create PDR > URR ID  (allowed: belongs to the URR)
+      missing in ours: Create URR  (allowed: usage reporting / charging is Phase 7 (CHF); not requested yet)
+      missing in ours: Create URR > Measurement Method  (allowed: belongs to the URR)
+      missing in ours: Create URR > Reporting Triggers  (allowed: belongs to the URR)
+      missing in ours: Create URR > URR ID  (allowed: belongs to the URR)
+      missing in ours: Create URR > Volume Threshold  (allowed: belongs to the URR)
+      missing in ours: User ID  (allowed: subscriber identity for lawful-intercept / charging correlation; the SMF keeps the SUPI in its own context)
+  PFCP Session Modification Request          8 elements; ours matches
+  PFCP Session Deletion Request              0 elements; ours matches
+
+PFCP SMF differential: OK
+    Start 109: ngap_differential_amf
+AMF -> gNB messages: reference 16, ours 17 (1 allowed extra: Identity request)
+DownlinkNASTransport               initiatingMessage    IEs: ref 3, ours 3
+InitialContextSetup                initiatingMessage    IEs: ref 8, ours 9  (extra in ours: UEAggregateMaximumBitRate)
+NGSetup                            successfulOutcome    IEs: ref 4, ours 4
+PDUSessionResourceRelease          initiatingMessage    IEs: ref 4, ours 4
+PDUSessionResourceSetup            initiatingMessage    IEs: ref 4, ours 4
+UEContextRelease                   initiatingMessage    IEs: ref 2, ours 2
+  NAS Authentication request                   IEs: ref 5, ours 5
+differential: OK
+    Start 110: nrf_differential
+step                               ref    ours    attributes
+register SMF                       201    201    (extra in ours: capacity, load, plmnList, priority) ok
+register SMF again (replace)       200    200    (extra in ours: capacity, load, plmnList, priority) ok
+register AMF                       201    201    (extra in ours: capacity, load, plmnList, priority) ok
+retrieve SMF                       200    200    (extra in ours: nfServices) ok
+retrieve unknown                   404    404    (extra in ours: cause) ok
+list SMF                           200    200    ok
+heart-beat                         204    204    ok
+heart-beat unknown                 404    404    (extra in ours: cause) ok
+discover SMF by service            200    200    (extra in ours: nrfSupportedFeatures) ok
+discover SMF by DNN                200    200    (extra in ours: nrfSupportedFeatures) ok
+discover SMF by slice (object)     400    400    (extra in ours: cause, invalidParams) ok
+discover SMF by slice (array)      200    200    (extra in ours: nrfSupportedFeatures) ok
+discover SMF by slice and DNN      400    400    (extra in ours: cause, invalidParams) ok
+discover without requester type    400    400    (extra in ours: cause, invalidParams) ok
+discover no match                  200    200    (extra in ours: nrfSupportedFeatures) ok
+subscribe                          201    201    ok
+deregister SMF                     204    204    ok
+deregister SMF again               404    404    (extra in ours: cause) ok
+discover after deregistration      200    200    (extra in ours: nrfSupportedFeatures) ok
+NRF differential: OK
+    Start 111: udr_differential
+provisioning ours with the documents of the reference:
+  authentication subscription  reference 200 -> ours PUT 201 ok
+  am-data                      reference 200 -> ours PUT 201 ok
+  smf-selection                reference 200 -> ours PUT 201 ok
+  sm-data                      reference 200 -> ours PUT 201 ok
+  policy am-data               reference 200 -> ours PUT 201 ok
+  policy sm-data               reference 200 -> ours PUT 201 ok
+
+step                                            ref  ours  attributes
+GET authentication subscription                 200   200  ok
+GET unknown subscriber                          404   404  ok
+GET am-data                                     200   200  ok
+GET am-data, fields=nssai                       200   200  ok
+GET sm-data, slice and DNN                      200   200  ok
+GET sm-data, other slice                        404   404  ok
+GET smf-selection                               200   200  ok
+GET provisioned-data                            200   200  ok
+PATCH authentication subscription               204   204  ok
+PUT authentication-status                       204   204  ok
+PUT amf-3gpp-access (create)                    204   201  (status differs: TS 29.504 5.2.2.3.2: the creation of a resource by PUT is answered 201 with the representation and a Location; Open5GS answers 204)
+GET amf-3gpp-access                             405   200  (status differs: the registration is readable (TS 29.505 6.1.3.x GET); Open5GS has no GET for it (405))
+PUT smf-registration (create)                   204   201  (status differs: as above)
+GET smf-registrations (list)                    405   200  (status differs: as above: the list of SMF registrations is readable; Open5GS answers 405)
+GET context-data (composite)                    405   200  (status differs: ContextDataSets is a resource of TS 29.505; Open5GS answers 405)
+DELETE smf-registration                         204   204  ok
+GET unknown resource name                       400   404  (status differs: an unknown resource is 404 (TS 29.500 5.2.7.2); Open5GS answers 400)
+GET identity-data                               400   404  (status differs: identity-data is a resource of TS 29.505; Open5GS answers 400 (unknown resource name))
+GET sdm-subscriptions                           400   404  (status differs: sdm-subscriptions is a resource of TS 29.505; Open5GS answers 400 (unknown resource name))
+GET subs-to-notify                              400   404  (status differs: subscriptions are a resource of TS 29.505; Open5GS answers 400 (unknown resource name))
+GET policy am-data                              200   200  ok
+GET unknown subscriber policy am-data           404   404  ok
+GET policy sm-data, slice and DNN               200   200  ok
+GET policy sm-data, slice not provisioned       400   404  (status differs: no data for the slice is 404 DATA_NOT_FOUND (TS 29.519); Open5GS answers 400)
+GET policy sm-data without a slice              400   200  (status differs: without ?snssai the whole SmPolicyData is returned; Open5GS requires the parameter (400))
+GET policy sm-data/{usageMonId}                 400   404  (status differs: the resource of TS 29.519; Open5GS answers 400)
+GET policy operator-specific-data               405   404  (status differs: a resource of TS 29.519; Open5GS answers 405)
+GET policy ue-policy-set                        405   404  (status differs: a resource of TS 29.519; Open5GS answers 405)
+note: sm-data: the reference's allowedSscModes has three entries (maxItems is 2); the default mode was left out before writing it into ours
+
+UDR differential: 0 difference(s)
+    Start 112: nssf_differential
+step                                      ref  ours  result
+PDU session, slice 1                      200   200  ok
+PDU session, slice 1 with sd FFFFFF       200   200  ok
+PDU session, slice 2 sd 000001            200   200  ok
+PDU session, tracking area given          200   200  ok
+PDU session, local breakout               200   200  ok
+unknown slice                             403   403  ok
+no nf-id                                  400   400  ok
+no nf-type                                400   400  ok
+no slice information                      400   400  ok
+registration request                      400   200  (status differs: Open5GS answers 400 ("Not implemented except PDU session"); the registration procedure is implemented here (TS 29.531 5.2.2.2.2))
+UE configuration update request           400   403  (status differs: as above (5.2.2.2.4))
+PDN connection request                    400   403  (status differs: as above (5.2.2.2.5))
+
+NSSF differential: 0 difference(s)
+    Start 113: scp_differential
+step                                                ref  ours  result
+model C: target apiRoot                             200   200  ok
+model D: delegated discovery                        200   200  (the producer id: ours is nfinst=<id> as in TS 29.500 5.2.3.2.8, Open5GS's is the bare id)
+model D: requester type from the User-Agent         200   200  (the producer id: ours is nfinst=<id> as in TS 29.500 5.2.3.2.8, Open5GS's is the bare id)
+model D: instance id                                200   200  (extra in ours: 3gpp-sbi-producer-id)
+target and discovery factors                        200   200  ok
+producer error relayed                              400   400  ok
+unreachable target                                  500   504  (status differs: ours is 504 TARGET_NF_NOT_REACHABLE (TS 29.500 6.10.8.2); Open5GS's answer is its own)
+no target and no discovery factors                  400   400  ok
+discovery without a requester type                  500   400  (status differs: as above (ours 400 MANDATORY_IE_MISSING))
+discovery without a target type                     500   400  (status differs: as above (ours 400 MANDATORY_IE_MISSING))
+
+SCP differential: 0 difference(s)
+    Start 114: bsf_differential
+step                                                        ref  ours  result
+register an IPv4 binding                                    201   201  ok
+discover by IPv4                                            200   200  (extra in ours: ipv4Addr, supi; TS 29.521 4.2.4.2: the PcfBinding as the PCF registered it; Open5GS leaves ipv4Addr and supi out of the answer)
+discover by IPv4, DNN, S-NSSAI and SUPI                     200   200  (extra in ours: ipv4Addr, supi; TS 29.521 4.2.4.2: the PcfBinding as the PCF registered it; Open5GS leaves ipv4Addr and supi out of the answer)
+discover by IPv4 with another DNN                           200   204  (status differs: TS 29.521 5.3.2.3.2: dnn, snssai, supi and ipDomain narrow the match; Open5GS ignores them)
+discover by IPv4 with another S-NSSAI                       200   204  (status differs: TS 29.521 5.3.2.3.2: dnn, snssai, supi and ipDomain narrow the match; Open5GS ignores them)
+discover an address nobody has                              404   204  (status differs: TS 29.521 4.2.4.2: no matching binding is 204 No Content; Open5GS answers 404)
+discover without a UE address                               404   400  (status differs: TS 29.521 4.2.4.2: 400 MANDATORY_QUERY_PARAM_MISSING; Open5GS answers 404)
+discover with two UE addresses                              200   400  (status differs: TS 29.521 5.3.2.3.2 NOTE 1: one and only one of ipv4Addr, ipv6Prefix and macAddr48; Open5GS takes the first)
+discover with a malformed IPv4 address                      400   400  ok
+discover with an unknown query parameter                    200   400  (status differs: TS 29.500 5.2.7.2: INVALID_QUERY_PARAM; Open5GS ignores it)
+register an IPv6 prefix binding                             400   201  (status differs: Open5GS's BSF refuses the IPv6 prefix 2001:db8:1:2::/64 of TS 29.571 Ipv6Prefix (400 Invalid IPv6 prefix))
+discover by an IPv6 address inside the prefix               404   200  (status differs: Open5GS's BSF refuses the IPv6 prefix 2001:db8:1:2::/64 of TS 29.571 Ipv6Prefix (400 Invalid IPv6 prefix))
+discover by an IPv6 address outside the prefix              404   204  (status differs: Open5GS's BSF refuses the IPv6 prefix 2001:db8:1:2::/64 of TS 29.571 Ipv6Prefix (400 Invalid IPv6 prefix))
+register a MAC binding                                      404   201  (status differs: Open5GS's BSF cannot register a MAC address binding (404))
+discover by MAC address                                     404   200  (status differs: Open5GS's BSF cannot register a MAC address binding (404))
+register with IPv4 and IPv6                                 400   201  (status differs: Open5GS's BSF refuses the IPv6 prefix 2001:db8:1:2::/64 of TS 29.571 Ipv6Prefix (400 Invalid IPv6 prefix))
+discover that one by IPv4                                   404   200  (status differs: Open5GS's BSF refuses the IPv6 prefix 2001:db8:1:2::/64 of TS 29.571 Ipv6Prefix (400 Invalid IPv6 prefix))
+discover that one by IPv6                                   404   200  (status differs: Open5GS's BSF refuses the IPv6 prefix 2001:db8:1:2::/64 of TS 29.571 Ipv6Prefix (400 Invalid IPv6 prefix))
+register the same IPv4 address in another slice             201   201  ok
+discover that address without a slice                       200   400  (status differs: TS 29.521 4.2.4.2: two bindings match, 400 MULTIPLE_BINDING_INFO_FOUND; Open5GS returns the first)
+discover that address in the second slice                   200   200  (extra in ours: ipv4Addr, supi; TS 29.521 4.2.4.2: the PcfBinding as the PCF registered it; Open5GS leaves ipv4Addr and supi out of the answer)
+deregister a binding                                        204   204  ok
+deregister it again                                         404   404  ok
+deregister an unknown binding                               404   404  ok
+discover the deregistered address                           404   204  (status differs: TS 29.521 4.2.4.2: no matching binding is 204 No Content; Open5GS answers 404)
+register without a DNN                                      400   400  ok
+register without an S-NSSAI                                 400   400  ok
+register without a UE address                               404   400  (status differs: TS 29.521 4.2.2.2: the address of the UE is required (without ExtendedSamePcf); Open5GS answers 404)
+register without a PCF address                              400   400  ok
+register a malformed IPv4 address                           400   400  ok
+register something that is not JSON                         400   400  ok
+update a binding (merge patch)                              404   501  (status differs: TS 29.521 4.2.5: Nbsf_Management_Update (BindingUpdate); Open5GS has no PATCH)
+discover the updated address                                404   204  (status differs: as above)
+update an unknown binding                                   404   404  ok
+
+BSF differential: 0 difference(s)
+    Start 115: ausf_differential
+provisioned: HTTP 201
+step                                           ref    ours    attributes
+start with a SUPI                              201    201    (extra in ours: servingNetworkName) ok
+start with a SUCI (null scheme)                201    201    (extra in ours: servingNetworkName) ok
+start with an unknown subscriber               404    404    ok
+start without a serving network name           400    400    (extra in ours: cause, invalidParams) ok
+start without an identity                      400    400    (extra in ours: cause, invalidParams) ok
+start with a malformed body                    400    400    (extra in ours: cause, detail) ok
+start with a malformed serving network name    403    403    ok
+confirm with a wrong RES*                      200    200    ok
+confirm again (single use)                     200    404    (extra in ours: cause, detail, status, title) (accepted difference) ok
+confirm an unknown context                     404    404    (extra in ours: cause) ok
+confirm without RES*                           400    400    (extra in ours: cause, invalidParams) ok
+delete the result of an unknown context        404    404    (extra in ours: cause) ok
+AUSF differential: OK

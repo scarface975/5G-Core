@@ -1,0 +1,8 @@
+# A capture of a registration (UERANSIM against Open5GS) replayed against our core (tools/cli/g5c-replay). The subscriber of the capture, imsi-001010000000001, is not provisioned yet: our core
+# refuses the registration where the recorded core challenged it, and the replay reports exactly that difference. After the subscriber exists, our core answers like the recorded one.
+name: replaying a capture finds where our core differs, and where it does not
+steps:
+  - replay: {capture: tests/fixtures/golden/s1_registration_open5gs_v2.8.0_ueransim.pcapng}
+    expect: fail
+  - load: {ues: 5, gnbs: 1}
+  - replay: {capture: tests/fixtures/golden/s1_registration_open5gs_v2.8.0_ueransim.pcapng}

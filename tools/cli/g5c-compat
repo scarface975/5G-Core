@@ -1,0 +1,174 @@
+#!/usr/bin/env python3
+"""g5c-compat: "does your core behave like Open5GS on these scenarios?", as a report (backlog I-02).
+
+  g5c-compat run [--build DIR] [--out DIR]       run the differential tests of a built tree (ctest -R differential) against the installed Open5GS and report
+  g5c-compat parse LOGFILE|- [--out DIR]         report from the output of those tests (a saved log, or standard input)
+
+Every case a differential test compares becomes one row: a function, the case, the answer of the reference and ours, and a verdict:
+  match        same status, same attributes
+  ours adds    the same answer and more (extra fields in ours)
+  documented   a difference with a reason the test records: a status code that TS 29.500 / 29.50x says otherwise, a resource the reference lacks (405 / 400 for what is a resource of the TS)
+  UNEXPLAINED  a difference nobody wrote a reason for (the differential test fails on it)
+  not compared the reference did not take part (a message only the reference sent)
+The reference is Open5GS 2.8.0; free5GC is not part of this report (no binaries for the oracle). Output: report.txt, report.md, report.html, report.csv and report.json in --out. Exit code 1 when
+anything is UNEXPLAINED."""
+import argparse
+import csv
+import html
+import json
+import os
+import re
+import subprocess
+import sys
+from collections import OrderedDict
+from pathlib import Path
+
+FUNCTION = OrderedDict([("pfcp_differential", "UPF (N4, against Open5GS's UPF)"), ("pfcp_differential_smf", "SMF (N4, against Open5GS's SMF)"), ("ngap_differential_amf", "AMF (N2)"),
+                        ("nrf_differential", "NRF"), ("udr_differential", "UDR"), ("nssf_differential", "NSSF"), ("scp_differential", "SCP"), ("bsf_differential", "BSF"), ("ausf_differential", "AUSF")])
+START = re.compile(r"^\s*Start\s+\d+:\s+(\w+)\s*$")
+ROW = re.compile(r"^(?P<label>\S.*?)\s{2,}(?P<ref>\d{3})\s+(?P<ours>\d{3})\s*(?P<rest>.*?)\s*$")
+PFCP = re.compile(r"^\s{2}(?P<label>PFCP .*?)\s{2,}(?:(?P<n>\d+) elements; ours (?P<res>matches|differs)|(?P<only>only Open5GS's .* sent this))\s*$")
+AMF_ROW = re.compile(r"^(?P<nas>\s{2}NAS )?(?P<label>\w[\w ]*?)\s+(?:(?:initiatingMessage|successfulOutcome|unsuccessfulOutcome)\s+)?IEs: ref (?P<ref>\d+), ours (?P<ours>\d+)\s*(?P<rest>.*)$")
+
+
+def verdict_of_status(ref, ours, rest):
+    notes = " ".join(re.findall(r"\(([^)]*)\)", rest))
+    if "accepted difference" in rest:  # the test records this one as accepted (the status or the body)
+        what = re.sub(r"\s*accepted difference\s*", "", notes).strip(" ;")
+        return "documented", ("the statuses differ (reference %s, ours %s)" % (ref, ours) if ref != ours else "an accepted difference of the body") + ("; " + what if what else "")
+    if ref != ours:
+        m = re.search(r"status differs:\s*(.*)", rest)
+        return ("documented", m.group(1).rstrip(") ").strip()) if m else ("UNEXPLAINED", rest or "the statuses differ and no reason is recorded")
+    if re.search(r"extra in ours", rest):
+        return "ours adds", re.search(r"extra in ours:\s*([^)]*)", rest).group(1).strip()
+    if notes:
+        return "documented", notes
+    return "match", ""
+
+
+def parse(text):
+    rows, test, last_pfcp, finals = [], None, None, {}
+    for ln in text.splitlines():
+        m = START.match(ln)
+        if m:
+            test, last_pfcp = m.group(1), None
+            continue
+        if test is None:
+            continue
+        fn = FUNCTION.get(test, test)
+        m = re.match(r"^(?:[A-Z][A-Za-z ]* )?[dD]ifferential: (OK|(\d+) difference\(s\))", ln) or re.match(r"^(NRF|UDR|NSSF|SCP|BSF|AUSF|PFCP|PFCP SMF) differential: (OK|(\d+) difference\(s\))", ln)
+        if m:
+            finals[test] = ln.strip()
+            continue
+        if test.startswith("pfcp"):
+            m = PFCP.match(ln)
+            if m:
+                if m.group("only"):
+                    last_pfcp = None
+                    rows.append(dict(test=test, function=fn, case=m.group("label").strip(), ref="", ours="", verdict="not compared", note=m.group("only")))
+                else:
+                    last_pfcp = dict(test=test, function=fn, case=m.group("label").strip(), ref="%s elements" % m.group("n"), ours="", verdict="match" if m.group("res") == "matches" else "ours adds", note="")
+                    rows.append(last_pfcp)
+                continue
+            if last_pfcp is not None and re.match(r"^\s{6}(missing|extra) in ours:", ln):
+                if "missing in ours" in ln:
+                    allowed = re.search(r"\(allowed:\s*(.*)\)\s*$", ln)
+                    if not allowed:  # one element without a reason makes the whole message UNEXPLAINED
+                        last_pfcp["verdict"] = "UNEXPLAINED"
+                    elif last_pfcp["verdict"] != "UNEXPLAINED":
+                        last_pfcp["verdict"] = "documented"
+                    reason = allowed.group(1) if allowed else ln.strip()
+                    last_pfcp["note"] = (last_pfcp["note"] + "; " if last_pfcp["note"] else "") + reason
+                elif last_pfcp["verdict"] != "UNEXPLAINED":
+                    last_pfcp["note"] = (last_pfcp["note"] + "; " if last_pfcp["note"] else "") + ln.strip()
+                continue
+        elif test.startswith("ngap"):
+            m = re.match(r"^AMF -> gNB messages: reference (\d+), ours (\d+)\s*(?:\((.*)\))?", ln)
+            if m:
+                ok = m.group(1) == m.group(2) or (m.group(3) and "allowed" in m.group(3))
+                rows.append(dict(test=test, function=fn, case="messages from the AMF to the gNB", ref=m.group(1), ours=m.group(2), verdict="match" if m.group(1) == m.group(2) else ("documented" if ok else "UNEXPLAINED"), note=m.group(3) or ""))
+                continue
+            m = AMF_ROW.match(ln)
+            if m:
+                ref, ours = int(m.group("ref")), int(m.group("ours"))
+                rows.append(dict(test=test, function=fn, case=("NAS " if m.group("nas") else "") + m.group("label").strip(), ref="%d IEs" % ref, ours="%d IEs" % ours,
+                                 verdict="match" if ref == ours else ("ours adds" if ours > ref else "UNEXPLAINED"), note=(re.search(r"extra in ours:\s*([^)]*)", m.group("rest")) or [None, ""])[1] if m.group("rest") else ""))
+                continue
+        else:
+            m = ROW.match(ln)
+            if m:
+                v, note = verdict_of_status(m.group("ref"), m.group("ours"), m.group("rest"))
+                rows.append(dict(test=test, function=fn, case=m.group("label").strip(), ref=m.group("ref"), ours=m.group("ours"), verdict=v, note=note))
+    return rows, finals
+
+
+def summarise(rows):
+    out = OrderedDict()
+    for r in rows:
+        s = out.setdefault(r["function"], OrderedDict((k, 0) for k in ("match", "ours adds", "documented", "UNEXPLAINED", "not compared")))
+        s[r["verdict"]] += 1
+    return out
+
+
+def write_reports(rows, finals, out):
+    out.mkdir(parents=True, exist_ok=True)
+    summ = summarise(rows)
+    head = "%-34s %6s %9s %11s %12s" % ("function", "match", "ours adds", "documented", "UNEXPLAINED")
+    lines = [head] + ["%-34s %6d %9d %11d %12d" % (f, s["match"], s["ours adds"], s["documented"], s["UNEXPLAINED"]) for f, s in summ.items()]
+    tot = [sum(s[k] for s in summ.values()) for k in ("match", "ours adds", "documented", "UNEXPLAINED")]
+    lines.append("%-34s %6d %9d %11d %12d" % ("total", *tot))
+    lines += ["", "where our core differs from Open5GS, and why:"]
+    for r in rows:
+        if r["verdict"] in ("documented", "UNEXPLAINED"):
+            lines.append("  %-32s %-44s ref %-9s ours %-9s %s" % (r["function"][:32], r["case"][:44], r["ref"], r["ours"], r["note"][:150]))
+    (out / "report.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    md = ["# Compatibility with Open5GS 2.8.0", "", "| Function | Match | Ours adds | Documented | Unexplained |", "|---|---:|---:|---:|---:|"]
+    md += ["| %s | %d | %d | %d | %d |" % (f, s["match"], s["ours adds"], s["documented"], s["UNEXPLAINED"]) for f, s in summ.items()]
+    md += ["", "## Differences and their reasons", "", "| Function | Case | Open5GS | Ours | Reason |", "|---|---|---|---|---|"]
+    md += ["| %s | %s | %s | %s | %s |" % (r["function"], r["case"], r["ref"], r["ours"], r["note"].replace("|", "/")) for r in rows if r["verdict"] in ("documented", "UNEXPLAINED")]
+    (out / "report.md").write_text("\n".join(md) + "\n", encoding="utf-8")
+    colour = {"match": "#1b7f3b", "ours adds": "#1b7f3b", "documented": "#9a6700", "UNEXPLAINED": "#b3261e", "not compared": "#57606a"}
+    trs = "".join("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td style='color:%s'>%s</td><td>%s</td></tr>" % (html.escape(r["function"]), html.escape(r["case"]), html.escape(r["ref"]), html.escape(r["ours"]),
+                                                                                                               colour[r["verdict"]], html.escape(r["verdict"]), html.escape(r["note"])) for r in rows)
+    (out / "report.html").write_text("<!doctype html><html lang='en'><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Compatibility report</title>"
+                                     "<style>body{font:14px system-ui;margin:16px}table{border-collapse:collapse;width:100%%}td,th{border:1px solid #8884;padding:4px 6px;font-size:12px;vertical-align:top}th{background:#1f3a5f;color:#fff}"
+                                     "@media(prefers-color-scheme:dark){body{background:#111;color:#ddd}}</style><h1>Compatibility with Open5GS 2.8.0</h1><pre>%s</pre><table><tr><th>Function</th><th>Case</th><th>Open5GS</th><th>Ours</th><th>Verdict</th><th>Note</th></tr>%s</table></html>"
+                                     % (html.escape("\n".join(lines[:len(summ) + 3])), trs), encoding="utf-8")
+    with open(out / "report.csv", "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["function", "case", "open5gs", "ours", "verdict", "note"])
+        for r in rows:
+            w.writerow([r["function"], r["case"], r["ref"], r["ours"], r["verdict"], r["note"]])
+    (out / "report.json").write_text(json.dumps({"reference": "Open5GS 2.8.0", "summary": summ, "tests": finals, "rows": rows}, indent=2), encoding="utf-8")
+    return "\n".join(lines[:len(summ) + 3])
+
+
+def ctest_text(build):
+    p = subprocess.run(["ctest", "--test-dir", build, "-R", "differential", "-V"], capture_output=True, text=True)
+    text = "\n".join(re.sub(r"^\d+: ", "", ln) for ln in p.stdout.splitlines())
+    if "Start" not in text:
+        raise SystemExit("g5c-compat: ctest in %s ran no differential test (is the tree built? is Open5GS installed?)" % build)
+    return text
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(prog="g5c-compat", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    r = sub.add_parser("run")
+    r.add_argument("--build", default=os.path.expanduser("~/g5c-cbuild/plain"))
+    p = sub.add_parser("parse")
+    p.add_argument("log")
+    for x in (r, p):
+        x.add_argument("--out", default="build/compat-report")
+    a = ap.parse_args(argv)
+    text = ctest_text(a.build) if a.cmd == "run" else (sys.stdin.read() if a.log == "-" else Path(a.log).read_text(errors="replace"))
+    rows, finals = parse(text)
+    if not rows:
+        print("g5c-compat: no comparison found in the input", file=sys.stderr)
+        return 2
+    print(write_reports(rows, finals, Path(a.out)))
+    return 1 if any(r["verdict"] == "UNEXPLAINED" for r in rows) else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

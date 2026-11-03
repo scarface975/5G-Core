@@ -17,6 +17,17 @@ mock peers, config tests, CLI), integration (several NFs, real peer bytes), conf
 payload, the matrix), fuzz (replay drivers; libFuzzer targets in CI), perf (1,000 vectors/s gate), soak (mixed load with the UDR
 killed and restarted).
 
+## Time warp, replay, negative testing and the training lab
+* **Time warp** (`G5C_TIME_WARP=60` in the environment of a function, or `g5c_time_warp_set(60)` in a test): the clock that deadlines are measured on runs 60 times faster than the wall clock, and the AMF's timer
+  thread and the SMF's job scheduler sleep a sixtieth of the wait. A T3560 sequence (five transmissions, then release) takes about a fifth of a second at a warp of 25 (`amf_e2e`, `test_time_warp`); the same
+  behaviour, the same counts. Not warped: the SMF's N4 retransmission timers and the real-time deadlines of the SBI client. The default values of the NAS timers are pinned against TS 24.501 Table 10.2.2 (`amf_units`).
+* **Replay** (`tools/cli/g5c-replay`): the NG Setup and the unprotected Registration Request of a capture are sent to the AMF over SCTP, and each answer is compared with the recorded one; the replay stops where
+  the recorded session's keys would be needed. `cluster_replay` shows our core refusing an unknown subscriber (Registration Reject #7) where the recorded core authenticated, and matching once it is provisioned.
+* **Negative testing** (`tools/cli/g5c-mutate`): hostile requests to every route of a function, read from its `/openapi.json`, and corrupted NGAP messages to the AMF. `cluster_mutation` sweeps nine functions and
+  the AMF; the unit test (`mutate_tool`) proves the sweep can fail, against fake functions that return 500 on a JSON bomb, accept what is not JSON, or go down. Run it against a core with `G5C_OAUTH2=0`, or
+  most requests are answered 401 and prove nothing (the report says how many reached the route's own parsing).
+* **Training lab** (`tools/cli/g5c-lab`, `docs/training`): thirteen exercises, each checked on a private cluster by `g5c-lab check N|all` (exercise 3 is in the test suite as `cluster_lab_03`).
+
 ## Conformance matrix
 `docs/conformance/phase1-2-matrix.json` ... `phase5-matrix.json`: procedure -> clause -> test -> status. `python tools/check/check_matrix.py --ctest-list build/ctest-list.txt`
 fails when a cited test, function or clause (checked against the pinned specification text) does not exist.

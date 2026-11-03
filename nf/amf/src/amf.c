@@ -162,7 +162,7 @@ static void *timer_main(void *arg)
             break;
         if (a->ntmrs > 0) {
             struct timespec ts;
-            double wait = a->tmrs[0].due - now;
+            double wait = g5c_real_wait(a->tmrs[0].due - now); /* virtual seconds to the deadline, real seconds to sleep */
             clock_gettime(CLOCK_REALTIME, &ts);
             ts.tv_sec += (time_t)wait;
             ts.tv_nsec += (long)((wait - (double)(time_t)wait) * 1e9);

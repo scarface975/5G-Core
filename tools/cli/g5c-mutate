@@ -1,0 +1,284 @@
+#!/usr/bin/env python3
+"""g5c-mutate: negative testing of a running core, route by route and message by message (backlog B-05). For LAB use: it sends hostile requests to the function it is pointed at.
+
+  g5c-mutate sbi URL [--methods GET,POST,PUT,PATCH,DELETE] [--max-routes N] [--only PREFIX] [--json] [--csv OUT]
+  g5c-mutate n2 CAPTURE|SCRIPT --amf HOST:PORT [--sbi URL] [--json]
+
+sbi: reads the route table of the function from URL/openapi.json and, for every route, sends what a careless or hostile client sends: a body that is not JSON, truncated JSON, the wrong content type,
+an empty body, `{}` `[]` `null`, a JSON bomb (nesting of thousands of levels), a string over the body limit, an absurd number, duplicate keys, lone surrogates, a huge key, and path parameters that are empty,
+very long, `../..`, percent-encoded NUL, SQL-like or unicode. After each route the function must still be ready.
+  A route FAILS when it answers 5xx, does not answer, or the function is no longer ready afterwards; or when it accepts (2xx) what is not JSON at all or is cut off. Everything else (any 4xx, and 2xx for
+  `{}` and the like, which a route may legitimately accept) passes. The report also says how many requests REACHED the route's own parsing (a 4xx other than 401 / 403 / 404 / 405): a function with
+  tokens enforced answers 401 to everything, which proves nothing about the parsing: run the sweep against a core with `G5C_OAUTH2=0` or give it `--curl-args` that carry a token.
+n2: takes the messages a gNB can send alone (NG Setup, an unprotected Registration Request; see g5c-replay) and corrupts them: cut at several lengths, a byte flipped at several places, appended
+garbage, repeated. After each, a fresh association must still get an NG Setup Response (and, with --sbi, /health/ready must be 200). The AMF may close the association: that is allowed; being gone is not.
+Exit code 1 when anything FAILS. The curl options of the cluster (certificates, --http2-prior-knowledge) come from G5C_CURL_ARGS."""
+import argparse
+import csv
+import importlib.machinery
+import importlib.util
+import json
+import os
+import shlex
+import socket
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+BODY_METHODS = {"POST", "PUT", "PATCH"}
+REACHED_IGNORE = {401, 403, 404, 405}
+
+
+def curl_args():
+    extra = shlex.split(os.environ.get("G5C_CURL_ARGS", ""))
+    return ["curl", "-s", "--max-time", "15"] + ([] if os.environ.get("G5C_MUTATE_HTTP1") else ["--http2-prior-knowledge"]) + extra
+
+
+def request(method, url, body=None, ctype="application/json", headers=()):
+    cmd = curl_args() + ["-X", method, "-o", "/dev/null", "-w", "%{http_code}"]
+    if body is not None:
+        cmd += ["-H", "content-type: " + ctype, "--data-binary", "@-"]
+    for h in headers:
+        cmd += ["-H", h]
+    try:
+        p = subprocess.run(cmd + [url], input=body if body is not None else None, capture_output=True, timeout=30)
+    except subprocess.TimeoutExpired:
+        return 0, "no answer in 30 s"
+    code = p.stdout.decode(errors="replace").strip()
+    if p.returncode != 0 or not code.isdigit() or code == "000":
+        return 0, "curl exit %d" % p.returncode
+    return int(code), ""
+
+
+def get_json(url):
+    cmd = curl_args() + ["-X", "GET", url]
+    p = subprocess.run(cmd, capture_output=True, timeout=30)
+    try:
+        return json.loads(p.stdout)
+    except ValueError:
+        return None
+
+
+def ready(base):
+    code, _ = request("GET", base + "/health/ready")
+    return code == 200
+
+
+def body_mutations():
+    """(name, bytes, content type, definitely_invalid)"""
+    j = "application/json"
+    return [
+        ("empty body", b"", j, False),
+        ("{}", b"{}", j, False), ("[]", b"[]", j, False), ("null", b"null", j, False), ('"x"', b'"x"', j, False), ("7", b"7", j, False),
+        ("not json", b"{not json", j, True),
+        ("truncated", b'{"a":1,"b":[1,2', j, True),
+        ("text/plain", b'{"a":1}', "text/plain", True),
+        ("json bomb", b"[" * 5000 + b"]" * 5000, j, False),
+        ("deep object", b'{"a":' * 3000 + b"1" + b"}" * 3000, j, False),
+        ("string over the limit", b'{"a":"' + b"a" * (1 << 21) + b'"}', j, False),
+        ("absurd number", b'{"a":1e999999}', j, False),
+        ("duplicate keys", b'{"supi":"a","supi":"b"}', j, False),
+        ("lone surrogate", b'{"supi":"\\ud800"}', j, False),
+        ("NUL in string", b'{"supi":"a\\u0000b"}', j, False),
+        ("huge key", b'{"' + b"k" * 200000 + b'":1}', j, False),
+        ("many keys", b"{" + b",".join(b'"k%d":1' % i for i in range(60000)) + b"}", j, False),
+    ]
+
+
+PATH_VALUES = ["", "a" * 5000, "../../etc/passwd", "%00", "%zz", "imsi-" + "9" * 1000, "'; DROP TABLE x;--", "{supi}", "é中文", "..%2f..%2f"]
+
+
+def fill(template, value="imsi-001010000000001"):
+    out, i = "", 0
+    while i < len(template):
+        if template[i] == "{":
+            j = template.index("}", i)
+            out += value
+            i = j + 1
+        else:
+            out += template[i]
+            i += 1
+    return out
+
+
+def quote(v):
+    from urllib.parse import quote as q
+    return v if "%" in v else q(v, safe="/")
+
+
+def sweep_sbi(base, methods, max_routes, only):
+    doc = get_json(base + "/openapi.json")
+    if not doc or "paths" not in doc:
+        raise SystemExit("g5c-mutate: %s/openapi.json did not answer (is the URL the SBI root, and the curl options right?)" % base)
+    routes = []
+    for path, ops in doc["paths"].items():
+        if path.startswith("/health") or path == "/metrics" or path == "/openapi.json":
+            continue
+        if only and not path.startswith(only):
+            continue
+        for m in ops:
+            if m.upper() in methods:
+                routes.append((m.upper(), path))
+    routes = routes[:max_routes] if max_routes else routes
+    report = []
+    for method, path in routes:
+        res = {"method": method, "path": path, "sent": 0, "reached": 0, "failures": []}
+        cases = []
+        if method in BODY_METHODS:
+            cases += [("body: " + n, b, c, inv, fill(path)) for n, b, c, inv in body_mutations()]
+        if "{" in path:
+            cases += [("path: " + (v[:20] + "..." if len(v) > 20 else v or "empty"), b"{}" if method in BODY_METHODS else None, "application/json", False,
+                       fill(path, quote(v)) if v else path.replace("{", "").replace("}", "")) for v in PATH_VALUES]
+        for name, body, ctype, invalid, p in cases:
+            code, why = request(method, base + p, body, ctype)
+            res["sent"] += 1
+            if code == 0 or code >= 500:
+                res["failures"].append("%s -> %s" % (name, why or code))
+            elif invalid and 200 <= code < 300:
+                res["failures"].append("%s accepted (%d)" % (name, code))
+            elif 400 <= code < 500 and code not in REACHED_IGNORE:
+                res["reached"] += 1
+        if not ready(base):
+            res["failures"].append("the function is no longer ready after this route")
+            res["down"] = True
+        res["result"] = "FAIL" if res["failures"] else "pass"
+        report.append(res)
+        if res.get("down"):
+            for _ in range(20):
+                time.sleep(0.5)
+                if ready(base):
+                    break
+            else:
+                break
+    return report
+
+
+def text_sbi(report):
+    out = []
+    for r in report:
+        out.append("%-4s %-6s %-60s %4d sent %4d reached%s" % (r["result"], r["method"], r["path"][:60], r["sent"], r["reached"], ("   " + "; ".join(r["failures"][:3])) if r["failures"] else ""))
+    sent, reached = sum(r["sent"] for r in report), sum(r["reached"] for r in report)
+    fails = sum(1 for r in report if r["result"] == "FAIL")
+    out.append("")
+    out.append("%d routes, %d requests, %d reached the parsing of a route (%.0f %%), %d route(s) FAILED" % (len(report), sent, reached, 100.0 * reached / sent if sent else 0, fails))
+    if sent and reached * 10 < sent:
+        out.append("note: under 10 % of the requests reached a route's own parsing: the function answers 401 / 404 to most of them (tokens enforced? wrong prefix?); this sweep proves little")
+    return "\n".join(out)
+
+
+def load_replay():
+    ld = importlib.machinery.SourceFileLoader("g5c_replay", str(HERE / "g5c-replay"))
+    spec = importlib.util.spec_from_loader("g5c_replay", ld)
+    mod = importlib.util.module_from_spec(spec)
+    ld.exec_module(mod)
+    return mod
+
+
+def corruptions(pdu):
+    n = len(pdu)
+    out = [("cut to 1 byte", pdu[:1]), ("cut to half", pdu[: n // 2]), ("cut by 1 byte", pdu[:-1]), ("appended 1000 bytes of 0xff", pdu + b"\xff" * 1000), ("appended zeros", pdu + b"\x00" * 64), ("repeated twice", pdu + pdu)]
+    for pos in sorted({0, 1, 2, 3, n // 2, n - 1}):
+        if 0 <= pos < n:
+            b = bytearray(pdu)
+            b[pos] ^= 0xFF
+            out.append(("byte %d inverted" % pos, bytes(b)))
+    b = bytearray(pdu)
+    b[3:4] = b"\x7f"  # a length that does not fit
+    out.append(("length byte 0x7f", bytes(b)))
+    return out
+
+
+def sweep_n2(steps, amf, sbi, inspect, rp):
+    ups = [s for s in steps if s["dir"] == "up" and rp.replayable(s)]
+    ng = next((s for s in ups if s["summary"]["procedure"] == "NGSetup"), None)
+    if ng is None:
+        raise SystemExit("g5c-mutate: the capture has no NG Setup to prove the AMF is still there with")
+    report = []
+
+    def alive():
+        try:
+            sk = rp.connect(amf, 2.0)
+        except OSError:
+            return False
+        try:
+            rp.send(sk, bytes.fromhex(ng["hex"]), 0)
+            got = rp.receive(sk, 1, 2.0)
+        except OSError:
+            return False
+        finally:
+            sk.close()
+        info = rp.decode([("0", got[0].hex())], inspect).get("0") if got else None
+        return info is not None and info["procedure"] == "NGSetup" and info["kind"] == "successfulOutcome"
+
+    if not alive():
+        raise SystemExit("g5c-mutate: the AMF does not answer an NG Setup before the sweep starts")
+    for s in ups:
+        label = rp.label(s["summary"])
+        res = {"message": label, "sent": 0, "failures": []}
+        for name, data in corruptions(bytes.fromhex(s["hex"])):
+            try:
+                sk = rp.connect(amf, 2.0)
+                if s["summary"]["procedure"] != "NGSetup":  # a UE message needs an NG-set-up association
+                    rp.send(sk, bytes.fromhex(ng["hex"]), 0)
+                    rp.receive(sk, 1, 1.0)
+                rp.send(sk, data, 0 if s["summary"]["procedure"] == "NGSetup" else 1)
+                rp.receive(sk, 1, 0.4)
+                sk.close()
+            except OSError:
+                pass  # the AMF closing the association is a legitimate answer
+            res["sent"] += 1
+            if not alive():
+                res["failures"].append("%s: the AMF no longer answers an NG Setup" % name)
+                break
+            if sbi and not ready(sbi):
+                res["failures"].append("%s: the AMF is not ready" % name)
+                break
+        res["result"] = "FAIL" if res["failures"] else "pass"
+        report.append(res)
+    return report
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(prog="g5c-mutate", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    s = sub.add_parser("sbi")
+    s.add_argument("url")
+    s.add_argument("--methods", default="GET,POST,PUT,PATCH,DELETE")
+    s.add_argument("--max-routes", type=int, default=0)
+    s.add_argument("--only", default="")
+    s.add_argument("--json", action="store_true")
+    s.add_argument("--csv")
+    n = sub.add_parser("n2")
+    n.add_argument("capture")
+    n.add_argument("--amf", required=True)
+    n.add_argument("--sbi")
+    n.add_argument("--amf-port", type=int, default=38412)
+    n.add_argument("--inspect")
+    n.add_argument("--json", action="store_true")
+    a = ap.parse_args(argv)
+    if a.cmd == "sbi":
+        report = sweep_sbi(a.url.rstrip("/"), {m.strip().upper() for m in a.methods.split(",")}, a.max_routes, a.only)
+        if a.csv:
+            with open(a.csv, "w", newline="") as f:
+                w = csv.writer(f)
+                w.writerow(["method", "path", "result", "sent", "reached", "failures"])
+                for r in report:
+                    w.writerow([r["method"], r["path"], r["result"], r["sent"], r["reached"], "; ".join(r["failures"])])
+        print(json.dumps(report, indent=2) if a.json else text_sbi(report))
+        return 1 if any(r["result"] == "FAIL" for r in report) else 0
+    rp = load_replay()
+    inspect = rp.find_inspect(a.inspect)
+    steps = rp.load_script(a.capture, a.amf_port, inspect)
+    report = sweep_n2(steps, a.amf, a.sbi.rstrip("/") if a.sbi else None, inspect, rp)
+    if a.json:
+        print(json.dumps(report, indent=2))
+    else:
+        for r in report:
+            print("%-4s %-45s %3d corruptions%s" % (r["result"], r["message"], r["sent"], ("   " + "; ".join(r["failures"])) if r["failures"] else ""))
+    return 1 if any(r["result"] == "FAIL" for r in report) else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

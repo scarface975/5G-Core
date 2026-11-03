@@ -6,7 +6,7 @@ log: { level: info, json: true }
 smf:
   udm: { uri: 'http://udm:7773' }
   pcf: { uri: 'http://pcf:7777' }
-  # amf: { uri: 'http://amf:7777' }   # needed only when the AMF's smContextStatusUri is not reachable from here
+  # amf: { uri: 'http://amf:7779' }   # needed only when the AMF's smContextStatusUri is not reachable from here
   mtu: 1400
   state_file: /var/lib/g5c/smf-state.json
   n4:

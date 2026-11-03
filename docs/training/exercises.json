@@ -1,0 +1,127 @@
+{
+  "exercises": [
+    {
+      "id": "01",
+      "title": "Start a core and register UEs",
+      "readme": "docs/training/01-first-registration.md",
+      "env": {},
+      "scenario": "scenarios/basic-wave.yaml"
+    },
+    {
+      "id": "02",
+      "title": "Make the AMF refuse registrations on purpose",
+      "readme": "docs/training/02-refuse-on-purpose.md",
+      "env": {
+        "G5C_AMF_EXTRA": "  inject: { registration_reject: [{ supi: imsi-00101, cause: 11 }] }"
+      },
+      "scenario": "scenarios/inject-amf-reject.yaml"
+    },
+    {
+      "id": "03",
+      "title": "Ask the core why a subscriber failed",
+      "readme": "docs/training/03-why-did-it-fail.md",
+      "env": {
+        "G5C_AMF_EXTRA": "  inject: { registration_reject: [{ supi: imsi-00101, cause: 11 }] }"
+      },
+      "scenario": "scenarios/why-injected.yaml"
+    },
+    {
+      "id": "04",
+      "title": "Kill the SMF in the middle of a wave",
+      "readme": "docs/training/04-lose-the-smf.md",
+      "env": {},
+      "scenario": "scenarios/smf-restart.yaml"
+    },
+    {
+      "id": "05",
+      "title": "Slow down the link to the UPF",
+      "readme": "docs/training/05-slow-link.md",
+      "env": {},
+      "scenario": "scenarios/n4-delay.yaml"
+    },
+    {
+      "id": "06",
+      "title": "Hold a session to its rate",
+      "readme": "docs/training/06-limit-a-session.md",
+      "env": {
+        "G5C_AMBR_UL": "1 Mbps",
+        "G5C_AMBR_DL": "1 Mbps"
+      },
+      "scenario": "scenarios/traffic-ambr.yaml"
+    },
+    {
+      "id": "07",
+      "title": "Survive a signalling storm",
+      "readme": "docs/training/07-signalling-storm.md",
+      "env": {
+        "G5C_AMF_EXTRA": "  overload: { registrations_per_s: 20, burst_s: 1, t3346_s: 10 }"
+      },
+      "scenario": "scenarios/registration-storm.yaml"
+    },
+    {
+      "id": "08",
+      "title": "Change a limit without a restart",
+      "readme": "docs/training/08-hot-reload.md",
+      "env": {
+        "G5C_AMF_EXTRA": "  overload: { registrations_per_s: 100000, burst_s: 1, t3346_s: 10 }"
+      },
+      "scenario": "scenarios/reload-amf-overload.yaml"
+    },
+    {
+      "id": "09",
+      "title": "Replay a customer's capture against the core",
+      "readme": "docs/training/09-replay-a-capture.md",
+      "env": {},
+      "scenario": "scenarios/replay-registration.yaml"
+    },
+    {
+      "id": "10",
+      "title": "Throw hostile input at the functions",
+      "readme": "docs/training/10-hostile-input.md",
+      "env": {
+        "G5C_OAUTH2": "0"
+      },
+      "scenario": "scenarios/mutation-sweep.yaml"
+    },
+    {
+      "id": "11",
+      "title": "Read N2 and N4 as a ladder",
+      "readme": "docs/training/11-read-a-capture.md",
+      "env": {},
+      "command": [
+        "python3",
+        "tools/cli/g5c-ladder",
+        "tests/fixtures/golden/s2_open5gs_v2.8.0_ueransim.pcapng"
+      ],
+      "contains": "ladders"
+    },
+    {
+      "id": "12",
+      "title": "Break a certificate and watch the core refuse",
+      "readme": "docs/training/12-break-a-certificate.md",
+      "env": {
+        "G5C_OAUTH2": "1"
+      },
+      "command": [
+        "bash",
+        "deploy/run/g5c-cluster.sh",
+        "ns",
+        "tls"
+      ],
+      "contains": "tls: PASS"
+    },
+    {
+      "id": "13",
+      "title": "Rotate the master key of the subscriber database",
+      "readme": "docs/training/13-rotate-a-key.md",
+      "env": {},
+      "command": [
+        "bash",
+        "deploy/run/g5c-cluster.sh",
+        "ns",
+        "ops"
+      ],
+      "contains": "ops: PASS"
+    }
+  ]
+}

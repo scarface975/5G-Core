@@ -83,7 +83,7 @@ static void *worker_main(void *a)
             struct timespec ts;
             clock_gettime(CLOCK_REALTIME, &ts);
             {
-                double wait = min_due - now;
+                double wait = g5c_real_wait(min_due - now);
                 ts.tv_sec += (time_t)wait;
                 ts.tv_nsec += (long)((wait - (double)(time_t)wait) * 1e9);
                 if (ts.tv_nsec >= 1000000000L) {

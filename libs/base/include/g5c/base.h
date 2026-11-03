@@ -60,7 +60,12 @@ long g5c_base64_decode(const char *s, uint8_t *out, size_t cap);
 int g5c_uuid_v4(char out[37]);
 /* Fill with CSPRNG bytes. Returns 0 / -1. */
 int g5c_random(void *p, size_t n);
-double g5c_now_seconds(void);   /* monotonic */
+double g5c_now_seconds(void);
+/* Time warp (backlog B-12): the clock that deadlines are measured on can run faster than the wall clock, so that a timer scenario of an hour takes a minute. G5C_TIME_WARP=60 in the environment, or
+ * g5c_time_warp_set(60) in a test; 1 is real time. Virtual time never jumps when the factor changes. The functions that wait for a deadline use g5c_real_wait() for the wall-clock time to sleep. */
+void g5c_time_warp_set(double factor);
+double g5c_time_warp(void);
+double g5c_real_wait(double virtual_seconds);   /* monotonic */
 int64_t g5c_unix_millis(void);  /* wall clock */
 
 /* ---- logging ---- */

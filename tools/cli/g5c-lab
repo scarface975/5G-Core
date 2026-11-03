@@ -1,0 +1,92 @@
+#!/usr/bin/env python3
+"""g5c-lab: the training exercises of docs/training (backlog G-04).
+
+  g5c-lab list                       the exercises
+  g5c-lab show N                     the text of exercise N (goal, what to do by hand, what you should see, why)
+  g5c-lab check N|all [--keep]       run the exercise on a private cluster and judge it: the scenario or command of the exercise decides pass or fail
+
+`check` is the reference solution: it starts the core in a network namespace (no root), does what the exercise does and compares the result with what the exercise says you should see. If an exercise
+stops working in a release, this is where it shows. A tree must be built (BUILD directory: G5C_BUILD_DIR, default ~/g5c-cbuild/plain); Linux with user namespaces; tshark for exercises 9 and 11."""
+import argparse
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent.parent
+DIR = ROOT / "docs" / "training"
+
+
+def exercises():
+    return json.loads((DIR / "exercises.json").read_text(encoding="utf-8"))["exercises"]
+
+
+def base_env(ex_id):
+    build = os.environ.get("G5C_BUILD_DIR") or os.path.expanduser("~/g5c-cbuild/plain")
+    env = dict(os.environ)
+    env.setdefault("G5C_BUILD_DIR", build)
+    env.setdefault("G5C_LOAD_BIN", os.path.join(build, "nf", "amf", "load_core"))
+    env.setdefault("G5C_TLS", "1")      # what the tests run the scenarios with: mutual TLS between the functions,
+    env.setdefault("G5C_OAUTH2", "0")   # without access tokens (an exercise that needs them says so)
+    env["G5C_RUN"] = os.path.join(os.path.expanduser("~/.cache/g5c-lab"), "run-" + ex_id)
+    return env
+
+
+def run_one(ex, keep):
+    env = base_env(ex["id"])
+    env.update(ex.get("env", {}))
+    if "scenario" in ex:
+        cmd = ["bash", str(ROOT / "deploy" / "run" / "g5c-cluster.sh"), "ns", "scenario", str(ROOT / ex["scenario"])]
+    else:
+        cmd = list(ex["command"])
+        cmd[1:] = [str(ROOT / c) if (ROOT / c).exists() else c for c in cmd[1:]]
+        if cmd[0] == "python3":
+            cmd[0] = sys.executable
+    p = subprocess.run(cmd, capture_output=True, text=True, env=env, cwd=str(ROOT))
+    out = p.stdout + p.stderr
+    ok = p.returncode == 0 and ex.get("contains", "") in out
+    if not keep:
+        subprocess.run(["rm", "-rf", env["G5C_RUN"]], capture_output=True)
+    return ok, p.returncode, out
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(prog="g5c-lab", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("list")
+    s = sub.add_parser("show")
+    s.add_argument("n")
+    c = sub.add_parser("check")
+    c.add_argument("n")
+    c.add_argument("--keep", action="store_true", help="keep the run directory (logs, configuration) of the cluster")
+    a = ap.parse_args(argv)
+    ex = exercises()
+    if a.cmd == "list":
+        for e in ex:
+            print("%-3s %s" % (e["id"], e["title"]))
+        return 0
+    pick = lambda n: [e for e in ex if e["id"] == n.zfill(2)]
+    if a.cmd == "show":
+        e = pick(a.n)
+        if not e:
+            print("g5c-lab: no exercise %s (g5c-lab list)" % a.n, file=sys.stderr)
+            return 2
+        print((ROOT / e[0]["readme"]).read_text(encoding="utf-8"))
+        return 0
+    chosen = ex if a.n == "all" else pick(a.n)
+    if not chosen:
+        print("g5c-lab: no exercise %s (g5c-lab list)" % a.n, file=sys.stderr)
+        return 2
+    bad = 0
+    for e in chosen:
+        ok, rc, out = run_one(e, a.keep)
+        print("%s  %-3s %s" % ("PASS" if ok else "FAIL", e["id"], e["title"]))
+        if not ok:
+            bad += 1
+            print("\n".join("      " + ln for ln in out.strip().splitlines()[-12:]))
+    return 1 if bad else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

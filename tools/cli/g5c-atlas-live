@@ -1,0 +1,180 @@
+#!/usr/bin/env python3
+"""g5c-atlas-live: the Atlas fed by a running core (backlog C-06). One small server reads the functions you name, computes the service KPIs with the arithmetic of g5c-kpi, and serves a page that
+refreshes itself: which functions are up and ready, what the NRF has registered, the KPIs since start and over the last minute with their targets, and the ones that miss.
+
+  g5c-atlas-live serve --nf amf=http://127.2.0.5:7779 --nf smf=http://127.2.0.4:7776 ... [--nrf http://127.2.0.1:7777] [--port 8099] [--bind 127.0.0.1] [--interval 5]
+  g5c-atlas-live snapshot --nf ... [--nrf ...]              one snapshot as JSON on standard output (what /api/live serves)
+
+The functions are read the way g5c-kpi reads them (curl with HTTP/2 prior knowledge; G5C_CURL_ARGS carries the certificate options of a TLS cluster). The page has no data of its own: everything it shows
+comes from the running functions at the moment, so the demo and the product look alike. It only READS (health, metrics, the NRF's registry). Bind it to a trusted interface: it has no login."""
+import argparse
+import importlib.machinery
+import importlib.util
+import json
+import os
+import shlex
+import subprocess
+import sys
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+PAGE = HERE.parent / "docs" / "dashboard" / "live.html"
+RING_SECONDS = 300
+
+
+def load_kpi():
+    ld = importlib.machinery.SourceFileLoader("g5c_kpi", str(HERE / "g5c-kpi"))
+    spec = importlib.util.spec_from_loader("g5c_kpi", ld)
+    mod = importlib.util.module_from_spec(spec)
+    ld.exec_module(mod)
+    return mod
+
+
+def curl(url, timeout=4):
+    cmd = ["curl", "-s", "--max-time", str(timeout)] + ([] if os.environ.get("G5C_LIVE_HTTP1") else ["--http2-prior-knowledge"]) + shlex.split(os.environ.get("G5C_CURL_ARGS", "")) + ["-w", "\n%{http_code}", url]
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 2)
+    except subprocess.TimeoutExpired:
+        return 0, ""
+    body, _, code = p.stdout.rpartition("\n")
+    return (int(code) if code.isdigit() else 0), body
+
+
+class Atlas:
+    def __init__(self, nfs, nrf, defs):
+        self.kpi = load_kpi()
+        self.nfs, self.nrf = nfs, nrf
+        self.defs = json.load(open(defs or self.kpi.DEFAULT_DEFS))
+        self.ring = []  # (time, samples)
+        self.lock = threading.Lock()
+
+    def probe(self, item):
+        name, url = item
+        live, _ = curl(url + "/health/live")
+        ready, _ = curl(url + "/health/ready")
+        code, text = curl(url + "/metrics")
+        samples = [(n, dict(l, __function=name), v) for n, l, v in self.kpi.parse_exposition(text)] if code == 200 else []  # which function: the same series of two functions must not be mixed up in a difference
+        version = next((l.get("version", "") for n, l, v in samples if n == "g5c_build_info"), "")
+        ue = next((v for n, l, v in samples if n in ("g5c_amf_ue_contexts", "g5c_smf_pdu_sessions_active", "g5c_upf_sessions")), None)
+        return {"name": name, "url": url, "live": live == 200, "ready": ready == 200, "version": version, "metrics": len(samples), "load": ue}, samples
+
+    def registry(self):
+        if not self.nrf:
+            return []
+        code, text = curl(self.nrf + "/nnrf-nfm/v1/nf-instances")
+        if code != 200:
+            return []
+        try:
+            doc = json.loads(text)
+        except ValueError:
+            return []
+        hrefs = [i.get("href", "") for i in (doc.get("_links", {}).get("item") or [])][:60]
+        out = []
+        for h in hrefs:
+            c, t = curl(h if h.startswith("http") else self.nrf + h)
+            try:
+                p = json.loads(t) if c == 200 else {}
+            except ValueError:
+                p = {}
+            if p:
+                out.append({"type": p.get("nfType", "?"), "id": p.get("nfInstanceId", h.rsplit("/", 1)[-1]), "status": p.get("nfStatus", "?"), "services": len(p.get("nfServices") or p.get("nfServiceList") or [])})
+        return sorted(out, key=lambda r: (r["type"], r["id"]))
+
+    def snapshot(self):
+        with ThreadPoolExecutor(max_workers=max(4, len(self.nfs))) as ex:
+            results = list(ex.map(self.probe, self.nfs))
+            reg_future = ex.submit(self.registry)
+            registry = reg_future.result()
+        funcs = [r[0] for r in results]
+        samples = [s for r in results for s in r[1]]
+        now = time.time()
+        with self.lock:
+            self.ring = [(t, s) for t, s in self.ring if now - t < RING_SECONDS] + [(now, samples)]
+            base = next(((t, s) for t, s in self.ring if 55 <= now - t <= 130), None)
+            first = self.ring[0]
+        since = self.kpi.compute(self.defs, samples)
+        window = None
+        if base is not None and base[0] < now:
+            window = self.kpi.compute(self.defs, self.kpi.diff(samples, base[1]), now - base[0])
+        miss = [k for k in since if k["status"] == "MISS"]
+        return {"time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now)), "functions": funcs, "registry": registry, "kpis": since, "kpisLastMinute": window,
+                "summary": {"functions": len(funcs), "live": sum(f["live"] for f in funcs), "ready": sum(f["ready"] for f in funcs), "registered": len(registry), "kpiMisses": len(miss),
+                            "windowSeconds": round(now - base[0]) if base else None}}
+
+
+def make_handler(atlas, interval):
+    cache = {"t": 0, "doc": None}
+    lock = threading.Lock()
+
+    class H(BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def send(self, code, body, ctype):
+            self.send_response(code)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Security-Policy", "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'")
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_GET(self):
+            path = self.path.split("?")[0]
+            if path in ("/", "/index.html"):
+                return self.send(200, PAGE.read_bytes(), "text/html; charset=utf-8")
+            if path == "/api/live":
+                with lock:  # one snapshot per interval however many browsers ask
+                    if time.time() - cache["t"] >= interval or cache["doc"] is None:
+                        cache["doc"], cache["t"] = atlas.snapshot(), time.time()
+                    doc = cache["doc"]
+                return self.send(200, json.dumps(doc).encode(), "application/json")
+            return self.send(404, b"not found", "text/plain")
+
+    return H
+
+
+def parse_nfs(items):
+    out = []
+    for it in items:
+        name, sep, url = it.partition("=")
+        if not sep or not url.startswith(("http://", "https://")):
+            raise SystemExit("g5c-atlas-live: --nf takes NAME=URL (got %r)" % it)
+        out.append((name, url.rstrip("/")))
+    if not out:
+        raise SystemExit("g5c-atlas-live: name at least one function with --nf NAME=URL")
+    return out
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(prog="g5c-atlas-live", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    for name in ("serve", "snapshot"):
+        s = sub.add_parser(name)
+        s.add_argument("--nf", action="append", default=[], metavar="NAME=URL")
+        s.add_argument("--nrf")
+        s.add_argument("--defs")
+    sv = sub.choices["serve"]
+    sv.add_argument("--port", type=int, default=8099)
+    sv.add_argument("--bind", default="127.0.0.1")
+    sv.add_argument("--interval", type=float, default=5.0)
+    a = ap.parse_args(argv)
+    atlas = Atlas(parse_nfs(a.nf), a.nrf.rstrip("/") if a.nrf else None, a.defs)
+    if a.cmd == "snapshot":
+        print(json.dumps(atlas.snapshot(), indent=2))
+        return 0
+    srv = ThreadingHTTPServer((a.bind, a.port), make_handler(atlas, a.interval))
+    print("g5c-atlas-live: http://%s:%d/ (reads %d functions)" % (a.bind, srv.server_address[1], len(atlas.nfs)), flush=True)
+    try:
+        srv.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

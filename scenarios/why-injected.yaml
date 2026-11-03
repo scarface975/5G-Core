@@ -1,0 +1,7 @@
+# Training exercise 3 (run with G5C_AMF_EXTRA='  inject: { registration_reject: [{ supi: imsi-00101, cause: 11 }] }'): the AMF refuses every registration; g5c-why reads the
+# logs of the functions and says so in plain words, naming the subscriber, the cause and that it was injected on purpose.
+name: g5c-why explains a refused registration
+steps:
+  - load: {ues: 3, gnbs: 1}
+    expect: fail
+  - why: {contains: ["imsi-0010100000000", "on purpose", "cause #11"]}

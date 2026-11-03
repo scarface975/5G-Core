@@ -13,6 +13,12 @@ Newest first. Versions follow `MAJOR.MINOR.PATCH[-rcN]` (docs/guides/release-pro
 - `tools/cli/g5c-why`: the logs of the functions explained per subscriber (cause in plain words, function, clause, what to check, runbook), lines of one trace joined across functions.
 - `tools/cli/g5c-cdr`: usage, quality and roaming reports from the SMF charging records, with checks on the records themselves.
 - Security assurance: `docs/conformance/security-suite.json` (17 named cases with their tests) and `g5c-dossier security`, which reports the suite and the security rows of the conformance matrices; the release dossier carries it.
+- Time warp (`G5C_TIME_WARP`): timer scenarios in a fraction of their time; the NAS timer defaults pinned against TS 24.501.
+- `tools/cli/g5c-replay` (a capture replayed against the AMF, differences reported) and `tools/cli/g5c-mutate` (hostile requests to every route and corrupted N2 messages), with the scenario steps `replay`, `mutate`, `reload`, `why` and the tests `cluster_replay`, `cluster_mutation`.
+- The training lab: thirteen exercises in `docs/training`, checked by `tools/cli/g5c-lab`.
+- Kubernetes manifests generated from the compose model (`deploy/k8s/base`, `tools/gen/gen_k8s.py`), cross-checked, never applied; the compose SMF example now names the AMF's real port.
+- `tools/cli/g5c-compat`: the differential tests against Open5GS as a compatibility report (129 compared cases; every difference with its reason).
+- `tools/cli/g5c-atlas-live`: the Atlas fed by a running core (functions, release, the NRF's registry, KPIs since start and over the last minute).
 
 ## 0.9.0-rc1 (release candidate)
 The first release candidate: all eleven functions of the strategy and the optional BSF, validated against Open5GS 2.8.0 and UERANSIM and against an OCUDU gNB with srsUE over ZeroMQ.

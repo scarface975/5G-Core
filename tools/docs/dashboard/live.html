@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>5G Core Atlas live</title>
+<style>
+:root { --bg:#eef1f4; --surface:#fff; --surface2:#f6f8fa; --ink:#14202b; --muted:#566676; --line:#d3dbe3; --accent:#0a6e78; --ok:#1d7f46; --ok-soft:#dcf1e4; --warn:#a9690f; --warn-soft:#f6e8cf; --bad:#b8332a; --bad-soft:#f8dfdc; --idle:#7a8997; --idle-soft:#e7ecf0;
+  --font:"IBM Plex Sans","Segoe UI",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,Consolas,monospace; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#0e161d; --surface:#15212b; --surface2:#1a2835; --ink:#e4ebf1; --muted:#93a4b3; --line:#27384a; --accent:#3cc0cc; --ok:#46c47a; --ok-soft:#14301f; --warn:#e0a942; --warn-soft:#3a2c10; --bad:#ef7b6e; --bad-soft:#3d1c19; --idle:#8394a3; --idle-soft:#212f3b; } }
+:root[data-theme="dark"] { --bg:#0e161d; --surface:#15212b; --surface2:#1a2835; --ink:#e4ebf1; --muted:#93a4b3; --line:#27384a; --accent:#3cc0cc; --ok:#46c47a; --ok-soft:#14301f; --warn:#e0a942; --warn-soft:#3a2c10; --bad:#ef7b6e; --bad-soft:#3d1c19; --idle:#8394a3; --idle-soft:#212f3b; }
+* { box-sizing: border-box; }
+body { margin:0; padding:0 16px 48px; background:var(--bg); color:var(--ink); font:14px/1.5 var(--font); }
+.wrap { max-width:1240px; margin-inline:auto; }
+header { display:flex; flex-wrap:wrap; gap:8px 24px; align-items:baseline; justify-content:space-between; padding-block:14px 10px; border-bottom:1px solid var(--line); }
+h1 { margin:0; font-size:22px; letter-spacing:-0.02em; } h1 small { font:500 12px var(--mono); color:var(--muted); margin-left:10px; letter-spacing:0; }
+h2 { font-size:16px; margin:24px 0 10px; }
+button { font:inherit; color:inherit; background:var(--surface); border:1px solid var(--line); border-radius:6px; padding:3px 10px; cursor:pointer; }
+button[aria-pressed="true"] { background:var(--accent); color:var(--surface); border-color:var(--accent); }
+.muted { color:var(--muted); } .mono { font-family:var(--mono); font-size:12.5px; }
+.stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin-top:16px; }
+.card { background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:12px 14px; }
+.big { font:700 26px var(--font); font-variant-numeric:tabular-nums; }
+.tablewrap { overflow-x:auto; background:var(--surface); border:1px solid var(--line); border-radius:8px; }
+table { border-collapse:collapse; width:100%; font-size:13px; }
+th { text-align:left; font:600 11.5px var(--font); text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); padding:8px 12px; background:var(--surface2); border-bottom:1px solid var(--line); white-space:nowrap; }
+td { padding:8px 12px; border-bottom:1px solid var(--line); vertical-align:top; } tr:last-child td { border-bottom:0; }
+.dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; background:var(--idle); } .dot.ok { background:var(--ok); } .dot.bad { background:var(--bad); }
+.pill { display:inline-block; font:500 11.5px var(--mono); border-radius:99px; padding:1px 9px; } .pill.ok { color:var(--ok); background:var(--ok-soft); } .pill.MISS { color:var(--bad); background:var(--bad-soft); } .pill.na { color:var(--idle); background:var(--idle-soft); }
+.kpis { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:12px; }
+.kpi.MISS { border-color:var(--bad); }
+#err { display:none; background:var(--bad-soft); color:var(--bad); border:1px solid var(--bad); border-radius:8px; padding:8px 12px; margin-top:12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>5G Core Atlas<small id="when">waiting for the first snapshot</small></h1>
+    <div><button id="theme" type="button">Theme</button></div>
+  </header>
+  <div id="err" role="alert"></div>
+  <div class="stats" id="stats"></div>
+  <h2>Functions</h2>
+  <div class="tablewrap"><table><thead><tr><th>Function</th><th>Live</th><th>Ready</th><th>Release</th><th>Load</th><th>Endpoint</th></tr></thead><tbody id="funcs"></tbody></table></div>
+  <h2>Service KPIs <span class="muted" style="font-weight:400">
+    <button id="k-since" type="button" aria-pressed="true">since start</button>
+    <button id="k-min" type="button" aria-pressed="false">last minute</button></span></h2>
+  <div class="kpis" id="kpis"></div>
+  <h2>Registered at the NRF</h2>
+  <div class="tablewrap"><table><thead><tr><th>Type</th><th>Instance</th><th>Status</th><th>Services</th></tr></thead><tbody id="reg"></tbody></table></div>
+</div>
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var mode = "since", last = null, failures = 0;
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function fmt(v, unit) {
+    if (v == null) return "-";
+    if (unit === "percent") return v.toFixed(1) + " %";
+    if (unit === "seconds") return (v * 1000).toFixed(v < 0.01 ? 2 : 0) + " ms";
+    if (unit === "bit/s") return v >= 1e9 ? (v / 1e9).toFixed(2) + " Gbit/s" : v >= 1e6 ? (v / 1e6).toFixed(2) + " Mbit/s" : v >= 1e3 ? (v / 1e3).toFixed(1) + " kbit/s" : v.toFixed(0) + " bit/s";
+    return Math.round(v).toLocaleString();
+  }
+  function stat(label, value, sub, bad) {
+    var c = el("div", "card"); c.appendChild(el("div", "muted", label));
+    var b = el("div", "big", value); if (bad) b.style.color = "var(--bad)"; c.appendChild(b); c.appendChild(el("div", "muted", sub)); return c;
+  }
+  function render(d) {
+    var s = d.summary, st = $("stats"); st.replaceChildren(
+      stat("Functions live", s.live + " of " + s.functions, s.ready + " ready", s.live < s.functions),
+      stat("Registered at the NRF", String(s.registered), "instances", false),
+      stat("KPIs missing target", String(s.kpiMisses), "since start", s.kpiMisses > 0),
+      stat("Window", s.windowSeconds != null ? s.windowSeconds + " s" : "-", s.windowSeconds != null ? "the last-minute KPIs" : "collecting (needs a minute)", false));
+    $("when").textContent = "live · " + d.time;
+    var fb = $("funcs"); fb.replaceChildren();
+    d.functions.forEach(function (f) {
+      var tr = el("tr"), n = el("td", "mono", f.name); n.style.fontWeight = "600"; tr.appendChild(n);
+      [f.live, f.ready].forEach(function (v) { var td = el("td"); td.appendChild(el("span", "dot " + (v ? "ok" : "bad"))); td.appendChild(document.createTextNode(v ? "yes" : "no")); tr.appendChild(td); });
+      tr.appendChild(el("td", "mono", f.version || "-")); tr.appendChild(el("td", "mono", f.load != null ? String(Math.round(f.load)) : "-")); tr.appendChild(el("td", "mono muted", f.url));
+      fb.appendChild(tr);
+    });
+    var rows = mode === "min" ? (d.kpisLastMinute || []) : d.kpis, kb = $("kpis"); /* the last-minute view never falls back to the since-start numbers */ kb.replaceChildren();
+    if (mode === "min" && !d.kpisLastMinute) kb.appendChild(el("div", "muted", "The last-minute view needs a minute of samples."));
+    rows.forEach(function (k) {
+      if (k.value == null && !k.target) return;
+      var c = el("div", "card kpi " + (k.status || "")); c.appendChild(el("div", "muted", k.name));
+      c.appendChild(el("div", "big", fmt(k.value, k.unit)));
+      var line = el("div", "muted");
+      if (k.target) { line.appendChild(document.createTextNode("target " + k.target.op + " " + k.target.value + " ")); line.appendChild(el("span", "pill " + (k.status === "ok" ? "ok" : k.status === "MISS" ? "MISS" : "na"), k.status === "ok" ? "ok" : k.status === "MISS" ? "misses" : "n/a")); }
+      c.appendChild(line); kb.appendChild(c);
+    });
+    var rb = $("reg"); rb.replaceChildren();
+    if (!d.registry.length) { var tr0 = el("tr"); var td0 = el("td", "muted", "nothing registered, or no NRF given"); td0.colSpan = 4; tr0.appendChild(td0); rb.appendChild(tr0); }
+    d.registry.forEach(function (r) { var tr = el("tr"); tr.appendChild(el("td", "mono", r.type)); tr.appendChild(el("td", "mono", r.id)); tr.appendChild(el("td", null, r.status)); tr.appendChild(el("td", "mono", String(r.services))); rb.appendChild(tr); });
+  }
+  function tick() {
+    fetch("/api/live", { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); }).then(function (d) {
+      failures = 0; $("err").style.display = "none"; last = d; render(d);
+    }).catch(function (e) {
+      failures++; var b = $("err"); b.textContent = "No snapshot from the server (" + e.message + "), retrying. The page shows the last one it had."; b.style.display = "block";
+    });
+  }
+  $("k-since").onclick = function () { mode = "since"; $("k-since").setAttribute("aria-pressed", "true"); $("k-min").setAttribute("aria-pressed", "false"); if (last) render(last); };
+  $("k-min").onclick = function () { mode = "min"; $("k-min").setAttribute("aria-pressed", "true"); $("k-since").setAttribute("aria-pressed", "false"); if (last) render(last); };
+  $("theme").onclick = function () {
+    var dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+    document.documentElement.dataset.theme = dark ? "light" : "dark";
+  };
+  tick(); setInterval(tick, 5000);
+})();
+</script>
+</body>
+</html>

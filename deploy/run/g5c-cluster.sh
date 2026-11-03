@@ -893,6 +893,7 @@ case "${1:-}" in
   start) shift; start_nf "${1:?nf name}";;
   restart) shift; stop_nf "${1:?nf name}"; start_nf "$1";;
   reload) shift; cmd_reload "$@";;
+  logdir) echo "$RUN/log";;
   kill) shift; kill -9 "$(cat "$(pidfile "${1:?nf name}")")"; rm -f "$(pidfile "$1")";;
   ns) shift; cmd_ns "$@";;
   *) sed -n 2,22p "$0"; exit 2;;

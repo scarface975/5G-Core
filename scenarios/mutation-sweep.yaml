@@ -1,0 +1,16 @@
+# Negative testing of a live core (tools/cli/g5c-mutate; run with G5C_OAUTH2=0 so the routes answer instead of refusing every request for want of a token): hostile requests to the routes of the
+# HTTP functions and corrupted N2 messages to the AMF. Every function must answer with a 4xx (never 5xx, never silence), still be ready afterwards, and the AMF must still set up an NG association.
+name: hostile input does not hurt the core
+steps:
+  - mutate: {nf: udm, only: /nudm-sdm/v2, max_routes: 6}
+  - mutate: {nf: udm, only: /nudm-ueau, max_routes: 6}
+  - mutate: {nf: pcf, only: /npcf-smpolicycontrol, max_routes: 6}
+  - mutate: {nf: smf, only: /nsmf-pdusession, max_routes: 6}
+  - mutate: {nf: amf, only: /namf-comm, max_routes: 6}
+  - mutate: {nf: nrf, only: /nnrf-nfm, max_routes: 6}
+  - mutate: {nf: ausf, max_routes: 6}
+  - mutate: {nf: nssf, max_routes: 6}
+  - mutate: {nf: bsf, max_routes: 6}
+  - mutate: {capture: tests/fixtures/golden/s1_registration_open5gs_v2.8.0_ueransim.pcapng}
+  - http: {nf: amf, path: /health/ready, expect: 200}
+  - http: {nf: udm, path: /health/ready, expect: 200}

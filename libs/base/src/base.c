@@ -288,11 +288,63 @@ int g5c_uuid_v4(char out[37])
     return 0;
 }
 
-double g5c_now_seconds(void)
+static pthread_mutex_t warp_mu = PTHREAD_MUTEX_INITIALIZER;
+static _Atomic bool warped;
+static double warp_factor = 1.0, warp_v0, warp_m0; /* virtual = v0 + (monotonic - m0) * factor, under warp_mu */
+static pthread_once_t warp_once = PTHREAD_ONCE_INIT;
+
+static double mono_now(void)
 {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (double)ts.tv_sec + (double)ts.tv_nsec / 1e9;
+}
+
+void g5c_time_warp_set(double factor)
+{
+    double m = mono_now();
+    if (factor < 1.0 || factor > 100000.0)
+        factor = 1.0;
+    pthread_mutex_lock(&warp_mu);
+    warp_v0 = atomic_load(&warped) ? warp_v0 + (m - warp_m0) * warp_factor : m; /* continue from where the virtual clock is */
+    warp_m0 = m;
+    warp_factor = factor;
+    atomic_store(&warped, factor != 1.0);
+    pthread_mutex_unlock(&warp_mu);
+}
+
+static void warp_from_env(void)
+{
+    const char *e = getenv("G5C_TIME_WARP");
+    if (e != NULL && *e != '\0')
+        g5c_time_warp_set(atof(e));
+}
+
+double g5c_time_warp(void)
+{
+    double f;
+    pthread_once(&warp_once, warp_from_env);
+    pthread_mutex_lock(&warp_mu);
+    f = warp_factor;
+    pthread_mutex_unlock(&warp_mu);
+    return f;
+}
+
+double g5c_real_wait(double virtual_seconds)
+{
+    return virtual_seconds / g5c_time_warp();
+}
+
+double g5c_now_seconds(void)
+{
+    double m = mono_now(), v;
+    pthread_once(&warp_once, warp_from_env);
+    if (!atomic_load(&warped))
+        return m;
+    pthread_mutex_lock(&warp_mu);
+    v = warp_v0 + (m - warp_m0) * warp_factor;
+    pthread_mutex_unlock(&warp_mu);
+    return v;
 }
 
 int64_t g5c_unix_millis(void)

@@ -1,0 +1,235 @@
+#!/usr/bin/env python3
+"""g5c-replay: a capture of N2 as a script, replayed against our core, with the differences reported (backlog B-11).
+
+  g5c-replay extract CAPTURE [-o script.json] [--amf-port 38412] [--inspect PATH]   needs tshark; the NGAP exchange of the capture as steps (direction, hex, decoded name)
+  g5c-replay run SCRIPT|CAPTURE --amf HOST:PORT [--json] [--timeout 1.5]            send the gNB's side to the core and compare each answer with the recorded one
+  g5c-replay show SCRIPT                                                              the steps as a ladder
+
+What is replayed: the messages a gNB can send again without the keys of the recorded session: NG Setup and an unprotected Registration Request. Everything after the first answer that needs the
+recorded UE's secrets (Authentication response, Security Mode Complete, ...) cannot be reproduced against another core: the replay stops there and says so. What it tells you: whether our core
+answers the first messages of a failing session the way the core in the capture did (the same NG Setup Response, the same Authentication Request), or differently (a Registration Reject with another
+cause, an NG Setup Failure): the first place where our core and the recorded one part ways, which is what a support engineer wants from a customer's capture."""
+import argparse
+import json
+import os
+import shutil
+import socket
+import struct
+import subprocess
+import sys
+import time
+
+IPPROTO_SCTP = 132
+SCTP_SNDINFO = 2
+PPID_NGAP = 60
+REPLAYABLE_NAS = {"Registration request"}
+
+
+def find_inspect(hint=None):
+    for c in (hint, os.environ.get("G5C_INSPECT"), os.path.expanduser("~/g5c-cbuild/plain/tools/inspect/g5c-inspect"), shutil.which("g5c-inspect")):
+        if c and os.path.exists(c):
+            return c
+    raise SystemExit("g5c-replay: g5c-inspect is needed to decode the PDUs (build the project, or set G5C_INSPECT)")
+
+
+def decode(pdus, inspect):
+    """[(id, hex)] -> {id: summary}"""
+    text = "".join("%s %s\n" % (i, h) for i, h in pdus)
+    out = subprocess.run([inspect, "decode"], input=text, capture_output=True, text=True).stdout
+    res = {}
+    for line in out.splitlines():
+        try:
+            j = json.loads(line)
+        except ValueError:
+            continue
+        nas = (j.get("nas") or {}).get("message") or {}
+        cause = None
+        for ie in nas.get("ies", []):
+            if ie.get("name") == "5GMM cause":
+                cause = int(ie["hex"], 16)
+        res[str(j.get("id"))] = {"kind": j.get("kind"), "procedure": j.get("procedure"), "nas": nas.get("name"), "protected": (j.get("nas") or {}).get("protected"), "cause": cause,
+                                 "decoded": {ie["name"]: ie.get("decoded") for ie in nas.get("ies", []) if ie.get("decoded")}}
+    return res
+
+
+def label(s):
+    if s is None:
+        return "(nothing)"
+    t = s.get("procedure") or "?"
+    if s.get("nas"):
+        t += " (%s%s)" % (s["nas"], " #%d" % s["cause"] if s.get("cause") is not None else "")
+    elif s.get("kind") and s["kind"] != "initiatingMessage" and s.get("procedure"):
+        t = "%s %s" % (t, "response" if s["kind"] == "successfulOutcome" else "failure")
+    return t
+
+
+def same(a, b):
+    return a is not None and b is not None and all(a.get(k) == b.get(k) for k in ("kind", "procedure", "nas", "cause"))
+
+
+def extract(capture, amf_port, inspect):
+    raw = subprocess.run(["tshark", "-r", capture, "-Y", "sctp", "-T", "json", "-x"], capture_output=True, text=True)
+    if raw.returncode != 0:
+        raise SystemExit("g5c-replay: tshark failed: %s" % raw.stderr.strip()[-200:])
+    steps = []
+    for pkt in json.loads(raw.stdout):
+        layers = pkt["_source"]["layers"]
+        frame = bytes.fromhex(layers["frame_raw"][0])
+        l2 = 14 if "eth" in layers else 16 if "sll" in layers else None
+        if l2 is None or "ip" not in layers:
+            continue
+        ihl = (frame[l2] & 0x0F) * 4
+        sctp = frame[l2 + ihl:]
+        dport = struct.unpack(">H", sctp[2:4])[0]
+        pos = 12
+        while pos + 4 <= len(sctp):
+            ctype, _f, clen = struct.unpack(">BBH", sctp[pos:pos + 4])
+            if clen < 4:
+                break
+            if ctype == 0 and clen > 16 and struct.unpack(">I", sctp[pos + 12:pos + 16])[0] == PPID_NGAP:
+                steps.append({"n": int(layers["frame"]["frame.number"]), "dir": "up" if dport == amf_port else "down", "hex": sctp[pos + 16:pos + clen].hex()})
+            pos += (clen + 3) & ~3
+    info = decode([(s["n"], s["hex"]) for s in steps], inspect)
+    for i, s in enumerate(steps):
+        s["summary"] = info.get(str(s["n"]))
+        if s["summary"] is None:
+            s["summary"] = {"kind": None, "procedure": "(undecodable)", "nas": None, "cause": None}
+        s["id"] = i
+    return steps
+
+
+def replayable(step):
+    s = step["summary"]
+    if s["procedure"] == "NGSetup" and s["kind"] == "initiatingMessage":
+        return True
+    return s["procedure"] == "InitialUEMessage" and s.get("protected") is False and s.get("nas") in REPLAYABLE_NAS
+
+
+def groups_of(steps):
+    """[(up step, [recorded answers])]"""
+    out = []
+    for s in steps:
+        if s["dir"] == "up":
+            out.append((s, []))
+        elif out:
+            out[-1][1].append(s)
+    return out
+
+
+def connect(target, timeout):
+    host, _, port = target.rpartition(":")
+    sk = socket.socket(socket.AF_INET, socket.SOCK_STREAM, IPPROTO_SCTP)
+    sk.settimeout(timeout)
+    sk.connect((host, int(port)))
+    return sk
+
+
+def send(sk, pdu, stream):
+    sk.sendmsg([pdu], [(IPPROTO_SCTP, SCTP_SNDINFO, struct.pack("=HHIIi", stream, 0, socket.htonl(PPID_NGAP), 0, 0))])
+
+
+def receive(sk, want, timeout):
+    got, end = [], time.time() + timeout
+    while time.time() < end:
+        sk.settimeout(max(0.05, end - time.time()))
+        try:
+            data = sk.recv(65536)
+        except (socket.timeout, TimeoutError):
+            break
+        if not data:
+            break
+        got.append(data)
+        if len(got) >= want:  # a short grace for one more, to see an unexpected extra message
+            end = min(end, time.time() + 0.25)
+    return got
+
+
+def run(steps, target, inspect, timeout):
+    report, sk = [], None
+    try:
+        sk = connect(target, timeout)
+    except OSError as e:
+        raise SystemExit("g5c-replay: cannot reach %s: %s" % (target, e))
+    try:
+        for up, recorded in groups_of(steps):
+            if not replayable(up):
+                report.append({"step": up["n"], "sent": label(up["summary"]), "result": "stopped",
+                               "detail": "replaying this needs the keys of the recorded session: the first part of the exchange is as far as another core can follow"})
+                break
+            send(sk, bytes.fromhex(up["hex"]), 0 if up["summary"]["procedure"] == "NGSetup" else 1)
+            replies = receive(sk, len(recorded), timeout)
+            ours = decode([(i, r.hex()) for i, r in enumerate(replies)], inspect)
+            ours_l = [ours.get(str(i)) for i in range(len(replies))]
+            rec_l = [r["summary"] for r in recorded]
+            n = max(len(ours_l), len(rec_l))
+            for k in range(n):
+                a = rec_l[k] if k < len(rec_l) else None
+                b = ours_l[k] if k < len(ours_l) else None
+                report.append({"step": up["n"], "sent": label(up["summary"]), "recorded": label(a), "ours": label(b), "result": "same" if same(a, b) else "different"})
+            if not recorded and not replies:
+                report.append({"step": up["n"], "sent": label(up["summary"]), "recorded": "(nothing)", "ours": "(nothing)", "result": "same"})
+            if any(r["result"] == "different" for r in report[-max(n, 1):]):
+                report[-1].setdefault("detail", "the exchanges part ways here; nothing after this point is comparable")
+                break
+    finally:
+        sk.close()
+    return report
+
+
+def text_report(report):
+    out = []
+    for r in report:
+        if r["result"] == "stopped":
+            out.append("step %-4d up   %s\n          STOPPED: %s" % (r["step"], r["sent"], r["detail"]))
+        else:
+            out.append("step %-4d up   %s\n          recorded: %-52s ours: %-52s %s" % (r["step"], r["sent"], r["recorded"], r["ours"], "same" if r["result"] == "same" else "DIFFERENT"))
+            if r.get("detail"):
+                out.append("          " + r["detail"])
+    return "\n".join(out)
+
+
+def load_script(path, amf_port, inspect):
+    if path.endswith((".pcap", ".pcapng")):
+        return extract(path, amf_port, inspect)
+    return json.load(open(path))
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(prog="g5c-replay", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    e = sub.add_parser("extract")
+    e.add_argument("capture")
+    e.add_argument("-o", "--out")
+    r = sub.add_parser("run")
+    r.add_argument("script")
+    r.add_argument("--amf", required=True)
+    r.add_argument("--json", action="store_true")
+    r.add_argument("--timeout", type=float, default=1.5)
+    s = sub.add_parser("show")
+    s.add_argument("script")
+    for x in (e, r, s):
+        x.add_argument("--amf-port", type=int, default=38412)
+        x.add_argument("--inspect")
+    a = ap.parse_args(argv)
+    inspect = find_inspect(a.inspect)
+    if a.cmd == "extract":
+        steps = extract(a.capture, a.amf_port, inspect)
+        text = json.dumps(steps, indent=1)
+        if a.out:
+            open(a.out, "w").write(text + "\n")
+            print("g5c-replay: %d steps (%d up) written to %s" % (len(steps), sum(1 for s in steps if s["dir"] == "up"), a.out))
+        else:
+            print(text)
+        return 0
+    steps = load_script(a.script, a.amf_port, inspect)
+    if a.cmd == "show":
+        for s in steps:
+            print("%-5d %-4s %s" % (s["n"], s["dir"], label(s["summary"])))
+        return 0
+    report = run(steps, a.amf, inspect, a.timeout)
+    print(json.dumps(report, indent=2) if a.json else text_report(report))
+    return 1 if any(x["result"] == "different" for x in report) else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
