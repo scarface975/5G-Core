@@ -27,6 +27,7 @@ void smf_worker_stop(smf *s);
 enum { SMF_PEER_OK = 0, SMF_PEER_FAIL = -1 };
 
 /* Subscribed session management data for (snssai, dnn): the dnnConfigurations entry, a copy for the caller to free */
+bool smf_parse_snssai(const g5c_json *j, uint8_t *sst, bool *has_sd, uint32_t *sd);
 int smf_udm_sm_data(smf *s, const char *supi, const g5c_json *serving_plmn, uint8_t sst, bool has_sd, uint32_t sd, const char *dnn,
                     g5c_json **dnn_cfg);
 int smf_udm_register(smf *s, const smf_sess *ss, const g5c_json *serving_plmn);
@@ -36,6 +37,8 @@ int smf_udm_deregister(smf *s, const char *supi, uint8_t psi);
 int smf_pcf_create(smf *s, const smf_sess *ss, const g5c_json *dnn_cfg, const char *notif_uri, const g5c_json *serving_plmn, g5c_json **decision,
                    char **resource);
 void smf_pcf_delete(smf *s, const char *resource);
+int smf_chf_create(smf *s, const smf_sess *ss, char **resource);
+void smf_chf_release(smf *s, const smf_sess *ss, const smf_usage *u);
 
 /* Nnrf_NFDiscovery of the AMF instance `nf_instance_id` (what the AMF named as servingNfId) */
 char *smf_nrf_amf_root(smf *s, const char *nf_instance_id);

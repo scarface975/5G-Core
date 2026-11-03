@@ -105,6 +105,26 @@ if(G5C_BASH AND UNIX)
            ${G5C_BASH} ${CMAKE_SOURCE_DIR}/deploy/run/g5c-cluster.sh ns scenario ${CMAKE_SOURCE_DIR}/scenarios/inject-n4-drop.yaml)
   set_tests_properties(cluster_inject_smf PROPERTIES ENVIRONMENT "${_direct_env};G5C_RUN=${CMAKE_BINARY_DIR}/cluster-run-inject-smf" TIMEOUT 300
                        LABELS "integration;cluster" SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
+  # mobility library (backlog B-09): Xn path switches between two gNBs against the real daemons
+  add_test(NAME cluster_mobility_xn COMMAND ${G5C_BASH} ${CMAKE_SOURCE_DIR}/deploy/run/g5c-cluster.sh ns scenario ${CMAKE_SOURCE_DIR}/scenarios/mobility-xn.yaml)
+  set_tests_properties(cluster_mobility_xn PROPERTIES ENVIRONMENT "${_direct_env};G5C_RUN=${CMAKE_BINARY_DIR}/cluster-run-mobility" TIMEOUT 300
+                       LABELS "integration;cluster" SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
+  # radio lab kit (backlog B-10): OCUDU gNB + srsUE over ZeroMQ against our core; skipped where the gNB or the UE is not installed
+  add_test(NAME radio_kit COMMAND ${G5C_BASH} ${CMAKE_SOURCE_DIR}/deploy/radio-kit/g5c-radio-kit run)
+  set_tests_properties(radio_kit PROPERTIES TIMEOUT 300 LABELS "integration;cluster" SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
+  # scale emulation (backlog B-03): four load processes with disjoint IMSI ranges against one core
+  add_test(NAME cluster_fanout COMMAND ${G5C_BASH} ${CMAKE_SOURCE_DIR}/deploy/run/g5c-cluster.sh ns scenario ${CMAKE_SOURCE_DIR}/scenarios/fanout.yaml)
+  set_tests_properties(cluster_fanout PROPERTIES ENVIRONMENT "${_direct_env};G5C_RUN=${CMAKE_BINARY_DIR}/cluster-run-fanout;G5C_LOAD_BIN=$<TARGET_FILE:load_core>" TIMEOUT 300
+                       LABELS "integration;cluster" SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
+  # online charging (backlog A-02): the SMF opens a charging session at the CHF for every PDU session; with no credit the sessions are refused
+  add_test(NAME cluster_charging COMMAND /usr/bin/env "G5C_CHF=1"
+           ${G5C_BASH} ${CMAKE_SOURCE_DIR}/deploy/run/g5c-cluster.sh ns scenario ${CMAKE_SOURCE_DIR}/scenarios/charging.yaml)
+  set_tests_properties(cluster_charging PROPERTIES ENVIRONMENT "${_direct_env};G5C_RUN=${CMAKE_BINARY_DIR}/cluster-run-charging" TIMEOUT 300
+                       LABELS "integration;cluster" SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
+  add_test(NAME cluster_charging_denied COMMAND /usr/bin/env "G5C_CHF=1" "G5C_CHF_EXTRA=  default_balance_bytes: 0"
+           ${G5C_BASH} ${CMAKE_SOURCE_DIR}/deploy/run/g5c-cluster.sh ns scenario ${CMAKE_SOURCE_DIR}/scenarios/charging-denied.yaml)
+  set_tests_properties(cluster_charging_denied PROPERTIES ENVIRONMENT "${_direct_env};G5C_RUN=${CMAKE_BINARY_DIR}/cluster-run-charging-denied" TIMEOUT 300
+                       LABELS "integration;cluster" SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
   # user plane (backlog B-02): the PCF gives every session 1 Mbit/s, each UE offers 4, the UPF must hold them to about 1 and count what it drops
   add_test(NAME cluster_traffic_ambr COMMAND /usr/bin/env "G5C_AMBR_UL=1 Mbps" "G5C_AMBR_DL=1 Mbps"
            ${G5C_BASH} ${CMAKE_SOURCE_DIR}/deploy/run/g5c-cluster.sh ns scenario ${CMAKE_SOURCE_DIR}/scenarios/traffic-ambr.yaml)
@@ -164,8 +184,14 @@ if(G5C_BASH AND UNIX)
     set_tests_properties(replay_tool PROPERTIES LABELS "unit" SKIP_RETURN_CODE 77)
     add_test(NAME cdr_tool COMMAND ${G5C_PYTHON} ${CMAKE_SOURCE_DIR}/tests/support/test_cdr.py)
     set_tests_properties(cdr_tool PROPERTIES LABELS "unit")
+    add_test(NAME fanout_tool COMMAND ${G5C_PYTHON} ${CMAKE_SOURCE_DIR}/tests/support/test_fanout.py)
+    add_test(NAME tester_tool COMMAND ${G5C_PYTHON} ${CMAKE_SOURCE_DIR}/tests/support/test_tester.py)
+    set_tests_properties(tester_tool PROPERTIES LABELS "unit")
+    add_test(NAME interop_register COMMAND ${G5C_PYTHON} ${CMAKE_SOURCE_DIR}/tests/support/test_interop.py)
+    set_tests_properties(interop_register PROPERTIES LABELS "unit")
     add_test(NAME why_tool COMMAND ${G5C_PYTHON} ${CMAKE_SOURCE_DIR}/tests/support/test_why.py)
     set_tests_properties(why_tool PROPERTIES LABELS "unit")
+    set_tests_properties(fanout_tool PROPERTIES LABELS "unit")
     add_test(NAME tokens_tool COMMAND ${G5C_PYTHON} ${CMAKE_SOURCE_DIR}/tests/support/test_tokens.py)
     set_tests_properties(tokens_tool PROPERTIES LABELS "unit")
     add_test(NAME alarms_tool COMMAND ${G5C_PYTHON} ${CMAKE_SOURCE_DIR}/tests/support/test_alarms.py)

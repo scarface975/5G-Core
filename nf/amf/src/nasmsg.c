@@ -42,6 +42,12 @@ uint8_t nm_gprs_timer3(unsigned secs)
     return (uint8_t)(6 << 5 | 31);
 }
 
+unsigned nm_gprs_timer3_secs(uint8_t v)
+{
+    static const unsigned unit[] = {600, 3600, 36000, 2, 30, 60, 1152000, 0};
+    return unit[v >> 5] * (unsigned)(v & 0x1f);
+}
+
 /* GPRS timer 2 (TS 24.008 10.5.7.4) */
 uint8_t nm_gprs_timer2(unsigned secs)
 {
@@ -253,6 +259,14 @@ int nm_reg_accept(const nm_regacc *p, g5c_bytes *out)
     if (p->t3502 != 0) {
         v = nm_gprs_timer2(p->t3502);
         setb(&m, "T3502 value", &v, 1);
+    }
+    if (p->mico)
+        set1(&m, "MICO indication", 0); /* RAAI 0: the registration area is not all of the PLMN */
+    if (p->has_edrx)
+        setb(&m, "Negotiated extended DRX parameters", &p->edrx, 1);
+    if (p->t3324 != 0) {
+        v = nm_gprs_timer3(p->t3324);
+        setb(&m, "T3324 value", &v, 1);
     }
     g5c_bytes_free(&t);
     return finish(&m, out);

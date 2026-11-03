@@ -390,6 +390,15 @@ void amf_page_ue(amf *a, amf_ue *u)
         for (size_t k = 0; k < ntais[i]; k++)
             g5c_json_set(g5c_json_push(list, g5c_json_new_obj()), "tAI", ng_tai_json(&tais[i][k]));
         ng_ie(p, NGAP_IE_TAIListForPaging, "ignore", list);
+        if (u->has_edrx) { /* the NAS cycle index 0..13 and the window value 0..15 are the positions in the NGAP enumerations (5.12 s * 2^n steps; 1.28 s * (n + 1)) */
+            static const char *const cycle[] = {"hfhalf", "hf1", "hf2", "hf4", "hf6", "hf8", "hf10", "hf12", "hf14", "hf16", "hf32", "hf64", "hf128", "hf256"};
+            char win[8];
+            g5c_json *e = g5c_json_new_obj();
+            snprintf(win, sizeof win, "s%u", (u->edrx >> 4) + 1u);
+            g5c_json_set_str(e, "paging-eDRX-Cycle", cycle[(u->edrx & 0x0f) < 14 ? (u->edrx & 0x0f) : 13]);
+            g5c_json_set_str(e, "paging-Time-Window", win);
+            ng_ie(p, NGAP_IE_PagingeDRXInformation, "ignore", e);
+        }
         (void)amf_send_pdu(a, idx[i], gens[i], 0, p);
         g5c_json_free(p);
     }

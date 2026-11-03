@@ -1,0 +1,177 @@
+#!/usr/bin/env python3
+"""g5c-tester: the emulator and the harness as a core-test tool (backlog I-01). Point it at a 5G core that is not ours, or at ours, and it drives scripted gNBs and UEs through registration, PDU
+sessions, mobility and storms, and reports what the core did. It is a front for the load generator (load_core) and the tools around it, with one set of options and one bundle to hand over.
+
+  g5c-tester info                          what the tester can do, and what it cannot
+  g5c-tester run --amf 10.0.0.5:38412 --subscribers http://10.0.0.1:7773 --ues 1000 [--gnbs 16] [--processes 4] [--mobility 6] [--storm-seconds 10] [--hold-ms 0]
+                 [--traffic-mbps 1] [--load-bin PATH] [--dry-run]
+  g5c-tester pack OUT.tar.gz [--load-bin PATH]     the bundle: load_core, the tools, the scenarios, the training exercises, the guides, a manifest with the hash of every file
+
+--amf is the core's N2 endpoint (ip:port). --subscribers is the admin API of the UDM the subscribers are provisioned through (the tester adds its own test subscribers, imsi 00101...); a core with
+another provisioning interface has to be given the subscribers first (g5c-subscribers export writes them) and the tester told so with --no-provision. --dry-run prints the command and the
+environment and starts nothing. The tester sends plain NGAP over SCTP (no DTLS/IPsec on N2) and GTP-U; it talks SBI only to the provisioning API. Test keys only: the subscribers carry the
+public test key of the guides. The bearer token of the admin API is read from the environment variable G5C_LOAD_ADMIN_TOKEN (never from the command line, never printed)."""
+import argparse
+import gzip
+import hashlib
+import json
+import os
+import shlex
+import subprocess
+import sys
+import tarfile
+import tempfile
+import time
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent.parent
+BUNDLE = [  # what goes in the bundle: (source in the repository, name in the bundle)
+    ("tools/cli/g5c-tester", "bin/g5c-tester"), ("tools/cli/g5c-fanout", "bin/g5c-fanout"), ("tools/cli/g5c-scenario", "bin/g5c-scenario"), ("tools/cli/g5c-replay", "bin/g5c-replay"),
+    ("tools/cli/g5c-mutate", "bin/g5c-mutate"), ("tools/cli/g5c-why", "bin/g5c-why"), ("tools/cli/g5c-kpi", "bin/g5c-kpi"), ("tools/cli/g5c-trace", "bin/g5c-trace"),
+    ("tools/cli/g5c-subscribers", "bin/g5c-subscribers"), ("tools/cli/g5c-compat", "bin/g5c-compat"), ("deploy/ops/kpis.json", "share/kpis.json"),
+]
+TREES = [("scenarios", "share/scenarios"), ("docs/training", "share/training"), ("docs/guides/testing.md", "share/testing.md")]
+CAN = ["registration, authentication (5G-AKA), security mode, PDU session establishment and release, de-registration, with the keys derived and every answer checked (a wrong MAC fails the run)",
+       "Xn path switches between two gNBs (--mobility N), each answer checked against the UE's own key derivation",
+       "registration storms (--storm-seconds), counting admitted, refused with cause #22 and anything else",
+       "uplink traffic at a given rate per UE (--traffic-mbps) and the delivered rate",
+       "one population from many processes, on one host or several (--processes; g5c-fanout --slice)",
+       "replay of a recorded gNB side (g5c-replay), hostile input (g5c-mutate), KPIs from a core's metrics (g5c-kpi), the failure explainer (g5c-why)"]
+CANNOT = ["radio: there is no RAN protocol below NGAP and no PHY; B-10's lab kit covers a virtual radio",
+          "N2 handover, inter-AMF mobility and idle-mode reselection are not scripted against a running core (only Xn path switch is)",
+          "NAS security algorithms other than the AMF's choice among NEA0-2 / NIA1-2 are not exercised on purpose",
+          "a core that wants DTLS or IPsec on N2/N3",
+          "more than about 20,000 UEs a process; beyond that use --processes. A million subscribers has not been run"]
+
+
+def env_for(a):
+    env = {"G5C_LOAD_REMOTE": "1", "G5C_LOAD_AMF_NGAP": a.amf, "G5C_LOAD_UES": str(a.ues), "G5C_LOAD_GNBS": str(a.gnbs), "G5C_LOAD_CHECK_MEM": "0", "G5C_LOAD_HOLD_MS": str(a.hold_ms)}
+    if a.subscribers:
+        env["G5C_LOAD_UDM"] = a.subscribers.rstrip("/")
+    for val, var in ((a.mobility, "G5C_LOAD_MOBILITY"), (a.storm_seconds, "G5C_LOAD_STORM_SECONDS"), (a.traffic_mbps, "G5C_LOAD_TRAFFIC_MBPS"), (a.waves, "G5C_LOAD_WAVES")):
+        if val:
+            env[var] = str(val)
+    return env
+
+
+def find_load(a):
+    for c in (a.load_bin, os.environ.get("G5C_LOAD_BIN"), str(ROOT / "bin" / "load_core"), str(ROOT / "build" / "nf" / "amf" / "load_core"), str(Path.home() / "g5c-cbuild" / "plain" / "nf" / "amf" / "load_core")):
+        if c and os.access(c, os.X_OK):
+            return c
+    return None
+
+
+def sha256(p):
+    h = hashlib.sha256()
+    with open(p, "rb") as f:
+        for blk in iter(lambda: f.read(1 << 20), b""):
+            h.update(blk)
+    return h.hexdigest()
+
+
+def files_of_bundle(load_bin):
+    out = []
+    for src, dst in BUNDLE:
+        out.append((ROOT / src, dst))
+    for src, dst in TREES:
+        p = ROOT / src
+        if p.is_dir():
+            out += [(f, dst + "/" + str(f.relative_to(p)).replace(os.sep, "/")) for f in sorted(p.rglob("*")) if f.is_file() and "__pycache__" not in f.parts]
+        else:
+            out.append((p, dst))
+    if load_bin:
+        out.append((Path(load_bin), "bin/load_core"))
+    return out
+
+
+def pack(dest, load_bin):
+    files = files_of_bundle(load_bin)
+    missing = [str(s) for s, _ in files if not s.exists()]
+    if missing:
+        raise SystemExit("g5c-tester pack: missing %s" % ", ".join(missing))
+    manifest = {"name": "g5c-tester", "files": {d: sha256(s) for s, d in files}, "load_core": bool(load_bin)}
+    readme = ("g5c tester edition\n\nbin/g5c-tester info   what it does and what it cannot\nbin/g5c-tester run --amf IP:PORT --subscribers URL --ues N ...\nshare/testing.md the test guide\n"
+              "MANIFEST.json lists every file with its SHA-256\n")
+    with open(dest, "wb") as raw, gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=0) as gz, tarfile.open(fileobj=gz, mode="w") as tf:
+        for s, d in files:
+            ti = tf.gettarinfo(str(s), arcname="g5c-tester/" + d)
+            ti.mtime, ti.uid, ti.gid, ti.uname, ti.gname = 0, 0, 0, "", ""  # the same bytes for the same inputs
+            with open(s, "rb") as f:
+                tf.addfile(ti, f)
+        for name, data in (("MANIFEST.json", json.dumps(manifest, indent=2, sort_keys=True).encode()), ("README.txt", readme.encode())):
+            with tempfile.NamedTemporaryFile() as t:
+                t.write(data)
+                t.flush()
+                ti = tf.gettarinfo(t.name, arcname="g5c-tester/" + name)
+                ti.mtime, ti.uid, ti.gid, ti.uname, ti.gname, ti.mode = 0, 0, 0, "", "", 0o644
+                t.seek(0)
+                tf.addfile(ti, t)
+    return len(files) + 2
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(prog="g5c-tester", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("info")
+    r = sub.add_parser("run")
+    r.add_argument("--amf", required=True, help="the core's N2 endpoint ip:port")
+    r.add_argument("--subscribers", help="admin API of the UDM, http(s)://host:port")
+    r.add_argument("--no-provision", action="store_true")
+    r.add_argument("--ues", type=int, default=100)
+    r.add_argument("--gnbs", type=int, default=8)
+    r.add_argument("--processes", type=int, default=1)
+    r.add_argument("--mobility", type=int, default=0)
+    r.add_argument("--storm-seconds", type=int, default=0)
+    r.add_argument("--traffic-mbps", type=float, default=0)
+    r.add_argument("--hold-ms", type=int, default=0)
+    r.add_argument("--waves", type=int, default=0)
+    r.add_argument("--load-bin")
+    r.add_argument("--dry-run", action="store_true")
+    p = sub.add_parser("pack")
+    p.add_argument("out")
+    p.add_argument("--load-bin")
+    a = ap.parse_args(argv)
+    if a.cmd == "info":
+        print("g5c tester: scripted gNBs and UEs against a 5G core\n\nCan:")
+        print("\n".join("  - " + x for x in CAN))
+        print("\nCannot:")
+        print("\n".join("  - " + x for x in CANNOT))
+        return 0
+    if a.cmd == "pack":
+        lb = a.load_bin or (find_load(a) if hasattr(a, "load_bin") else None)
+        n = pack(a.out, lb)
+        print("g5c-tester pack: %d files in %s%s" % (n, a.out, "" if lb else " (without load_core: no binary found, pass --load-bin)"))
+        return 0
+    if ":" not in a.amf or not a.amf.rsplit(":", 1)[1].isdigit():
+        print("g5c-tester: --amf takes ip:port", file=sys.stderr)
+        return 2
+    if a.ues < 1 or a.gnbs < 1 or a.processes < 1 or (a.mobility and a.storm_seconds):
+        print("g5c-tester: ues, gnbs and processes are 1 or more; mobility and storm are separate runs", file=sys.stderr)
+        return 2
+    if not a.subscribers and not a.no_provision:
+        print("g5c-tester: give --subscribers (the UDM admin API) or --no-provision", file=sys.stderr)
+        return 2
+    lb = find_load(a)
+    env = env_for(a)
+    if a.no_provision:
+        env["G5C_LOAD_NO_PROVISION"] = "1"
+    cmd = [lb or "load_core"]
+    if a.processes > 1:
+        cmd = [sys.executable, str(ROOT / "tools" / "cli" / "g5c-fanout"), "run", "--load-bin", lb or "load_core", "--processes", str(a.processes), "--ues", str(a.ues), "--gnbs", str(a.gnbs)]
+    if a.dry_run:
+        print("env: " + " ".join("%s=%s" % (k, shlex.quote(v)) for k, v in sorted(env.items())))
+        print("command: " + " ".join(shlex.quote(c) for c in cmd))
+        return 0
+    if lb is None:
+        print("g5c-tester: load_core not found (build it, or --load-bin / G5C_LOAD_BIN)", file=sys.stderr)
+        return 2
+    e = dict(os.environ)
+    e.update(env)
+    t0 = time.time()
+    rc = subprocess.run(cmd, env=e).returncode
+    print("g5c-tester: %s in %.1f s" % ("PASS" if rc == 0 else "FAIL (exit %d)" % rc, time.time() - t0))
+    return 0 if rc == 0 else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

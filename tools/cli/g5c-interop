@@ -1,0 +1,80 @@
+#!/usr/bin/env python3
+"""g5c-interop: the interoperability register (docs/interop/register.json) as a page, and a check that it is honest.
+
+  g5c-interop list [--register FILE]       the entries as a table
+  g5c-interop check [--register FILE]      every entry has its fields, a result, a reproduce command and an evidence file that exists; exit 1 otherwise
+  g5c-interop md [--register FILE]         the Markdown of docs/interop/README.md, written to standard output
+
+The register lists only combinations that were run. The `not_tested` list is part of the page: a reader sees what is missing as well as what is there."""
+import argparse
+import json
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent.parent
+DEFAULT = ROOT / "docs" / "interop" / "register.json"
+FIELDS = ("id", "kind", "peer", "core", "result", "what", "limits", "reproduce", "evidence")
+
+
+def load(path):
+    return json.loads(Path(path).read_text())
+
+
+def check(reg, root=ROOT):
+    """The problems of the register, one text each."""
+    bad, seen = [], set()
+    for i, e in enumerate(reg.get("entries", [])):
+        name = e.get("id", "#%d" % i)
+        for f in FIELDS:
+            if not str(e.get(f, "")).strip():
+                bad.append("%s: %s is empty" % (name, f))
+        if name in seen:
+            bad.append("%s: listed twice" % name)
+        seen.add(name)
+        ev = e.get("evidence", "")
+        if ev and not (Path(root) / ev).exists():
+            bad.append("%s: the evidence %s does not exist" % (name, ev))
+    if not reg.get("entries"):
+        bad.append("no entries")
+    if not reg.get("not_tested"):
+        bad.append("not_tested is empty: say what has not been tried")
+    return bad
+
+
+def markdown(reg):
+    out = ["# Interoperability", "", reg.get("note", ""), "", "| Peer | Core | Result | What was seen |", "|---|---|---|---|"]
+    for e in reg["entries"]:
+        out.append("| %s (%s) | %s | %s | %s |" % (e["peer"], e["kind"], e["core"], e["result"], e["what"]))
+    out += ["", "## Limits and how to run each again", ""]
+    for e in reg["entries"]:
+        out += ["**%s**" % e["peer"], "", "- Limits: %s" % e["limits"], "- Run: `%s`" % e["reproduce"], "- Evidence: `%s`" % e["evidence"], ""]
+    out += ["## Not tested", ""] + ["- %s" % x for x in reg["not_tested"]] + [""]
+    return "\n".join(out)
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(prog="g5c-interop", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("cmd", choices=("list", "check", "md"))
+    ap.add_argument("--register", default=str(DEFAULT))
+    a = ap.parse_args(argv)
+    try:
+        reg = load(a.register)
+    except (OSError, ValueError) as e:
+        print("g5c-interop: %s" % e, file=sys.stderr)
+        return 2
+    if a.cmd == "check":
+        bad = check(reg, Path(a.register).resolve().parent.parent.parent)
+        for b in bad:
+            print("  " + b)
+        print("interop register: %s" % ("FAIL (%d problems)" % len(bad) if bad else "OK (%d entries, %d not tested)" % (len(reg["entries"]), len(reg["not_tested"]))))
+        return 1 if bad else 0
+    if a.cmd == "md":
+        print(markdown(reg))
+        return 0
+    for e in reg["entries"]:
+        print("%-28s %-34s %s" % (e["id"], e["peer"][:34], e["result"]))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

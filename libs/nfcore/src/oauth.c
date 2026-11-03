@@ -28,6 +28,7 @@ static const struct {
     {"nudr-dr", "UDR"},     {"nudr-group-id-map", "UDR"},
     {"nnssf-nsselection", "NSSF"}, {"nnssf-nssaiavailability", "NSSF"},
     {"nbsf-management", "BSF"},
+    {"nchf-convergedcharging", "CHF"},
     {"nnef-eventexposure", "NEF"}, {"nnef-pfdmanagement", "NEF"},
     {"nnrf-nfm", "NRF"},    {"nnrf-disc", "NRF"},
 };

@@ -23,3 +23,5 @@ smf:
     - { name: upf-1, address: 10.100.0.7, port: 8805, dnns: [internet] }
   dnns:
     - { name: internet, ipv4_pool: 10.45.0.0/16, ipv6_pool: '2001:db8:45::/48', dns: [8.8.8.8, 8.8.4.4] }
+  # chf: { uri: 'http://chf:7787', rating_group: 1, quota_bytes: 10485760, required: true }   # online charging: a session the CHF denies is refused
+  # slice_limits: [ { sst: 1, max_sessions: 5000 } ]   # most PDU sessions per slice (cause #69 above it)

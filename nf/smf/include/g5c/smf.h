@@ -153,6 +153,7 @@ int smf_gsm_build_mod_cmd(uint8_t psi, const smf_policy *oldp, const smf_policy 
 /* 5GSM cause values used (TS 24.501 Table 9.11.4.2.1) */
 enum {
     SMF_5GSM_INSUFFICIENT_RESOURCES = 26,
+    SMF_5GSM_INSUFFICIENT_RESOURCES_SLICE = 69,
     SMF_5GSM_MISSING_OR_UNKNOWN_DNN = 27,
     SMF_5GSM_UNKNOWN_PDU_SESSION_TYPE = 28,
     SMF_5GSM_USER_AUTH_FAILED = 29,
@@ -382,6 +383,7 @@ typedef struct smf_sess {
     g5c_json *decision; /* the SmPolicyDecision pol was built from (kept for persistence) */
     bool paging;        /* a downlink-data notification is being turned into a page */
     char *pcf_resource; /* SM policy association URI */
+    char *chf_resource; /* charging data resource at the CHF; NULL without online charging */
     char *pcf_notif;
     char *amf_status_uri;
     char *amf_n1n2_url;
@@ -441,6 +443,17 @@ typedef struct smf {
     } inject_reject[8]; /* `smf.inject.pdu_session_reject`: test knob (failure injection for RAN tests) */
     unsigned ninject_reject;
     unsigned inject_drop_pct; /* `smf.inject.n4_drop_responses_percent`, handed to the N4 client */
+    struct {
+        uint8_t sst;
+        bool has_sd;
+        uint32_t sd;
+        unsigned max_sessions;
+    } slice_limit[8]; /* `smf.slice_limits`: PDU sessions admitted per S-NSSAI (network slice admission control, TS 23.501 5.15.11) */
+    unsigned nslice_limit;
+    char *chf;                 /* `smf.chf.uri`: the CHF of Nchf_ConvergedCharging; NULL: no charging */
+    unsigned chf_rating_group; /* `smf.chf.rating_group` */
+    uint64_t chf_quota;        /* `smf.chf.quota_bytes`: the volume asked for */
+    bool chf_required;         /* `smf.chf.required`: a session is refused when the CHF refuses or cannot be reached */
     char *cdr_path;            /* `smf.cdr.file`: one JSON record per released PDU session */
     pthread_mutex_t cdr_mu;
     uint64_t cdr_seq;

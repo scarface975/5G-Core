@@ -302,6 +302,11 @@ typedef struct {
     uint16_t status;
     bool has_react;
     uint16_t react;
+    bool mico;
+    bool has_edrx;
+    uint8_t edrx;
+    bool has_t3324;
+    uint8_t t3324;
     g5c_json *ics;
 } accept_info;
 
@@ -347,6 +352,17 @@ static void parse_accept(ue_t *u, const g5c_bytes *plain, accept_info *ai)
     if (v != NULL && n == 2) {
         ai->has_react = true;
         ai->react = (uint16_t)(v[0] | v[1] << 8);
+    }
+    ai->mico = nas_msg_get(&m, "MICO indication", &n) != NULL;
+    v = nas_msg_get(&m, "Negotiated extended DRX parameters", &n);
+    if (v != NULL && n == 1) {
+        ai->has_edrx = true;
+        ai->edrx = v[0];
+    }
+    v = nas_msg_get(&m, "T3324 value", &n);
+    if (v != NULL && n == 1) {
+        ai->has_t3324 = true;
+        ai->t3324 = v[0];
     }
     nas_free(&m);
     (void)u;
@@ -839,6 +855,95 @@ static sess_t ue_establish(gnb_t *g, ue_t *u, uint8_t psi, uint32_t gnb_teid, ui
     g5c_json_free(p);
     gnb_pdu_setup_response(g, u, psi, gnb_teid);
     return s;
+}
+
+static char *encoded_hex(const char *type, g5c_json *tree)
+{
+    g5c_bytes b;
+    char err[160], *h;
+    g5c_bytes_init(&b);
+    TK_ASSERT(ngap_encode_as(type, tree, &b, err, sizeof err) == 0);
+    h = g5c_hex_encode(b.data, b.len);
+    g5c_bytes_free(&b);
+    g5c_json_free(tree);
+    return h;
+}
+
+static g5c_json *gtp_tunnel_json(int idx, uint32_t teid)
+{
+    g5c_json *up = g5c_json_new_obj(), *gt = g5c_json_set(up, "gTPTunnel", g5c_json_new_obj());
+    uint8_t tb[4] = {(uint8_t)(teid >> 24), (uint8_t)(teid >> 16), (uint8_t)(teid >> 8), (uint8_t)teid};
+    g5c_json_set(gt, "transportLayerAddress", bits_json(E.gnb_ip4[idx], 32));
+    g5c_json_set(gt, "gTP-TEID", hex_str(tb, 4));
+    return up;
+}
+
+static g5c_json *flow_list(int q)
+{
+    g5c_json *l = g5c_json_new_arr();
+    g5c_json_set_int(g5c_json_push(l, g5c_json_new_obj()), "qosFlowIdentifier", q);
+    return l;
+}
+
+/* NH / NCC of the n-th derivation after KgNB (TS 33.501 A.10) */
+static void ue_nh(const ue_t *u, int n, uint8_t out[32])
+{
+    uint8_t cur[32];
+    const uint8_t *p[1];
+    size_t l[1] = {32};
+    memcpy(cur, u->kgnb, 32);
+    for (int i = 0; i < n; i++) {
+        p[0] = cur;
+        TK_ASSERT(g5c_kdf(u->kamf, 32, 0x6f, p, l, 1, cur) == 0);
+    }
+    memcpy(out, cur, 32);
+}
+
+/* The Xn path switch: gNB `to` asks the AMF to switch the downlink path of PDU session 1 of `u` to its own tunnel and checks the next hop (NH, NCC) in the answer
+ * against the one the UE derives. The UE belongs to `to` from now on. `ncc` is how many next hops have been handed out including this one (the first switch: 2). */
+static void gnb_path_switch(gnb_t *to, int to_idx, ue_t *u, uint32_t new_ran_id, uint32_t tac, uint64_t cell, uint32_t teid, int ncc)
+{
+    g5c_json *p = new_pdu("initiatingMessage", NGAP_PROC_PathSwitchRequest, "reject"), *list, *it;
+    const g5c_json *sc;
+    uint8_t nh[32], got[32];
+    char *tr;
+    int64_t am = 0, rn = 0, n = -1;
+    add_ie(p, NGAP_IE_RAN_UE_NGAP_ID, "ignore", g5c_json_new_int(new_ran_id));
+    add_ie(p, NGAP_IE_SourceAMF_UE_NGAP_ID, "reject", g5c_json_new_int((int64_t)u->amf_id));
+    add_ie(p, NGAP_IE_UserLocationInformation, "ignore", uli_json(tac, cell));
+    {
+        g5c_json *caps = g5c_json_new_obj();
+        uint8_t z[2] = {0xe0, 0x00};
+        g5c_json_set(caps, "nRencryptionAlgorithms", bits_json(z, 16));
+        g5c_json_set(caps, "nRintegrityProtectionAlgorithms", bits_json(z, 16));
+        g5c_json_set(caps, "eUTRAencryptionAlgorithms", bits_json(z, 16));
+        g5c_json_set(caps, "eUTRAintegrityProtectionAlgorithms", bits_json(z, 16));
+        add_ie(p, NGAP_IE_UESecurityCapabilities, "ignore", caps);
+    }
+    list = g5c_json_new_arr();
+    it = g5c_json_push(list, g5c_json_new_obj());
+    g5c_json_set_int(it, "pDUSessionID", 1);
+    {
+        g5c_json *t = g5c_json_new_obj();
+        g5c_json_set(t, "dL-NGU-UP-TNLInformation", gtp_tunnel_json(to_idx, teid));
+        g5c_json_set(t, "qosFlowAcceptedList", flow_list(1));
+        tr = encoded_hex("PathSwitchRequestTransfer", t);
+        g5c_json_set_str(it, "pathSwitchRequestTransfer", tr);
+        free(tr);
+    }
+    add_ie(p, NGAP_IE_PDUSessionResourceToBeSwitchedDLList, "reject", list);
+    gnb_tx(to, p, 0);
+    p = rx_expect(to, NGAP_PROC_PathSwitchRequest, "successfulOutcome", 4000);
+    TK_ASSERT(g5c_json_int(ie_of(p, NGAP_IE_AMF_UE_NGAP_ID), &am) && (uint64_t)am == u->amf_id);
+    TK_ASSERT(g5c_json_int(ie_of(p, NGAP_IE_RAN_UE_NGAP_ID), &rn) && rn == (int64_t)new_ran_id);
+    sc = ie_of(p, NGAP_IE_SecurityContext);
+    TK_ASSERT(g5c_json_get_int(sc, "nextHopChainingCount", &n) && n == ncc);
+    TK_ASSERT(g5c_hex_decode(g5c_json_get_str(g5c_json_get(sc, "nextHopNH"), "hex"), got, 32) == 32);
+    ue_nh(u, ncc, nh);
+    TK_ASSERT(memcmp(nh, got, 32) == 0);
+    TK_ASSERT(g5c_json_len(ie_of(p, NGAP_IE_PDUSessionResourceSwitchedList)) == 1);
+    g5c_json_free(p);
+    u->ran_id = new_ran_id;
 }
 
 #endif

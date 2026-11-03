@@ -41,7 +41,7 @@ TAIS="$(printf '%s' "${G5C_TAC:-1,2}" | sed -E 's/([0-9]+)/{ tac: \1 }/g; s/ *, 
 AMF_SEC=""; [ -n "${G5C_AMF_CIPHERING:-}" ] && AMF_SEC="  security: { integrity: [ NIA2 ], ciphering: [ ${G5C_AMF_CIPHERING} ] }"
 TOKEN="admin-token-0123456789"     # the load generator's provisioning token; replace for anything but a test cluster
 
-A_UDR="${G5C_UDR_ADDR:-127.2.0.201}"; A_UDM="${G5C_UDM_ADDR:-127.2.0.1}"; A_AUSF="${G5C_AUSF_ADDR:-127.2.0.2}"; A_NSSF="${G5C_NSSF_ADDR:-127.2.0.14}"; A_NEF="${G5C_NEF_ADDR:-127.2.0.15}"; A_SCP="${G5C_SCP_ADDR:-127.2.0.16}"; A_BSF="${G5C_BSF_ADDR:-127.2.0.17}"
+A_UDR="${G5C_UDR_ADDR:-127.2.0.201}"; A_UDM="${G5C_UDM_ADDR:-127.2.0.1}"; A_AUSF="${G5C_AUSF_ADDR:-127.2.0.2}"; A_NSSF="${G5C_NSSF_ADDR:-127.2.0.14}"; A_NEF="${G5C_NEF_ADDR:-127.2.0.15}"; A_SCP="${G5C_SCP_ADDR:-127.2.0.16}"; A_BSF="${G5C_BSF_ADDR:-127.2.0.17}"; A_CHF="${G5C_CHF_ADDR:-127.2.0.18}"
 A_PCF="${G5C_PCF_ADDR:-127.2.0.3}";   A_SMF="${G5C_SMF_ADDR:-127.2.0.4}"; A_AMF="${G5C_AMF_ADDR:-127.2.0.5}"
 A_UPF="${G5C_UPF_ADDR:-127.2.0.7}"
 A_NRF="${G5C_NRF_ADDR:-127.2.0.10}"
@@ -58,6 +58,10 @@ SCPON="${G5C_SCP:-1}"
 # G5C_BSF=1 (default): the BSF (Nbsf_Management, TS 29.521) is started before the PCF; the PCF registers the binding of every PDU session that has a UE address and the NEF asks
 # for the PCF of a UE address there. G5C_BSF=0: no BSF (the PCF does not register, the NEF takes the PCF from the NRF).
 BSFON="${G5C_BSF:-1}"
+# G5C_CHF=1: the CHF (Nchf_ConvergedCharging, TS 32.291) is started before the SMF; the SMF opens a charging session for every PDU session and closes it with the usage the UPF measured.
+# G5C_CHF_EXTRA: lines added to the chf: block (two-space indent), e.g. G5C_CHF_EXTRA="  default_balance_bytes: 0" to refuse every session. G5C_CHF=0 (default): no charging.
+CHFON="${G5C_CHF:-0}"
+ALLNFS="nrf scp bsf udr nssf nef udm ausf pcf upf smf amf"; [ "$CHFON" = 1 ] && ALLNFS="$ALLNFS chf"
 # G5C_OAUTH2=1 (default, needs discovery): every function requires the access token of the NRF for its services and asks the NRF for one for every service it calls
 # (TS 33.501 13.4.1; `oauth2: { enforce, acquire }` of the common configuration). G5C_OAUTH2=0: no tokens.
 OAUTH2ON="${G5C_OAUTH2:-1}"
@@ -80,6 +84,7 @@ else
 fi
 [ "$SCPON" = 1 ] && NFS="$(echo "$NFS" | sed 's/^nrf /nrf scp /; t; s/^/scp /')"
 [ "$BSFON" = 1 ] && NFS="$(echo "$NFS" | sed 's/ pcf / bsf pcf /')"
+[ "$CHFON" = 1 ] && NFS="$(echo "$NFS" | sed 's/ pcf / chf pcf /')"
 
 # where the binary of an NF is: the installed set, or a CMake build tree (G5C_BUILD_DIR, used by the ctest wrappers)
 bin_of() {
@@ -120,6 +125,8 @@ log: { level: $LOGLEVEL, json: $LOGJSON }" common
   common="$common_noscp"
   [ "$SCPON" = 1 ] && common="$common_noscp
 scp_client: { uri: 'http://$A_SCP:7785' }"
+  local chf_peer=""
+  [ "$CHFON" = 1 ] && chf_peer="  chf: { uri: 'http://$A_CHF:7787' }"
   local bsf_peer="bsf: { enabled: false }"
   [ "$BSFON" = 1 ] && bsf_peer="bsf: { uri: 'http://$A_BSF:7786' }"
   [ "$OAUTH2ON" = 1 ] && [ "$DISCOVERY" = 1 ] && common="$common
@@ -164,6 +171,15 @@ $nrfline
 sbi: { address: $A_BSF, port: 7786 }
 bsf:
   state_file: $RUN/state/bsf.json
+EOF
+  [ "$CHFON" = 1 ] && cat > "$RUN/conf/chf.yaml" <<EOF
+name: chf-1
+$common
+$nrfline
+sbi: { address: $A_CHF, port: 7787 }
+chf:
+  cdr_file: $RUN/state/chf-cdr.jsonl
+${G5C_CHF_EXTRA:-}
 EOF
   cat > "$RUN/conf/nrf.yaml" <<EOF
 name: nrf-1
@@ -266,6 +282,7 @@ $smf_peers
     - { name: upf-1, address: $A_UPF, port: 8805, dnns: [internet] }
   dnns:
     - { name: internet, ipv4_pool: $UE_POOL, dns: [8.8.8.8, 8.8.4.4] }
+${chf_peer}
 ${G5C_SMF_EXTRA:-}
 EOF
   cat > "$RUN/conf/amf.yaml" <<EOF
@@ -290,15 +307,15 @@ $amf_nssf
 ${G5C_AMF_EXTRA:-}
 EOF
   echo "$TLSON" > "$RUN/conf/.tls"
-  if [ "$TLSON" = 1 ]; then for nf in nrf scp bsf udr nssf nef udm ausf pcf upf smf amf; do tls_conf "$nf"; done; fi
+  if [ "$TLSON" = 1 ]; then for nf in $ALLNFS; do tls_conf "$nf"; done; fi
 }
 
 # the CA, the certificates of the functions (their addresses as subject alternative names) and the operator's
 gen_pki() {
   local pki="$RUN/pki" nf a
   bash "$HERE/g5c-pki.sh" init "$pki"
-  for nf in nrf scp bsf udr nssf nef udm ausf pcf upf smf amf; do
-    case "$nf" in nrf) a=$A_NRF;; scp) a=$A_SCP;; bsf) a=$A_BSF;; udr) a=$A_UDR;; nssf) a=$A_NSSF;; nef) a=$A_NEF;; udm) a=$A_UDM;; ausf) a=$A_AUSF;; pcf) a=$A_PCF;; upf) a=$A_UPF;; smf) a=$A_SMF;; amf) a=$A_AMF;; esac
+  for nf in $ALLNFS; do
+    case "$nf" in nrf) a=$A_NRF;; scp) a=$A_SCP;; bsf) a=$A_BSF;; chf) a=$A_CHF;; udr) a=$A_UDR;; nssf) a=$A_NSSF;; nef) a=$A_NEF;; udm) a=$A_UDM;; ausf) a=$A_AUSF;; pcf) a=$A_PCF;; upf) a=$A_UPF;; smf) a=$A_SMF;; amf) a=$A_AMF;; esac
     [ -f "$pki/$nf.crt" ] || bash "$HERE/g5c-pki.sh" issue "$pki" "$nf" "$a"
   done
   [ -f "$pki/admin.crt" ] || bash "$HERE/g5c-pki.sh" issue "$pki" admin 127.0.0.1
@@ -314,7 +331,7 @@ tls_conf() {
   # tokens, registration) and the operator's certificate; the NRF and the SCP are called by every function.
   if [ "${G5C_PIN_PEERS:-0}" = 1 ]; then
     local peers="admin, scp, nrf"
-    case "$nf" in nrf|scp) peers="admin, nrf, scp, bsf, udr, nssf, nef, udm, ausf, pcf, smf, amf, upf";; esac
+    case "$nf" in nrf|scp) peers="admin, nrf, scp, bsf, chf, udr, nssf, nef, udm, ausf, pcf, smf, amf, upf";; esac
     sed -i -E "/^sbi:/ s#crl: ([^ ]+) \}#crl: \1, allowed_peers: [$peers] }#" "$f"
   fi
 }
@@ -330,7 +347,7 @@ gen_conf_once() {
 
 sbi_of() {
   case "$1" in
-    nrf) echo "$SCH://$A_NRF:7777";; udr) echo "$SCH://$A_UDR:7790";; nssf) echo "$SCH://$A_NSSF:7783";; nef) echo "$SCH://$A_NEF:7784";; scp) echo "$SCH://$A_SCP:7785";; bsf) echo "$SCH://$A_BSF:7786";; udm) echo "$SCH://$A_UDM:7773";; ausf) echo "$SCH://$A_AUSF:7774";;
+    nrf) echo "$SCH://$A_NRF:7777";; udr) echo "$SCH://$A_UDR:7790";; nssf) echo "$SCH://$A_NSSF:7783";; nef) echo "$SCH://$A_NEF:7784";; scp) echo "$SCH://$A_SCP:7785";; bsf) echo "$SCH://$A_BSF:7786";; chf) echo "$SCH://$A_CHF:7787";; udm) echo "$SCH://$A_UDM:7773";; ausf) echo "$SCH://$A_AUSF:7774";;
     pcf) echo "$SCH://$A_PCF:7775";; smf) echo "$SCH://$A_SMF:7776";; amf) echo "$SCH://$A_AMF:7777";; upf) echo "$SCH://$A_UPF:9091";;
   esac
 }
@@ -440,7 +457,7 @@ cmd_ns() {
 # link impairment (scenario steps, backlog B-08): packets TO one function's address are delayed, dropped, duplicated and/or reordered (tc netem on the loopback of the namespace, selected by destination),
 # every other link stays as it was. `impair NF DELAY_MS [LOSS_PCT [REORDER_PCT [DUP_PCT [JITTER_MS]]]]`, `impair clear`. Needs the private namespace (ns mode) or root.
 addr_of() {
-  case "$1" in nrf) echo "$A_NRF";; scp) echo "$A_SCP";; bsf) echo "$A_BSF";; udr) echo "$A_UDR";; nssf) echo "$A_NSSF";; nef) echo "$A_NEF";; udm) echo "$A_UDM";; ausf) echo "$A_AUSF";;
+  case "$1" in nrf) echo "$A_NRF";; scp) echo "$A_SCP";; bsf) echo "$A_BSF";; chf) echo "$A_CHF";; udr) echo "$A_UDR";; nssf) echo "$A_NSSF";; nef) echo "$A_NEF";; udm) echo "$A_UDM";; ausf) echo "$A_AUSF";;
     pcf) echo "$A_PCF";; smf) echo "$A_SMF";; amf) echo "$A_AMF";; upf) echo "$A_UPF";; *) return 1;; esac
 }
 cmd_impair() {
@@ -755,7 +772,11 @@ do_load() {
   local ues="${1:-200}" gnbs="${2:-16}" waves="${3:-1}"
   load_env
   echo "RSS before: $(cmd_rss)" >&2
-  G5C_LOAD_UES="$ues" G5C_LOAD_GNBS="$gnbs" G5C_LOAD_WAVES="$waves" G5C_LOAD_WAVE_HOOK="$0 rss" "$LOAD" >&2
+  if [ "${G5C_LOAD_PROCESSES:-1}" -gt 1 ] 2>/dev/null; then # B-03: the population is `processes` load processes of `ues` UEs each, with disjoint IMSI ranges (tools/cli/g5c-fanout)
+    python3 "$HERE/../../tools/cli/g5c-fanout" run --load-bin "$LOAD" --processes "$G5C_LOAD_PROCESSES" --ues "$ues" --gnbs "$gnbs" >&2
+  else
+    G5C_LOAD_UES="$ues" G5C_LOAD_GNBS="$gnbs" G5C_LOAD_WAVES="$waves" G5C_LOAD_WAVE_HOOK="$0 rss" "$LOAD" >&2
+  fi
   local rc=$?
   echo "RSS after:  $(cmd_rss)" >&2
   if [ "${G5C_AMF_NSSF:-1}" = 1 ] && [ -z "${G5C_LOAD_STORM_SECONDS:-}" ]; then # a storm leaves the admitted UEs unfinished: nothing reaches the NSSF

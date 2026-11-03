@@ -62,6 +62,13 @@ typedef struct {
     unsigned paging_tries;
     unsigned workers;
     unsigned reach_grace; /* seconds added to T3512 for the mobile reachable timer */
+    bool ps_mico, ps_edrx, ps_psm;      /* `amf.power_saving`: MICO mode, extended DRX and the active timer T3324 are granted when the UE asks for them */
+    struct {
+        nas_snssai s;
+        unsigned max_ues;
+    } slice_limit[8]; /* `amf.slice_limits`: UEs registered per S-NSSAI (network slice admission control, TS 23.501 5.15.11) */
+    unsigned nslice_limit;
+    unsigned ps_edrx_max, ps_t3324_max; /* the longest eDRX cycle granted (index 0..13, 5.12 s .. 2621.44 s) and the longest T3324 in seconds */
     unsigned unauth_ue_max; /* connections that have not completed registration */
     unsigned ov_regs_per_s, ov_gnb_regs_per_s, ov_burst_s, ov_t3346; /* `amf.overload`: registrations admitted per second (all, and per gNB), the burst in seconds, the back-off timer T3346 given to a rejected UE */
     struct {
@@ -185,6 +192,11 @@ struct amf_ue {
     size_t radio_cap_len;
     bool imeisv_requested;
     int64_t last_active_ms;
+    bool mico;      /* MICO mode negotiated: the UE is not reachable while idle and is not paged */
+    bool has_edrx;  /* extended DRX negotiated; edrx = paging time window << 4 | cycle */
+    uint8_t edrx;
+    unsigned t3324; /* the active time granted, seconds; 0: no power saving mode. After it the idle UE is not paged */
+    double idle_at; /* g5c_now_seconds() when the UE became idle */
     struct amf_ue *next_all, *prev_all;
 };
 

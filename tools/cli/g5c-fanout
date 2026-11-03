@@ -1,0 +1,150 @@
+#!/usr/bin/env python3
+"""g5c-fanout: one population of emulated UEs driven by many load processes, on one host or on several (backlog B-03). The load generator (load_core, remote mode) is one process with its own gNB
+associations; this tool starts N of them with disjoint IMSI ranges, waits for all, and adds up what they did: UEs completed, wall time, the rate of the whole fleet and the slowest 99th percentile.
+
+  g5c-fanout run --load-bin PATH --processes 8 --ues 2000 [--gnbs 16] [--base 0] [--env KEY=VALUE ...] [--json out.json]
+  g5c-fanout plan --total 1000000 --per-process 5000 --hosts 4         the slices and the command each host runs (nothing is started)
+  g5c-fanout run ... --slice 2/4                                       host 2 of 4: only the processes of its share of --total are started
+
+The processes are plain remote-mode load processes (G5C_LOAD_REMOTE=1 and the other G5C_LOAD_* variables are read from the environment, as deploy/run/g5c-cluster.sh `load` sets them), with
+G5C_LOAD_BASE moved by their share and G5C_LOAD_FANOUT=1: the core's population counts are not any one process's business, they are checked here by the caller (see --check-url). Exit code 0
+when every process completed all its UEs, 1 when one did not, 2 on a bad call. Memory: each process holds its UEs' keys, about 30 kB per UE."""
+import argparse
+import json
+import os
+import subprocess
+import sys
+import tempfile
+import time
+from pathlib import Path
+
+MAX_BASE = 4_000_000_000  # imsi_base is an unsigned 32 bit number in the load process
+
+
+def plan(total, per_process, hosts):
+    """The slices: a list of (host, process, base, ues). The total is cut into processes of per_process UEs (the last one smaller), the processes are dealt to the hosts in turn."""
+    if total < 1 or per_process < 1 or hosts < 1:
+        raise ValueError("total, per-process and hosts must be 1 or more")
+    if total >= MAX_BASE:
+        raise ValueError("the IMSI range of a population is limited to %d UEs" % MAX_BASE)
+    out, base, n = [], 0, 0
+    while base < total:
+        ues = min(per_process, total - base)
+        out.append((n % hosts + 1, n, base, ues))
+        base += ues
+        n += 1
+    return out
+
+
+def run_fleet(load_bin, jobs, gnbs, extra_env, workdir, timeout):
+    """Starts one process per job at once; returns the results in job order."""
+    procs = []
+    for (_, n, base, ues) in jobs:
+        env = dict(os.environ)
+        env.update(extra_env)
+        env.update({"G5C_LOAD_REMOTE": env.get("G5C_LOAD_REMOTE", "1"), "G5C_LOAD_FANOUT": "1", "G5C_LOAD_UES": str(ues), "G5C_LOAD_GNBS": str(min(gnbs, ues)),
+                    "G5C_LOAD_BASE": str(base), "G5C_LOAD_JSON": str(Path(workdir) / ("load-%d.json" % n))})
+        log = open(Path(workdir) / ("load-%d.log" % n), "w")
+        procs.append((n, base, ues, subprocess.Popen([load_bin], env=env, stdout=log, stderr=subprocess.STDOUT), log, time.time()))
+    results = []
+    deadline = time.time() + timeout
+    for (n, base, ues, p, log, t0) in procs:
+        try:
+            rc = p.wait(timeout=max(1.0, deadline - time.time()))
+        except subprocess.TimeoutExpired:
+            p.kill()
+            p.wait()
+            rc = -9
+        log.close()
+        rep = None
+        try:
+            rep = json.loads((Path(workdir) / ("load-%d.json" % n)).read_text())
+        except (OSError, ValueError):
+            pass
+        results.append({"process": n, "base": base, "ues": ues, "rc": rc, "seconds": round(time.time() - t0, 2), "report": rep})
+    return results
+
+
+def summarise(results, wall):
+    done = sum(r["ues"] for r in results if r["rc"] == 0)
+    p99 = {}
+    for r in results:
+        for k, v in ((r["report"] or {}).get("latency") or {}).items():
+            p99[k] = max(p99.get(k, 0.0), v.get("p99_ms", 0.0))
+    return {"processes": len(results), "failed_processes": [r["process"] for r in results if r["rc"] != 0], "ues_planned": sum(r["ues"] for r in results), "ues_completed": done,
+            "wall_seconds": round(wall, 2), "ues_per_second": round(done / wall, 1) if wall > 0 else 0.0, "worst_p99_ms": p99}
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(prog="g5c-fanout", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    pl = sub.add_parser("plan")
+    pl.add_argument("--total", type=int, required=True)
+    pl.add_argument("--per-process", type=int, default=5000)
+    pl.add_argument("--hosts", type=int, default=1)
+    rn = sub.add_parser("run")
+    rn.add_argument("--load-bin", required=True)
+    rn.add_argument("--processes", type=int)
+    rn.add_argument("--ues", type=int, help="UEs per process")
+    rn.add_argument("--total", type=int, help="instead of --processes/--ues: the whole population (with --per-process)")
+    rn.add_argument("--per-process", type=int, default=5000)
+    rn.add_argument("--slice", help="K/N: this is host K of N; only its share of the processes is started")
+    rn.add_argument("--gnbs", type=int, default=16)
+    rn.add_argument("--base", type=int, default=0, help="IMSI offset of the whole population")
+    rn.add_argument("--env", action="append", default=[], metavar="KEY=VALUE")
+    rn.add_argument("--timeout", type=float, default=3600)
+    rn.add_argument("--json")
+    a = ap.parse_args(argv)
+    try:
+        if a.cmd == "plan":
+            jobs = plan(a.total, a.per_process, a.hosts)
+            for h in range(1, a.hosts + 1):
+                mine = [j for j in jobs if j[0] == h]
+                print("host %d/%d: %d processes, %d UEs  ->  g5c-fanout run --load-bin <load_core> --total %d --per-process %d --slice %d/%d" %
+                      (h, a.hosts, len(mine), sum(j[3] for j in mine), a.total, a.per_process, h, a.hosts))
+            return 0
+        if a.total is not None:
+            hosts = int(a.slice.split("/")[1]) if a.slice else 1
+            jobs = plan(a.total, a.per_process, hosts)
+        elif a.processes and a.ues:
+            jobs = plan(a.processes * a.ues, a.ues, 1)
+        else:
+            raise ValueError("give --total, or --processes and --ues")
+        if a.slice:
+            k, n = (int(x) for x in a.slice.split("/"))
+            if not 1 <= k <= n:
+                raise ValueError("--slice K/N needs 1 <= K <= N")
+            jobs = [j for j in jobs if j[0] == k]
+        jobs = [(h, n, b + a.base, u) for (h, n, b, u) in jobs]
+        if not jobs or max(b + u for (_, _, b, u) in jobs) >= MAX_BASE:
+            raise ValueError("nothing to run, or the IMSI range is too large")
+        extra = {}
+        for kv in a.env:
+            k, sep, v = kv.partition("=")
+            if not sep:
+                raise ValueError("--env takes KEY=VALUE")
+            extra[k] = v
+    except (ValueError, IndexError) as e:
+        print("g5c-fanout: %s" % e, file=sys.stderr)
+        return 2
+    with tempfile.TemporaryDirectory(prefix="g5c-fanout-") as wd:
+        t0 = time.time()
+        results = run_fleet(a.load_bin, jobs, a.gnbs, extra, wd, a.timeout)
+        wall = time.time() - t0
+        for r in results:
+            if r["rc"] != 0:
+                print("process %d failed (exit %s); its log:" % (r["process"], r["rc"]), file=sys.stderr)
+                try:
+                    print((Path(wd) / ("load-%d.log" % r["process"])).read_text()[-1500:], file=sys.stderr)
+                except OSError:
+                    pass
+    s = summarise(results, wall)
+    print("fanout: %d processes, %d of %d UEs completed in %.1f s (%.0f UEs/s); worst p99 %s" % (s["processes"], s["ues_completed"], s["ues_planned"], s["wall_seconds"], s["ues_per_second"],
+          ", ".join("%s %.0f ms" % kv for kv in sorted(s["worst_p99_ms"].items())) or "n/a"))
+    if a.json:
+        Path(a.json).write_text(json.dumps({"summary": s, "processes": results}, indent=2))
+    return 0 if not s["failed_processes"] else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -19,6 +19,10 @@
  *                      deploy/run/g5c-cluster.sh kills and restarts network functions)
  *   G5C_LOAD_STORM_SECONDS  storm mode: every gNB sends Registration Requests back to back for this long (no waiting for the core to keep up) and counts what comes back: challenged
  *                      (admitted), refused with cause #22 congestion (amf.overload), or anything else. The challenged UEs are left to the AMF's timers. The run fails when a reply is neither
+ *   G5C_LOAD_ADMIN_TOKEN / G5C_LOAD_NO_PROVISION  the bearer token of the UDM admin API (default: the cluster's test token); set NO_PROVISION when the subscribers exist already (tools/cli/g5c-tester)
+ *   G5C_LOAD_FANOUT    1: this process is one of several against the same core (tools/cli/g5c-fanout): the population counts of the core are not judged, the caller does that
+ *   G5C_LOAD_MOBILITY  mobility mode (backlog B-09): every UE registers on one gNB, establishes its session and then moves between two gNBs (tracking areas 1 and 2) by this many Xn path switches, each checked
+ *                      (next hop, chaining count, switched sessions); then it de-registers
  *   G5C_LOAD_CHECK_MEM 0: do not assert that RSS stops growing between waves (sanitizer builds)
  *   G5C_LOAD_TRAFFIC_MBPS  user plane (backlog B-02): once every UE has its session, each UE sends uplink GTP-U at this rate (Mbit/s, may be fractional) for G5C_LOAD_TRAFFIC_MS
  *   G5C_LOAD_ECHO      an echo server behind the UPF (tools/cli/g5c-dn --echo 7 on the data network gateway): the uplink packets are addressed to it and come back as downlink through
@@ -106,7 +110,7 @@ static size_t upf_sessions(void)
     return n;
 }
 
-static bool remote;
+static bool remote, fanout; /* fanout: other load processes share the core, so the population counts are not this process's alone */
 static char amf_sbi[96], smf_sbi[96], upf_sbi[96];
 
 /* one value of a Prometheus text exposition */
@@ -158,12 +162,16 @@ static size_t n_upf_sessions(void)
 /* the count a wave must reach: base + want */
 static bool count_is(size_t cur, size_t base, size_t want)
 {
+    if (fanout)
+        return true;
     return remote ? cur >= want && cur <= base + want : cur == base + want;
 }
 
 /* after de-registration: back to the base (remote: at most the base, leftovers may have gone) */
 static bool count_back(size_t cur, size_t base)
 {
+    if (fanout)
+        return true;
     return remote ? cur <= base : cur == base;
 }
 
@@ -543,7 +551,8 @@ static int storm_main(unsigned n_ues, unsigned n_gnbs, unsigned seconds)
         char imsi[16], js[200];
         imsi_of(imsi, sizeof imsi, i);
         snprintf(js, sizeof js, "{\"supi\":\"imsi-%s\",\"k\":\"" K_HEX "\",\"op\":\"" OP_HEX "\"}", imsi);
-        provision(js);
+        if (getenv("G5C_LOAD_NO_PROVISION") == NULL)
+            provision(js);
     }
     t0 = now_s();
     chaos_deadline = t0 + seconds;
@@ -610,7 +619,8 @@ static int chaos_main(unsigned n_ues, unsigned n_gnbs, unsigned seconds)
         char imsi[16], js[200];
         imsi_of(imsi, sizeof imsi, i);
         snprintf(js, sizeof js, "{\"supi\":\"imsi-%s\",\"k\":\"" K_HEX "\",\"op\":\"" OP_HEX "\"}", imsi);
-        provision(js);
+        if (getenv("G5C_LOAD_NO_PROVISION") == NULL)
+            provision(js);
     }
     t0 = now_s();
     chaos_deadline = t0 + seconds;
@@ -629,6 +639,136 @@ static int chaos_main(unsigned n_ues, unsigned n_gnbs, unsigned seconds)
     free(th);
     free(w);
     return atomic_load(&c_ok) > 0 ? 0 : 1;
+}
+
+/* ---- mobility mode (backlog B-09): Xn path switches against real daemons ----
+ * Each worker owns two gNBs (two associations, tracking areas 1 and 2). A UE registers and establishes its session on gNB A, then moves A -> B -> A ... for G5C_LOAD_MOBILITY
+ * path switches; every answer is checked (the UE and RAN identifiers, the next hop and its chaining count against the UE's own derivation, the switched session list), and the UE
+ * de-registers from wherever it ended. The run passes when every UE did all its moves and the core is empty at the end. */
+static atomic_long m_done, m_moves, m_fail;
+static unsigned mob_hops;
+
+static void drain(gnb_t *g)
+{
+    g5c_json *p;
+    while ((p = gnb_rx(g, 40)) != NULL)
+        g5c_json_free(p);
+}
+
+static bool mob_connect(gnb_t *g, int idx, unsigned id, uint32_t tac)
+{
+    g5c_json *r;
+    gnb_open(g, idx);
+    r = gnb_ng_setup(g, id, tac, "00f110", "gnb-mobility");
+    if (r != NULL && is_kind(r, "successfulOutcome")) {
+        g5c_json_free(r);
+        return true;
+    }
+    g5c_json_free(r);
+    gnb_close(g);
+    return false;
+}
+
+static void *mobility_thread(void *arg)
+{
+    worker_t *w = arg;
+    gnb_t g[2];
+    if (!mob_connect(&g[0], 0, 3000 + 2 * w->idx, 1) || !mob_connect(&g[1], 1, 3001 + 2 * w->idx, 2)) {
+        atomic_fetch_add(&m_fail, (long)w->count);
+        return NULL;
+    }
+    for (unsigned i = 0; i < w->count; i++) {
+        jmp_buf jb;
+        volatile unsigned hop = 0;
+        ue_t u;
+        char imsi[16];
+        volatile int at = 0;
+        tl_jb = &jb;
+        if (setjmp(jb) != 0) {
+            tl_jb = NULL;
+            atomic_fetch_add(&m_fail, 1);
+            fprintf(stderr, "mobility: UE %u failed after %u moves: %s\n", w->first + i, hop, tl_msg);
+            gnb_close(&g[0]);
+            gnb_close(&g[1]);
+            if (!mob_connect(&g[0], 0, 3000 + 2 * w->idx, 1) || !mob_connect(&g[1], 1, 3001 + 2 * w->idx, 2))
+                return NULL;
+            continue;
+        }
+        imsi_of(imsi, sizeof imsi, w->first + i);
+        ue_init(&u, imsi, 1 + i);
+        {
+            accept_info ai = ue_register_ex(&g[0], &u, 1, false, false, NULL);
+            accept_free(&ai);
+        }
+        {
+            sess_t s = ue_establish(&g[0], &u, 1, 0x10000 + w->first + i, 1);
+            TK_ASSERT(s.has_ue_ip);
+        }
+        for (hop = 0; hop < mob_hops; hop++) {
+            int to = 1 - at;
+            drain(&g[to]);
+            gnb_path_switch(&g[to], to, &u, 100000 + (w->first + i) * 64 + hop, to == 0 ? 1 : 2, 0x200 + hop, 0x40000 + (w->first + i) * 64 + hop, (int)hop + 2);
+            at = to;
+            atomic_fetch_add(&m_moves, 1);
+        }
+        drain(&g[at]);
+        {
+            nas_msg m;
+            g5c_bytes b, id;
+            uint8_t dt = 0x09, ng = u.ngksi;
+            g5c_bytes_init(&b);
+            g5c_bytes_init(&id);
+            put_guti_identity(&u, &id);
+            TK_ASSERT(nas_msg_init(&m, "De-registration request (UE originating de-registration)"));
+            nas_msg_set(&m, "De-registration type", &dt, 1);
+            nas_msg_set(&m, "ngKSI", &ng, 1);
+            nas_msg_set(&m, "5GS mobile identity", id.data, id.len);
+            TK_ASSERT(nas_msg_encode(&m, &b) == NAS_OK);
+            nas_msg_free(&m);
+            ue_send_protected(&g[at], &u, 2, b.data, b.len, 1);
+            g5c_bytes_free(&b);
+            g5c_bytes_free(&id);
+            gnb_confirm_release(&g[at], &u);
+        }
+        tl_jb = NULL;
+        atomic_fetch_add(&m_done, 1);
+    }
+    gnb_close(&g[0]);
+    gnb_close(&g[1]);
+    return NULL;
+}
+
+static int mobility_main(unsigned n_ues, unsigned n_gnbs, unsigned hops)
+{
+    pthread_t *th = g5c_xmalloc(sizeof *th * n_gnbs);
+    worker_t *w = g5c_xmalloc(sizeof *w * n_gnbs);
+    unsigned per = n_ues / n_gnbs, rem = n_ues % n_gnbs, next = 0;
+    double t0;
+    mob_hops = hops;
+    printf("mobility: %u UEs over %u workers, %u Xn path switches each\n", n_ues, n_gnbs, hops);
+    fflush(stdout);
+    for (unsigned i = 0; i < n_ues; i++) {
+        char imsi[16], js[200];
+        imsi_of(imsi, sizeof imsi, i);
+        snprintf(js, sizeof js, "{\"supi\":\"imsi-%s\",\"k\":\"" K_HEX "\",\"op\":\"" OP_HEX "\"}", imsi);
+        if (getenv("G5C_LOAD_NO_PROVISION") == NULL)
+            provision(js);
+    }
+    t0 = now_s();
+    for (unsigned i = 0; i < n_gnbs; i++) {
+        w[i].idx = i;
+        w[i].first = next;
+        w[i].count = per + (i < rem ? 1 : 0);
+        next += w[i].count;
+        TK_ASSERT(pthread_create(&th[i], NULL, mobility_thread, &w[i]) == 0);
+    }
+    for (unsigned i = 0; i < n_gnbs; i++)
+        pthread_join(th[i], NULL);
+    printf("mobility: %ld of %u UEs completed, %ld path switches in %.1f s (%.0f/s), %ld failed\n", atomic_load(&m_done), n_ues, atomic_load(&m_moves), now_s() - t0,
+           (double)atomic_load(&m_moves) / (now_s() - t0), atomic_load(&m_fail));
+    free(th);
+    free(w);
+    return atomic_load(&m_done) == (long)n_ues && atomic_load(&m_fail) == 0 ? 0 : 1;
 }
 
 static double pct(const double *sorted, size_t n, double p)
@@ -673,6 +813,7 @@ int main(void)
     snprintf(extra, sizeof extra, "  max_unauthenticated: %u\n", n_gnbs * 4 + 64);
     g_amf_extra = extra;
     remote = env_uint("G5C_LOAD_REMOTE", 0) != 0;
+    fanout = env_uint("G5C_LOAD_FANOUT", 0) != 0;
     if (remote) {
         const char *ep = getenv("G5C_LOAD_AMF_NGAP") != NULL ? getenv("G5C_LOAD_AMF_NGAP") : "127.2.0.5:38412", *colon = strrchr(ep, ':');
         static char ip[64];
@@ -717,6 +858,8 @@ int main(void)
     }
     if (env_uint("G5C_LOAD_STORM_SECONDS", 0) != 0)
         return storm_main(n_ues, n_gnbs, env_uint("G5C_LOAD_STORM_SECONDS", 0));
+    if (env_uint("G5C_LOAD_MOBILITY", 0) != 0)
+        return mobility_main(n_ues, n_gnbs, env_uint("G5C_LOAD_MOBILITY", 0));
     if (env_uint("G5C_LOAD_CHAOS_SECONDS", 0) != 0)
         return chaos_main(n_ues, n_gnbs, env_uint("G5C_LOAD_CHAOS_SECONDS", 0));
     fds0 = open_fds();
@@ -729,7 +872,8 @@ int main(void)
         char imsi[16], js[200];
         imsi_of(imsi, sizeof imsi, i);
         snprintf(js, sizeof js, "{\"supi\":\"imsi-%s\",\"k\":\"" K_HEX "\",\"op\":\"" OP_HEX "\"}", imsi);
-        provision(js);
+        if (getenv("G5C_LOAD_NO_PROVISION") == NULL)
+            provision(js);
     }
     printf("load: provisioned %u subscribers in %.1f s\n", n_ues, now_s() - t_start);
     fflush(stdout);

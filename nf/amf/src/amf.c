@@ -733,6 +733,26 @@ static int parse_overload(const g5c_json *ov, amf_cfg *cf, char *err, size_t cap
     return 0;
 }
 
+/* `power_saving: { mico: true, edrx: true, max_edrx_cycle: 13, psm: true, max_t3324_s: 600 }`: what the AMF grants a UE that asks for it (all on by default) */
+static int parse_power_saving(const g5c_json *ps, amf_cfg *cf, char *err, size_t cap)
+{
+    static const char *const k_ps[] = {"mico", "edrx", "max_edrx_cycle", "psm", "max_t3324_s", NULL};
+    cf->ps_mico = cf->ps_edrx = cf->ps_psm = true;
+    cf->ps_edrx_max = 13;
+    cf->ps_t3324_max = 600;
+    if (ps == NULL)
+        return 0;
+    if (!g5c_json_is(ps, G5C_J_OBJECT) || g5c_json_check_keys(ps, k_ps, "amf.power_saving", err, cap) != 0) {
+        if (err[0] == 0)
+            snprintf(err, cap, "invalid config: `amf.power_saving` must be a mapping");
+        return -1;
+    }
+    (void)g5c_json_get_bool(ps, "mico", &cf->ps_mico);
+    (void)g5c_json_get_bool(ps, "edrx", &cf->ps_edrx);
+    (void)g5c_json_get_bool(ps, "psm", &cf->ps_psm);
+    return get_uint(ps, "max_edrx_cycle", 0, 13, &cf->ps_edrx_max, "amf.power_saving", err, cap) != 0 || get_uint(ps, "max_t3324_s", 2, 1152000, &cf->ps_t3324_max, "amf.power_saving", err, cap) != 0 ? -1 : 0;
+}
+
 /* configuration reload of `amf.overload`: the new limits apply from the next registration, with full buckets */
 static int amf_reload_overload(void *ctx, const g5c_json *from, const g5c_json *to, char *err, size_t cap)
 {
@@ -759,7 +779,7 @@ amf *amf_from_config(const g5c_json *root, g5c_nf *nf, char *err, size_t cap)
 {
     static const char *const k_amf[] = {"name", "guami", "ngap", "capacity", "tais", "slices", "security", "ausf", "udm", "pcf", "smf", "nssf", "default_dnn",
                                         "network_name", "timers", "paging_tries", "workers", "self_uri", "state_file", "reachable_grace",
-                                        "max_unauthenticated", "inject", "overload", NULL};
+                                        "max_unauthenticated", "inject", "overload", "power_saving", "slice_limits", NULL};
     static const char *const k_guami[] = {"region", "set", "pointer", NULL};
     static const char *const k_ngap[] = {"address", "port", NULL};
     static const char *const k_sec[] = {"integrity", "ciphering", NULL};
@@ -1022,8 +1042,26 @@ amf *amf_from_config(const g5c_json *root, g5c_nf *nf, char *err, size_t cap)
         get_uint(c, "max_unauthenticated", 1, 1000000, &cf->unauth_ue_max, "amf", err, cap) != 0)
         goto fail;
     (void)u;
-    if (parse_overload(g5c_json_get(c, "overload"), cf, err, cap) != 0)
+    if (parse_overload(g5c_json_get(c, "overload"), cf, err, cap) != 0 || parse_power_saving(g5c_json_get(c, "power_saving"), cf, err, cap) != 0)
         goto fail;
+    if (g5c_json_get(c, "slice_limits") != NULL) { /* `slice_limits: [ { sst: 1, sd: '000001', max_ues: 1000 } ]` */
+        const g5c_json *lims = g5c_json_get(c, "slice_limits");
+        static const char *const k_sl[] = {"sst", "sd", "max_ues", NULL};
+        if (!g5c_json_is(lims, G5C_J_ARRAY) || g5c_json_len(lims) > 8) {
+            snprintf(err, cap, "invalid config: `amf.slice_limits` must be a list of up to 8 entries");
+            goto fail;
+        }
+        for (size_t i = 0; i < g5c_json_len(lims); i++) {
+            const g5c_json *e = g5c_json_at(lims, i);
+            if (!g5c_json_is(e, G5C_J_OBJECT) || g5c_json_check_keys(e, k_sl, "amf.slice_limits", err, cap) != 0 || !amf_snssai_from_json(e, &cf->slice_limit[i].s) ||
+                get_uint(e, "max_ues", 0, 100000000, &cf->slice_limit[i].max_ues, "amf.slice_limits", err, cap) != 0 || g5c_json_get(e, "max_ues") == NULL) {
+                if (err[0] == 0)
+                    snprintf(err, cap, "invalid config: `amf.slice_limits[]` needs `sst`, optionally a 6 hex digit `sd`, and `max_ues` 0..=100000000");
+                goto fail;
+            }
+            cf->nslice_limit = (unsigned)i + 1;
+        }
+    }
     g5c_nf_on_reload(nf, "amf.overload", amf_reload_overload, a);
     if (g5c_json_get(c, "inject") != NULL) { /* `inject: { registration_reject: [{ supi: imsi-0010100, cause: 11 }], accept_delay_ms */
         static const char *const k_inj[] = {"registration_reject", "accept_delay_ms", NULL}, *const k_rej[] = {"supi", "cause", NULL};

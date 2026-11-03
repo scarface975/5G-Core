@@ -13,6 +13,7 @@ A scenario:
                                                                   and jitter are printed; max_loss_pct and expect_dl_mbps (the downlink AMBR) are judged
       - load: {ues: 4, traffic_mbps: 4, traffic_ms: 1500, expect_mbps: 1}   as above, and every UE sends uplink traffic at 4 Mbit/s for 1.5 s once it has its session; the run fails unless the UPF
                                                                   delivered 0.5x to 1.3x of expect_mbps per UE (the session AMBR the PCF gave; traffic_size sets the packet size, 1000 octets by default)
+      - load: {ues: 20, gnbs: 4, mobility: 6}                    every UE moves between two gNBs by 6 Xn path switches (next hop and sessions checked), then de-registers
       - load: {ues: 30, background: true, id: wave}               started and left running ... then
       - join: wave                                                ... waited for (expect: pass | fail applies to the result)
       - impair: {to: upf, delay_ms: 150, jitter_ms: 20, loss_pct: 1, reorder_pct: 10, duplicate_pct: 2, duration_s: 5}   packets to that function are delayed / dropped / reordered / duplicated;
@@ -123,7 +124,7 @@ class ClusterRunner:
         """Traffic profile of the load step (B-02): traffic_mbps per UE for traffic_ms with packets of traffic_size octets; expect_mbps is the per-UE rate the session AMBR allows."""
         env = dict(os.environ)
         for key, var in (("traffic_mbps", "G5C_LOAD_TRAFFIC_MBPS"), ("traffic_ms", "G5C_LOAD_TRAFFIC_MS"), ("traffic_size", "G5C_LOAD_TRAFFIC_SIZE"), ("expect_mbps", "G5C_LOAD_EXPECT_MBPS"),
-                         ("expect_dl_mbps", "G5C_LOAD_EXPECT_DL_MBPS"), ("max_loss_pct", "G5C_LOAD_ECHO_MAX_LOSS_PCT"), ("storm_seconds", "G5C_LOAD_STORM_SECONDS")):
+                         ("expect_dl_mbps", "G5C_LOAD_EXPECT_DL_MBPS"), ("max_loss_pct", "G5C_LOAD_ECHO_MAX_LOSS_PCT"), ("storm_seconds", "G5C_LOAD_STORM_SECONDS"), ("mobility", "G5C_LOAD_MOBILITY"), ("processes", "G5C_LOAD_PROCESSES")):
             if key in a:
                 env[var] = str(a[key])
         if a.get("echo"):

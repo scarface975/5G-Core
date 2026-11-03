@@ -48,6 +48,7 @@ void smf_destroy(smf *s)
         smf_policy_free(&ss->pol);
         g5c_json_free(ss->decision);
         free(ss->pcf_resource);
+        free(ss->chf_resource);
         free(ss->pcf_notif);
         free(ss->amf_status_uri);
         free(ss->amf_n1n2_url);
@@ -68,6 +69,7 @@ void smf_destroy(smf *s)
     free(s->udm);
     g5c_disc_free(s->disc);
     free(s->pcf);
+    free(s->chf);
     free(s->amf);
     free(s->instance_id);
     free(s->self_uri);
@@ -231,7 +233,7 @@ static char *peer_uri(const g5c_json *cfg, const char *name, bool required, char
 smf *smf_from_config(const g5c_json *root, g5c_nf *nf, char *err, size_t cap)
 {
     static const char *const k_smf[] = {"self_uri", "udm", "pcf", "amf", "mtu", "n1n2_delay_ms", "release_guard_ms", "workers", "state_file", "slices", "n4", "upfs",
-                                        "dnns", "cdr", "inject", NULL};
+                                        "dnns", "cdr", "inject", "slice_limits", "chf", NULL};
     static const char *const k_n4[] = {"address", "port", "t1_ms", "n1", "heartbeat", "lost_after", NULL};
     static const char *const k_hb[] = {"interval", "failures", NULL};
     static const char *const k_dnn[] = {"name", "ipv4_pool", "ipv6_pool", "dns", NULL};
@@ -299,6 +301,57 @@ smf *smf_from_config(const g5c_json *root, g5c_nf *nf, char *err, size_t cap)
             goto fail;
         }
         s->mtu = (uint16_t)v;
+    }
+    s->chf_rating_group = 1;
+    s->chf_quota = 10u * 1024 * 1024;
+    s->chf_required = true;
+    if (g5c_json_get(c, "chf") != NULL) { /* `chf: { uri: 'http://chf:7787', rating_group: 1, quota_bytes: 10485760, required: true }` */
+        static const char *const k_chf[] = {"uri", "rating_group", "quota_bytes", "required", NULL};
+        const g5c_json *ch = g5c_json_get(c, "chf");
+        int64_t cv;
+        if (!g5c_json_is(ch, G5C_J_OBJECT) || g5c_json_check_keys(ch, k_chf, "smf.chf", err, cap) != 0) {
+            if (err[0] == 0)
+                snprintf(err, cap, "invalid config: `smf.chf` must be a mapping");
+            goto fail;
+        }
+        s->chf = peer_uri(c, "chf", true, err, cap);
+        if (s->chf == NULL)
+            goto fail;
+        if (g5c_json_get(ch, "rating_group") != NULL) {
+            if (!g5c_json_get_int(ch, "rating_group", &cv) || cv < 0 || cv > 4294967295LL) {
+                snprintf(err, cap, "invalid config: `smf.chf.rating_group` must be 0..=4294967295");
+                goto fail;
+            }
+            s->chf_rating_group = (unsigned)cv;
+        }
+        if (g5c_json_get(ch, "quota_bytes") != NULL) {
+            if (!g5c_json_get_int(ch, "quota_bytes", &cv) || cv < 1) {
+                snprintf(err, cap, "invalid config: `smf.chf.quota_bytes` must be a positive number");
+                goto fail;
+            }
+            s->chf_quota = (uint64_t)cv;
+        }
+        (void)g5c_json_get_bool(ch, "required", &s->chf_required);
+    }
+    if (g5c_json_get(c, "slice_limits") != NULL) { /* `slice_limits: [ { sst: 1, sd: '000001', max_sessions: 100 } ]` */
+        const g5c_json *sl = g5c_json_get(c, "slice_limits");
+        static const char *const k_sl[] = {"sst", "sd", "max_sessions", NULL};
+        if (!g5c_json_is(sl, G5C_J_ARRAY) || g5c_json_len(sl) > 8) {
+            snprintf(err, cap, "invalid config: `smf.slice_limits` must be a list of up to 8 entries");
+            goto fail;
+        }
+        for (size_t i = 0; i < g5c_json_len(sl); i++) {
+            const g5c_json *e = g5c_json_at(sl, i);
+            int64_t mx = 0;
+            if (!g5c_json_is(e, G5C_J_OBJECT) || g5c_json_check_keys(e, k_sl, "smf.slice_limits", err, cap) != 0 ||
+                !smf_parse_snssai(e, &s->slice_limit[i].sst, &s->slice_limit[i].has_sd, &s->slice_limit[i].sd) || !g5c_json_get_int(e, "max_sessions", &mx) || mx < 0 || mx > 100000000) {
+                if (err[0] == 0)
+                    snprintf(err, cap, "invalid config: `smf.slice_limits[]` needs `sst`, optionally a 6 hex digit `sd`, and `max_sessions` 0..=100000000");
+                goto fail;
+            }
+            s->slice_limit[i].max_sessions = (unsigned)mx;
+            s->nslice_limit = (unsigned)i + 1;
+        }
     }
     if (g5c_json_get(c, "inject") != NULL) { /* failure injection, for testing a RAN against a core that misbehaves */
         static const char *const k_inj[] = {"pdu_session_reject", "n4_drop_responses_percent", NULL}, *const k_rej[] = {"supi", "status", NULL};

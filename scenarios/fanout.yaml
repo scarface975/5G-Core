@@ -1,0 +1,8 @@
+# One population from several load processes (backlog B-03): four processes of 40 UEs each, with disjoint IMSI ranges, register and open sessions at the same time against the same
+# core (tools/cli/g5c-fanout); on a bigger machine the same step takes `processes: 200, ues: 5000`, and with --slice the processes can be spread over several hosts.
+name: four load processes, one core
+steps:
+  - load: {ues: 40, gnbs: 4, processes: 4}
+  - assert: {metric: "amf:g5c_amf_registrations_total{result=accepted}", ">=": 160}
+  - assert: {metric: "amf:g5c_amf_registered_ues", "==": 0}
+  - assert: {metric: "smf:g5c_smf_pdu_sessions_active", "==": 0}

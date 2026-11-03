@@ -1,0 +1,79 @@
+{
+  "title": "Interoperability register",
+  "note": "Only what has been run and has evidence in this repository. A product that is not listed here has not been tested. Each entry names how to reproduce it and a file that must exist.",
+  "entries": [
+    {
+      "id": "ran-ocudu-srsue",
+      "kind": "gNB + UE (virtual radio)",
+      "peer": "OCUDU gNB with srsUE (srsRAN 4G in 5G SA mode) over ZeroMQ",
+      "core": "ours (all functions)",
+      "result": "pass",
+      "what": "NG Setup accepted (PLMN 00101, TAC 7), registration with 5G-AKA, security mode, PDU session, ping 5 of 5 through the user plane; five runs in a row",
+      "limits": "srsUE cannot decipher 5G NAS with NEA1 to NEA3 (the sequence number is read from the 4G position), so the demo configures NEA0 with NIA2; DEMO_CIPHERING=NEA2 for a UE that implements TS 33.501",
+      "reproduce": "CORE=ours deploy/demo/zmq_demo.sh",
+      "evidence": "docs/demo/zmq-demo.md"
+    },
+    {
+      "id": "ran-ueransim-our-amf",
+      "kind": "gNB + UE (simulator)",
+      "peer": "UERANSIM nr-gnb and nr-ue",
+      "core": "Open5GS 2.8.0 core with our AMF in its place",
+      "result": "pass",
+      "what": "registration, authentication, security mode, PDU session through the Open5GS SMF and UPF, release and de-registration (recorded trace)",
+      "limits": "the recorded scenario S3; one UE",
+      "reproduce": "OUR_AMF=1 deploy/oracle/scenario.sh s3",
+      "evidence": "tests/fixtures/golden/s3_our_amf_open5gs_core_ueransim.pcapng"
+    },
+    {
+      "id": "ran-ueransim-our-smf-upf",
+      "kind": "gNB + UE (simulator)",
+      "peer": "UERANSIM nr-gnb and nr-ue",
+      "core": "Open5GS 2.8.0 AMF with our SMF and our UPF in its place",
+      "result": "pass",
+      "what": "PDU session establishment and release with PFCP between our SMF and our UPF, GTP-U through our UPF (recorded trace)",
+      "limits": "the recorded scenario S3; one UE",
+      "reproduce": "OUR_SMF=1 OUR_UPF=1 deploy/oracle/scenario.sh s3",
+      "evidence": "tests/fixtures/golden/s3_our_smf_our_upf_open5gs_amf_ueransim.pcapng"
+    },
+    {
+      "id": "ue-ueransim-eap-aka-prime",
+      "kind": "UE (simulator)",
+      "peer": "UERANSIM nr-ue 3.3.0, patched copy",
+      "core": "ours (AUSF EAP-AKA')",
+      "result": "pass with a patched peer",
+      "what": "EAP-AKA' authentication against our AUSF: key derivation, AT_MAC and AT_RES verified by an independent implementation",
+      "limits": "stock UERANSIM 3.3.0 rejects the AT_KDF attribute of a conforming server (Length 1, RFC 5448 3.2); the copy built by build_ueransim_eap.sh accepts it",
+      "reproduce": "deploy/oracle/build_ueransim_eap.sh",
+      "evidence": "deploy/oracle/build_ueransim_eap.sh"
+    },
+    {
+      "id": "core-open5gs-udm-pcf",
+      "kind": "core functions",
+      "peer": "Open5GS 2.8.0 AMF, AUSF, SMF, PCF",
+      "core": "our UDM, UDR and PCF in their place",
+      "result": "pass",
+      "what": "Open5GS authenticates and sets up sessions against our UDM and UDR; Open5GS SMF takes policy from our PCF and follows a mid-session policy change with a PFCP update",
+      "limits": "scenarios S3 and S4 of the oracle",
+      "reproduce": "OUR_UDM=1 OUR_PCF=1 deploy/oracle/scenario.sh s4",
+      "evidence": "deploy/oracle/README.md"
+    },
+    {
+      "id": "core-open5gs-differential",
+      "kind": "core functions (differential)",
+      "peer": "Open5GS 2.8.0",
+      "core": "ours (nine functions)",
+      "result": "129 cases compared, 0 unexplained",
+      "what": "the same requests to both cores, answers compared field by field; every difference has a stated reason",
+      "limits": "what the nine differential tests send; free5GC is not a reference",
+      "reproduce": "tools/cli/g5c-compat run",
+      "evidence": "tests/fixtures/compat/differentials.log"
+    }
+  ],
+  "not_tested": [
+    "any commercial gNB or O-RAN radio unit",
+    "any commercial UE or modem",
+    "free5GC as a peer",
+    "srsRAN Project gNB (OCUDU is the gNB tested)",
+    "real radio with an SDR"
+  ]
+}

@@ -188,6 +188,7 @@ static void sess_free(smf_sess *ss)
     smf_policy_free(&ss->pol);
     g5c_json_free(ss->decision);
     free(ss->pcf_resource);
+    free(ss->chf_resource);
     free(ss->pcf_notif);
     free(ss->amf_status_uri);
     free(ss->amf_n1n2_url);
@@ -343,6 +344,8 @@ static void sess_teardown(smf *s, smf_sess *ss, const char *why)
     }
     if (ss->up_seid != 0) /* a session that never reached the UPF has no record */
         smf_cdr_write(s, ss, &usage, why);
+    if (ss->chf_resource != NULL)
+        smf_chf_release(s, ss, &usage);
     if (ss->pcf_resource != NULL)
         smf_pcf_delete(s, ss->pcf_resource);
     if (ss->udm_registered)
@@ -491,7 +494,7 @@ static void create_error(smf *s, g5c_resp *resp, int status, const char *cause, 
 
 /* ---- Create SM Context ---- */
 
-static bool parse_snssai(const g5c_json *j, uint8_t *sst, bool *has_sd, uint32_t *sd)
+bool smf_parse_snssai(const g5c_json *j, uint8_t *sst, bool *has_sd, uint32_t *sd)
 {
     int64_t v;
     const char *sdt;
@@ -593,6 +596,8 @@ static void create_abort(smf *s, smf_sess *ss)
         smf_n4_msg dr;
         (void)smf_n4_call(s->n4, ss->upf, PFCP_SESSION_DELETION_REQUEST, true, ss->up_seid, NULL, 0, &dr);
     }
+    if (ss->chf_resource != NULL)
+        smf_chf_release(s, ss, NULL);
     if (ss->pcf_resource != NULL)
         smf_pcf_delete(s, ss->pcf_resource);
     if (ss->udm_registered)
@@ -660,7 +665,7 @@ static void create_ctx(void *ctx, const g5c_req *req, g5c_resp *resp)
         g5c_resp_problem_invalid(resp, 400, "MANDATORY_IE_MISSING", "n1SmMsg", "the PDU Session Establishment Request is required");
         goto bad;
     }
-    if (!parse_snssai(g5c_json_get(pr.json, "sNssai"), &sst, &has_sd, &sd)) {
+    if (!smf_parse_snssai(g5c_json_get(pr.json, "sNssai"), &sst, &has_sd, &sd)) {
         g5c_resp_problem_invalid(resp, 400, "MANDATORY_IE_INCORRECT", "sNssai", "missing or malformed");
         goto bad;
     }
@@ -709,6 +714,19 @@ static void create_ctx(void *ctx, const g5c_req *req, g5c_resp *resp)
     if (old != NULL)
         sess_teardown(s, old, "replaced by a new establishment of the same PDU session id");
 
+    for (unsigned k = 0; k < s->nslice_limit; k++) { /* slice admission control: #69 insufficient resources for the specific slice (TS 24.501 Table 9.11.4.2.1) */
+        size_t n = 0;
+        if (s->slice_limit[k].sst != sst || s->slice_limit[k].has_sd != has_sd || (has_sd && s->slice_limit[k].sd != sd))
+            continue;
+        pthread_mutex_lock(&s->mu);
+        for (const smf_sess *o = s->sessions; o != NULL; o = o->next)
+            n += !o->dead && o->sst == sst && o->has_sd == has_sd && (!has_sd || o->sd == sd);
+        pthread_mutex_unlock(&s->mu);
+        if (n >= s->slice_limit[k].max_sessions) {
+            g5c_counter_inc(g5c_counter_get(s->metrics, "g5c_smf_slice_admission_total", "PDU session establishments turned away because the slice is full.", &(g5c_label){"result", "rejected"}, 1));
+            REJECT(403, "INSUFFICIENT_RESOURCES_SLICE", "the slice has reached its maximum number of PDU sessions", SMF_5GSM_INSUFFICIENT_RESOURCES_SLICE, "rejected");
+        }
+    }
     rc = smf_udm_sm_data(s, supi, plmn, sst, has_sd, sd, dnn, &cfg);
     if (rc == 404)
         REJECT(403, "DNN_DENIED", "the subscription does not allow this DNN / slice", SMF_5GSM_MISSING_OR_UNKNOWN_DNN, "rejected");
@@ -782,6 +800,14 @@ static void create_ctx(void *ctx, const g5c_req *req, g5c_resp *resp)
         REJECT(rc == 403 ? 403 : 500, rc == 403 ? "UE_NOT_AUTHORIZED" : "SYSTEM_FAILURE", "SM policy could not be obtained",
                rc == 403 ? SMF_5GSM_USER_AUTH_FAILED : SMF_5GSM_NETWORK_FAILURE, "failed");
     ss->pcf_resource = resource;
+    if (s->chf != NULL) { /* online charging: the CHF grants the first quota or the session is not set up (when charging is required) */
+        int cr = smf_chf_create(s, ss, &ss->chf_resource);
+        g5c_counter_inc(g5c_counter_get(s->metrics, "g5c_smf_charging_total", "Nchf_ConvergedCharging session openings by result.",
+                                        &(g5c_label){"result", cr == 0 ? "granted" : cr > 0 ? "refused" : "failed"}, 1));
+        if (cr != 0 && s->chf_required)
+            REJECT(cr > 0 ? 403 : 500, cr > 0 ? "CHARGING_DENIED" : "SYSTEM_FAILURE", cr > 0 ? "the CHF refused the charging session" : "the CHF did not answer",
+                   cr > 0 ? SMF_5GSM_INSUFFICIENT_RESOURCES : SMF_5GSM_NETWORK_FAILURE, "failed");
+    }
     ss->pcf_notif = notif;
     ss->decision = g5c_json_dup(decision);
     notif = NULL;
@@ -814,7 +840,7 @@ static void create_ctx(void *ctx, const g5c_req *req, g5c_resp *resp)
     est.cp_seid = ss->cp_seid;
     smf_n4_local_addr(s->n4, est.smf_ip4);
     est.dnn = ss->dnn;
-    est.want_usage = s->cdr_path != NULL;
+    est.want_usage = s->cdr_path != NULL || s->chf != NULL;
     est.pdu_type = ss->pdu_type;
     est.has4 = ss->has4;
     est.has6 = ss->has6;
@@ -1298,7 +1324,7 @@ static void release_ctx(void *ctx, const g5c_req *req, g5c_resp *resp)
 static void est_ctx(const smf_sess *ss, smf_n4_est *e)
 {
     memset(e, 0, sizeof *e);
-    e->want_usage = ss->owner != NULL && ss->owner->cdr_path != NULL;
+    e->want_usage = ss->owner != NULL && (ss->owner->cdr_path != NULL || ss->owner->chf != NULL);
     e->dnn = ss->dnn;
     e->pdu_type = ss->pdu_type;
     e->has4 = ss->has4;

@@ -1,0 +1,8 @@
+# Online charging (run with G5C_CHF=1): the SMF opens a charging session at the CHF for every PDU session and gets the first quota; every session of the wave is charged.
+name: every PDU session is charged
+steps:
+  - load: {ues: 30, gnbs: 4}
+  - assert: {metric: "smf:g5c_smf_charging_total{result=granted}", ">=": 30}
+  - assert: {metric: "chf:g5c_chf_requests_total{operation=create,result=ok}", ">=": 30}
+  - assert: {metric: "chf:g5c_chf_granted_bytes_total", ">": 0}
+  - kpi: {name: pdu_session_establishment_success_rate, ">=": 95}

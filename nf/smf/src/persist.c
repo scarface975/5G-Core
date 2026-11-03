@@ -93,6 +93,7 @@ static g5c_json *snapshot(const smf_sess *ss)
         g5c_json_set_int(r, "pdrDl", ss->pol.rules[k].pdr_dl);
     }
     set_opt_str(o, "pcfResource", ss->pcf_resource);
+    set_opt_str(o, "chfResource", ss->chf_resource);
     set_opt_str(o, "pcfNotif", ss->pcf_notif);
     set_opt_str(o, "amfStatusUri", ss->amf_status_uri);
     set_opt_str(o, "amfN1n2Url", ss->amf_n1n2_url);
@@ -360,6 +361,8 @@ size_t smf_state_apply_sessions(smf *s, const g5c_json *doc)
         }
         if (g5c_json_get_str(o, "pcfResource") != NULL)
             ss->pcf_resource = g5c_xstrdup(g5c_json_get_str(o, "pcfResource"));
+        if (g5c_json_get_str(o, "chfResource") != NULL)
+            ss->chf_resource = g5c_xstrdup(g5c_json_get_str(o, "chfResource"));
         if (g5c_json_get_str(o, "pcfNotif") != NULL)
             ss->pcf_notif = g5c_xstrdup(g5c_json_get_str(o, "pcfNotif"));
         if (g5c_json_get_str(o, "amfStatusUri") != NULL)

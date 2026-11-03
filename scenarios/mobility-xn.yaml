@@ -1,0 +1,9 @@
+# Mobility on the real daemons (backlog B-09): every UE registers on gNB A, gets a PDU session and moves between two gNBs by Xn path switches (tracking areas 1 and 2); the AMF's
+# answers are checked against the UE's own next-hop derivation, the SMF switches the downlink tunnel of the UPF each time, and everything is released at the end.
+name: Xn path switches between two gNBs
+steps:
+  - load: {ues: 24, gnbs: 4, mobility: 6}
+  - assert: {metric: "amf:g5c_amf_path_switch_total{result=completed}", ">=": 144}
+  - assert: {metric: "amf:g5c_amf_path_switch_total{result=failed}", "==": 0}
+  - assert: {metric: "amf:g5c_amf_registered_ues", "==": 0}
+  - assert: {metric: "smf:g5c_smf_pdu_sessions_active", "==": 0}

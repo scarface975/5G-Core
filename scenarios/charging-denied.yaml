@@ -1,0 +1,9 @@
+# Online charging with nothing to spend (run with G5C_CHF=1 G5C_CHF_EXTRA='  default_balance_bytes: 0'): the CHF denies the quota, the SMF refuses the PDU sessions
+# (the load generator stops at the first refusal of each gNB) and none is left behind.
+name: no credit, no PDU session
+steps:
+  - load: {ues: 20, gnbs: 2}
+    expect: fail
+  - assert: {metric: "chf:g5c_chf_denied_total", ">=": 2}
+  - assert: {metric: "smf:g5c_smf_charging_total{result=refused}", ">=": 2}
+  - assert: {metric: "smf:g5c_smf_pdu_sessions_active", "==": 0}

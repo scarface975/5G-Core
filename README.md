@@ -46,6 +46,7 @@ The core follows the Service-Based Architecture of TS 23.501. Control-plane func
 | **NEF** | Northbound exposure for application functions: traffic influence, monitoring events, AS session with QoS. | Per-AF access control, bridges to UDR, AMF, PCF, UDM and BSF. |
 | **SCP** | Service communication proxy: indirect communication models C and D (TS 29.500 §6.10). | Delegated discovery with cache, producer reselection with quarantine, loop detection, chained SCPs. |
 | **BSF** | Binding support. Nbsf_Management register/update/deregister/discover. | IPv4 and IPv6 longest-prefix match, MAC and framed-route bindings, overlapping address handling. |
+| **CHF** | Charging. Nchf_ConvergedCharging create/update/release with volume quota grants against subscriber balances; the SMF is the trigger (`smf.chf`). Optional. | Quota arithmetic, final unit indication, denial when the balance is gone, charging data records as JSON lines. |
 
 Every function is a single binary configured by one YAML file, started as `<name> [--check] <config.yaml>` (`--check` validates the configuration and exits), and exposes `/health/live`, `/health/ready`, `/metrics` and, where applicable, an authenticated `/admin/v1` surface.
 
@@ -106,7 +107,7 @@ Every function is a single binary configured by one YAML file, started as `<name
 
 | Path | Contents |
 |------|----------|
-| `nf/<function>/` | `include/`, `src/`, `tests/` for each of the twelve functions. Functions never include each other; shared code is only reached through `libs/`. |
+| `nf/<function>/` | `include/`, `src/`, `tests/` for each of the twelve functions and the optional CHF. Functions never include each other; shared code is only reached through `libs/`. |
 | `libs/` | The libraries of section 3. |
 | `ctl/` | `g5c-ctl`, the command-line client for the admin interfaces. |
 | `tools/` | Section 6. |

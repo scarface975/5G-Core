@@ -36,6 +36,12 @@ The NSSF decides which S-NSSAIs a UE is allowed: `nssf.slices` lists what the PL
 at registration and at every PDU session (`amf.nssf: { enabled: true }`; without an answer the AMF's own `amf.slices` list decides). A slice the NSSF does not serve is rejected in the registration
 accept's rejected NSSAI; a PDU session on it is refused. The SMF's `smf.dnns` give every DNN its address pool.
 
+**Slice admission control**: `amf.slice_limits: [ { sst: 1, sd: "000001", max_ues: 1000 } ]` caps the UEs registered in a slice at this AMF (a full slice is left out of the allowed NSSAI and put in the rejected NSSAI; a UE that has the slice already keeps it; metric `g5c_amf_slice_admission_total`), and `smf.slice_limits: [ { sst: 1, max_sessions: 5000 } ]` caps PDU sessions (refused with 5GSM cause #69; `g5c_smf_slice_admission_total`). Counts are per function instance.
+
+**Power saving**: `amf.power_saving: { mico: true, edrx: true, max_edrx_cycle: 13, psm: true, max_t3324_s: 600 }` (all on by default) grants MICO mode, extended DRX and the active timer T3324 to a UE that asks. An idle UE in MICO mode, or after its T3324, is not paged: the SMF's transfer fails at once with UE_NOT_REACHABLE (`g5c_amf_paging_suppressed_total{reason}`). A UE with extended DRX is paged with its cycle and paging time window.
+
+**Online charging**: `chf` (a function of its own, `chf: { default_balance_bytes, accounts: [ { supi, balance_bytes } ], max_grant_bytes, validity_s, cdr_file }`) and `smf.chf: { uri, rating_group, quota_bytes, required }`. With `required: true` a session whose charging session the CHF denies is refused. Start it in the cluster with `G5C_CHF=1`.
+
 ## Security
 * **Mutual TLS** between all functions (`sbi.tls`), **access tokens** of the NRF on top (`oauth2: { enforce, acquire }`, TS 33.501 13.4.1). Certificates: `deploy/run/g5c-pki.sh` (issue, renew, status, check); renewal needs
   no restart. The CA key belongs offline.
@@ -98,6 +104,8 @@ accept's rejected NSSAI; a PDU session on it is refused. The SMF's `smf.dnns` gi
 |---|---|
 | `deploy/run/g5c-init` | Guided setup for one host: PLMN, tracking areas, N2/N3 addresses and UE pool in, twelve configurations, fresh secrets, a CA and certificates, and a `START-HERE.md` out. |
 | `tools/cli/g5c-subscribers`, `tools/cli/g5c-kpi` | Bulk import / export of subscribers; service KPIs from one definition file (above). |
+| `tools/cli/g5c-fanout`, `tools/cli/g5c-tester` | One population from many load processes (`--processes`, `--slice K/N` over hosts); the load generator pointed at a core (`--amf ip:port --subscribers URL`) with storms, mobility and traffic, and `pack` for one bundle. |
+| `tools/cli/g5c-interop`, `deploy/radio-kit/g5c-radio-kit` | The interoperability register (`docs/interop`) checked; the radio lab (OCUDU gNB + srsUE over ZeroMQ against our core) in one command. |
 | `tools/cli/g5c-scenario`, `scenarios/` | A test as YAML steps (load, kill, restart, impair a link, assert on metrics and KPIs, HTTP calls); `deploy/run/g5c-cluster.sh ns scenario FILE...` runs them against a private cluster. |
 | `tools/cli/g5c-api` | The same runs from CI or a notebook over HTTP with a bearer token (start, status, stop, list). |
 | `tools/cli/g5c-dn` | The data network behind N6 for scenarios: DNS, HTTP (`/bytes/N`, `/delay/MS`), UDP echo, a RADIUS server for slice authentication. |
@@ -146,5 +154,5 @@ sessions are on the PCF and are not in the console yet.
 counts it (`g5c_sbi_requests_total{status}`), which the alert rules watch.
 
 ## What this release does not do
-Roaming (SEPP, home-routed sessions), non-3GPP access, EAP-TLS, charging via Nchf, lawful intercept (a design is in `docs/security/lawful-intercept-design.md`), shared-state high availability of the AMF and
+Roaming (SEPP, home-routed sessions), non-3GPP access, EAP-TLS, rating and offline charging in a standard format (online charging with quota grants exists, the SMF does not yet send updates during a session), slice-specific authentication (NSSAA), RedCap, lawful intercept (a design is in `docs/security/lawful-intercept-design.md`), shared-state high availability of the AMF and
 SMF (a function that dies loses its connected UEs; the registrations and sessions come back from the state file), multi-PLMN.

@@ -1830,6 +1830,27 @@ static void test_metrics(void)
     free(txt);
 }
 
+static void test_slice_limit(void)
+{
+    g5c_resp r;
+    char ref1[37], ref2[37];
+    size_t base = smf_session_count(E.s);
+    E.s->nslice_limit = 1;
+    E.s->slice_limit[0].sst = 1;
+    E.s->slice_limit[0].has_sd = false;
+    E.s->slice_limit[0].max_sessions = (unsigned)base + 1; /* room for exactly one more */
+    TK_ASSERT(establish("imsi-001010000000001", 7, "internet", 1, 1, ref1, &r) == 201);
+    g5c_resp_free(&r);
+    TK_ASSERT(establish("imsi-001010000000002", 7, "internet", 1, 1, ref2, &r) == 403);
+    expect_reject(&r, 403, "INSUFFICIENT_RESOURCES_SLICE", SMF_5GSM_INSUFFICIENT_RESOURCES_SLICE);
+    g5c_resp_free(&r);
+    TK_ASSERT(release(ref1) / 100 == 2);
+    TK_ASSERT(establish("imsi-001010000000002", 7, "internet", 1, 1, ref2, &r) == 201); /* a place is free again */
+    g5c_resp_free(&r);
+    (void)release(ref2);
+    E.s->nslice_limit = 0;
+}
+
 int main(void)
 {
     g5c_log_init("error", false);
@@ -1845,6 +1866,7 @@ int main(void)
     test_concurrency();
     test_upf_outage();
     test_metrics();
+    test_slice_limit();
     test_persistence();
     teardown();
     printf("smf e2e: OK\n");

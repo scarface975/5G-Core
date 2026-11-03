@@ -1534,48 +1534,6 @@ static void test_sbi_errors(void)
 
 /* ---- mobility: Xn path switch and N2 handover ---- */
 
-static char *encoded_hex(const char *type, g5c_json *tree)
-{
-    g5c_bytes b;
-    char err[160], *h;
-    g5c_bytes_init(&b);
-    TK_ASSERT(ngap_encode_as(type, tree, &b, err, sizeof err) == 0);
-    h = g5c_hex_encode(b.data, b.len);
-    g5c_bytes_free(&b);
-    g5c_json_free(tree);
-    return h;
-}
-
-static g5c_json *gtp_tunnel_json(int idx, uint32_t teid)
-{
-    g5c_json *up = g5c_json_new_obj(), *gt = g5c_json_set(up, "gTPTunnel", g5c_json_new_obj());
-    uint8_t tb[4] = {(uint8_t)(teid >> 24), (uint8_t)(teid >> 16), (uint8_t)(teid >> 8), (uint8_t)teid};
-    g5c_json_set(gt, "transportLayerAddress", bits_json(E.gnb_ip4[idx], 32));
-    g5c_json_set(gt, "gTP-TEID", hex_str(tb, 4));
-    return up;
-}
-
-static g5c_json *flow_list(int q)
-{
-    g5c_json *l = g5c_json_new_arr();
-    g5c_json_set_int(g5c_json_push(l, g5c_json_new_obj()), "qosFlowIdentifier", q);
-    return l;
-}
-
-/* NH / NCC of the n-th derivation after KgNB (TS 33.501 A.10) */
-static void ue_nh(const ue_t *u, int n, uint8_t out[32])
-{
-    uint8_t cur[32];
-    const uint8_t *p[1];
-    size_t l[1] = {32};
-    memcpy(cur, u->kgnb, 32);
-    for (int i = 0; i < n; i++) {
-        p[0] = cur;
-        TK_ASSERT(g5c_kdf(u->kamf, 32, 0x6f, p, l, 1, cur) == 0);
-    }
-    memcpy(out, cur, 32);
-}
-
 static void test_path_switch(void)
 {
     gnb_t a, b;
@@ -2514,6 +2472,196 @@ static void test_persistence(void)
     gnb_close(&g);
 }
 
+/* ---- power saving: MICO mode, extended DRX, the active timer T3324 ---- */
+
+/* the SMF's N1N2MessageTransfer for an idle UE, as in test_paging_failure; returns the HTTP status */
+static int n1n2_transfer(const char *supi)
+{
+    g5c_resp r;
+    char url[300], body[900];
+    g5c_mp_part parts[2];
+    g5c_bytes mp;
+    char *ct;
+    int st;
+    static const uint8_t junk[] = {0x00, 0x01, 0x02};
+    snprintf(body, sizeof body,
+             "{\"pduSessionId\":1,\"n1n2FailureTxfNotifURI\":\"%s/n1n2-failure\",\"n2InfoContainer\":{\"n2InformationClass\":\"SM\",\"smInfo\":{\"pduSessionId\":1,"
+             "\"n2InfoContent\":{\"ngapIeType\":\"PDU_RES_SETUP_REQ\",\"ngapData\":{\"contentId\":\"n2SmInfo\"}}}}}",
+             E.cb_base);
+    parts[0] = (g5c_mp_part){NULL, "application/json", (const uint8_t *)body, strlen(body)};
+    parts[1] = (g5c_mp_part){"n2SmInfo", "application/vnd.3gpp.ngap", junk, sizeof junk};
+    g5c_bytes_init(&mp);
+    TK_ASSERT(g5c_mp_build(parts, 2, &mp, &ct) == 0);
+    snprintf(url, sizeof url, "%s/namf-comm/v1/ue-contexts/%s/n1-n2-messages", E.amf_base, supi);
+    st = http("POST", url, ct, mp.data, mp.len, &r, false);
+    g5c_resp_free(&r);
+    g5c_bytes_free(&mp);
+    free(ct);
+    return st;
+}
+
+static bool wait_failure_notif(int before, double secs)
+{
+    double end = now_s() + secs;
+    while (atomic_load(&cb_failure_notifs) == before && now_s() < end)
+        usleep(10000);
+    return atomic_load(&cb_failure_notifs) == before + 1;
+}
+
+static void test_power_saving(void)
+{
+    gnb_t g;
+    ue_t u;
+    accept_info ai;
+    g5c_json *p;
+    int before;
+    gnb_setup_ok(&g, 0, 1, 1);
+
+    /* MICO: asked and granted; the idle UE is not paged, the SMF's transfer fails at once with UE_NOT_REACHABLE */
+    ue_init(&u, "001010000000091", 91);
+    ue_provision(&u, NULL);
+    u.req_mico = true;
+    ai = ue_register(&g, &u, 1);
+    TK_ASSERT(ai.mico && !ai.has_edrx && !ai.has_t3324);
+    accept_free(&ai);
+    ue_establish(&g, &u, 1, 0x4001, 1);
+    gnb_release_request(&g, &u, "user-inactivity");
+    TK_ASSERT(wait_ue(u.supi, 1, 0, 1));
+    before = atomic_load(&cb_failure_notifs);
+    TK_ASSERT(n1n2_transfer(u.supi) == 202);
+    TK_ASSERT(wait_failure_notif(before, 2));
+    TK_ASSERT(gnb_rx(&g, 600) == NULL); /* nothing was paged */
+
+    /* not granted when the AMF does not allow it, and the UE is paged as usual */
+    E.a->cfg.ps_mico = false;
+    ue_init(&u, "001010000000092", 92);
+    ue_provision(&u, NULL);
+    u.req_mico = true;
+    ai = ue_register(&g, &u, 1);
+    TK_ASSERT(!ai.mico);
+    accept_free(&ai);
+    ue_establish(&g, &u, 1, 0x4001, 1);
+    gnb_release_request(&g, &u, "user-inactivity");
+    TK_ASSERT(wait_ue(u.supi, 1, 0, 1));
+    TK_ASSERT(n1n2_transfer(u.supi) == 202);
+    p = rx_expect(&g, NGAP_PROC_Paging, "initiatingMessage", 3000);
+    TK_ASSERT(ie_of(p, NGAP_IE_PagingeDRXInformation) == NULL);
+    g5c_json_free(p);
+    p = rx_expect(&g, NGAP_PROC_Paging, "initiatingMessage", 3000); /* the repetition, T3513 later */
+    g5c_json_free(p);
+    E.a->cfg.ps_mico = true;
+
+    /* extended DRX: the cycle is cut to the longest the AMF grants (index 9 = 163.84 s), the window stays, and the paging carries both */
+    E.a->cfg.ps_edrx_max = 9;
+    ue_init(&u, "001010000000093", 93);
+    ue_provision(&u, NULL);
+    u.req_edrx = true;
+    u.edrx = (uint8_t)(3 << 4 | 12);
+    ai = ue_register(&g, &u, 1);
+    TK_ASSERT(!ai.mico && ai.has_edrx && ai.edrx == (3 << 4 | 9));
+    accept_free(&ai);
+    ue_establish(&g, &u, 1, 0x4001, 1);
+    gnb_release_request(&g, &u, "user-inactivity");
+    TK_ASSERT(wait_ue(u.supi, 1, 0, 1));
+    TK_ASSERT(n1n2_transfer(u.supi) == 202);
+    p = rx_expect(&g, NGAP_PROC_Paging, "initiatingMessage", 3000);
+    {
+        const g5c_json *e = ie_of(p, NGAP_IE_PagingeDRXInformation);
+        TK_ASSERT(e != NULL && strcmp(g5c_json_get_str(e, "paging-eDRX-Cycle"), "hf16") == 0 && strcmp(g5c_json_get_str(e, "paging-Time-Window"), "s4") == 0);
+    }
+    g5c_json_free(p);
+    p = rx_expect(&g, NGAP_PROC_Paging, "initiatingMessage", 3000);
+    g5c_json_free(p);
+    E.a->cfg.ps_edrx_max = 13;
+
+    /* power saving mode: T3324 of 2 s is granted; paged inside it, not after it */
+    ue_init(&u, "001010000000094", 94);
+    ue_provision(&u, NULL);
+    u.t3324 = (uint8_t)(3 << 5 | 1);
+    ai = ue_register(&g, &u, 1);
+    TK_ASSERT(ai.has_t3324 && ai.t3324 == (3 << 5 | 1));
+    accept_free(&ai);
+    ue_establish(&g, &u, 1, 0x4001, 1);
+    gnb_release_request(&g, &u, "user-inactivity");
+    TK_ASSERT(wait_ue(u.supi, 1, 0, 1));
+    TK_ASSERT(n1n2_transfer(u.supi) == 202);
+    p = rx_expect(&g, NGAP_PROC_Paging, "initiatingMessage", 3000);
+    g5c_json_free(p);
+    p = rx_expect(&g, NGAP_PROC_Paging, "initiatingMessage", 3000); /* the repetition, T3513 later */
+    g5c_json_free(p);
+    before = atomic_load(&cb_failure_notifs);
+    TK_ASSERT(wait_failure_notif(before, 5)); /* nobody answers this paging: the usual failure */
+    usleep(2300000);                          /* T3324 has run out */
+    before = atomic_load(&cb_failure_notifs);
+    TK_ASSERT(n1n2_transfer(u.supi) == 202);
+    TK_ASSERT(wait_failure_notif(before, 1));
+    p = gnb_rx(&g, 600);
+    if (p != NULL)
+        fprintf(stderr, "STRAY %.300s\n", g5c_json_to_string(p, NULL));
+    TK_ASSERT(p == NULL);
+
+    /* the AMF's own ceiling for T3324: 60 s asked, 2 s granted */
+    E.a->cfg.ps_t3324_max = 2;
+    ue_init(&u, "001010000000095", 95);
+    ue_provision(&u, NULL);
+    u.t3324 = (uint8_t)(5 << 5 | 1);
+    ai = ue_register(&g, &u, 1);
+    TK_ASSERT(ai.has_t3324 && ai.t3324 == (3 << 5 | 1));
+    accept_free(&ai);
+    ue_switch_off(&g, &u);
+    E.a->cfg.ps_t3324_max = 600;
+    gnb_close(&g);
+}
+
+/* ---- network slice admission control ---- */
+
+#define SLICES2 ",\"slices\":[{\"sst\":1},{\"sst\":2,\"sd\":\"000002\"}]"
+
+static void test_slice_admission(void)
+{
+    static const uint8_t both[] = {0x01, 0x01, 0x04, 0x02, 0x00, 0x00, 0x02}; /* slice 1 and slice 2 / 000002 */
+    gnb_t g;
+    ue_t a, b, c;
+    accept_info ai;
+    size_t held = 0;
+    nas_snssai s2 = {.sst = 2, .has_sd = true, .sd = 2};
+    gnb_setup_ok(&g, 0, 1, 1);
+    pthread_mutex_lock(&E.a->tmu);
+    for (const amf_ue *v = E.a->ues; v != NULL; v = v->next_all)
+        held += v->mm == MM_REGISTERED && amf_snssai_in(v->allowed, v->nallowed, &s2);
+    pthread_mutex_unlock(&E.a->tmu);
+    E.a->cfg.nslice_limit = 1;
+    E.a->cfg.slice_limit[0].s = s2;
+    E.a->cfg.slice_limit[0].max_ues = (unsigned)held + 1; /* room for exactly one more */
+
+    ue_init(&a, "001010000000096", 96);
+    ue_provision(&a, SLICES2);
+    memcpy(a.nssai, both, sizeof both);
+    a.nssai_len = sizeof both;
+    ai = ue_register(&g, &a, 1);
+    TK_ASSERT(ai.nallowed == 2);
+    accept_free(&ai);
+
+    ue_init(&b, "001010000000097", 97);
+    ue_provision(&b, SLICES2);
+    memcpy(b.nssai, both, sizeof both);
+    b.nssai_len = sizeof both;
+    ai = ue_register(&g, &b, 1);
+    TK_ASSERT(ai.nallowed == 1 && ai.allowed[0].sst == 1); /* the full slice is left out */
+    accept_free(&ai);
+
+    ue_switch_off(&g, &a); /* a place is free again */
+    ue_init(&c, "001010000000098", 98);
+    ue_provision(&c, SLICES2);
+    memcpy(c.nssai, both, sizeof both);
+    c.nssai_len = sizeof both;
+    ai = ue_register(&g, &c, 1);
+    TK_ASSERT(ai.nallowed == 2);
+    accept_free(&ai);
+    E.a->cfg.nslice_limit = 0;
+    gnb_close(&g);
+}
+
 int main(void)
 {
     g5c_log_init("error", false);
@@ -2527,6 +2675,8 @@ int main(void)
     test_sessions();
     test_idle_service_paging();
     test_paging_failure();
+    test_power_saving();
+    test_slice_admission();
     test_context_reuse();
     test_network_initiated();
     test_association_loss();

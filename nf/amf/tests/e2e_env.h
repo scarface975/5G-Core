@@ -107,7 +107,7 @@ static int http(const char *method, const char *url, const char *ctype, const vo
 {
     char err[160], auth[64];
     g5c_kv hdr = {"authorization", auth};
-    snprintf(auth, sizeof auth, "Bearer %s", ADMIN);
+    snprintf(auth, sizeof auth, "Bearer %s", getenv("G5C_LOAD_ADMIN_TOKEN") != NULL ? getenv("G5C_LOAD_ADMIN_TOKEN") : ADMIN); /* a core that is not started by the cluster script has its own token */
     if (g5c_client_request(E.cl, method, url, admin ? &hdr : NULL, admin ? 1 : 0, ctype, body, blen, out, err, sizeof err) != 0) {
         fprintf(stderr, "http %s %s: %s\n", method, url, err);
         return -1;
@@ -586,6 +586,12 @@ typedef struct {
     bool report_mac_failure;
     bool report_sync_failure;
     bool conceal; /* the SUCI is concealed with the home network's Profile A key instead of the null scheme */
+    bool req_mico;
+    bool req_edrx;
+    uint8_t edrx;   /* requested extended DRX parameters: paging time window << 4 | cycle */
+    uint8_t t3324;  /* requested T3324 (GPRS timer 3 value); 0: none */
+    uint8_t nssai[32]; /* the Requested NSSAI value; empty: slice 1 */
+    size_t nssai_len;
 } ue_t;
 
 static void ue_init(ue_t *u, const char *imsi, uint32_t ran_id)
@@ -708,7 +714,18 @@ static void build_reg_request(ue_t *u, uint8_t type, bool with_guti, g5c_bytes *
     nas_msg_set(&m, "5GS mobile identity", id.data, id.len);
     g5c_bytes_free(&id);
     nas_msg_set(&m, "UE security capability", u->cap, 4);
-    nas_msg_set(&m, "Requested NSSAI", req_nssai, sizeof req_nssai);
+    if (u->nssai_len > 0)
+        nas_msg_set(&m, "Requested NSSAI", u->nssai, u->nssai_len);
+    else
+        nas_msg_set(&m, "Requested NSSAI", req_nssai, sizeof req_nssai);
+    if (u->req_mico) {
+        uint8_t mico = 0;
+        nas_msg_set(&m, "MICO indication", &mico, 1);
+    }
+    if (u->req_edrx)
+        nas_msg_set(&m, "Requested extended DRX parameters", &u->edrx, 1);
+    if (u->t3324 != 0)
+        nas_msg_set(&m, "T3324 value", &u->t3324, 1);
     TK_ASSERT(nas_msg_encode(&m, out) == NAS_OK);
     nas_msg_free(&m);
 }

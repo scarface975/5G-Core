@@ -20,6 +20,10 @@ typedef struct {
     bool has_react;
     uint16_t react;
     unsigned t3512, t3502;
+    bool mico;      /* MICO indication */
+    bool has_edrx;
+    uint8_t edrx;   /* negotiated extended DRX parameters */
+    unsigned t3324; /* seconds; 0: not sent */
 } nm_regacc;
 
 typedef struct {
@@ -37,6 +41,7 @@ typedef struct {
 } nm_cfgupd;
 
 uint8_t nm_gprs_timer3(unsigned secs);
+unsigned nm_gprs_timer3_secs(uint8_t v); /* 0 when deactivated */
 uint8_t nm_gprs_timer2(unsigned secs);
 int nm_identity_request(g5c_bytes *out);
 int nm_auth_request(uint8_t ngksi, const uint8_t abba[2], const uint8_t rand[16], const uint8_t autn[16], g5c_bytes *out);

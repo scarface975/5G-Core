@@ -52,6 +52,11 @@ typedef struct {
     bool has_uplink;
     uint16_t uplink;
     bool has_container;
+    bool mico;
+    bool has_edrx;
+    uint8_t edrx;
+    bool has_t3324;
+    unsigned t3324;
 } reg_info;
 
 /* ---- bookkeeping ---- */
@@ -310,6 +315,17 @@ static int parse_reg(const nas_msg *m, reg_info *ri)
         ri->uplink = bitmap16(v, n);
     }
     ri->has_container = nas_msg_get(m, "NAS message container", &n) != NULL;
+    ri->mico = nas_msg_get(m, "MICO indication", &n) != NULL;
+    v = nas_msg_get(m, "Requested extended DRX parameters", &n);
+    if (v != NULL && n >= 1) {
+        ri->has_edrx = true;
+        ri->edrx = v[0];
+    }
+    v = nas_msg_get(m, "T3324 value", &n);
+    if (v != NULL && n >= 1) {
+        ri->has_t3324 = true;
+        ri->t3324 = nm_gprs_timer3_secs(v[0]);
+    }
     return 0;
 }
 
@@ -804,6 +820,71 @@ static void fill_common(amf *a, nm_regacc *ra, amf_ue *u)
     ra->t3512 = a->cfg.t3512;
 }
 
+/* Network slice admission control (TS 23.501 5.15.11): a slice that already holds its maximum number of registered UEs leaves the allowed NSSAI and joins the rejected one. A UE that
+ * is registered already keeps the slices it has. Two registrations racing for the last place can both get it: the count is of UEs registered. The Rel-17 "Extended rejected NSSAI"
+ * with its back-off timer is not in the pinned NAS tables (Rel-16), so the plain Rejected NSSAI carries the slice. */
+static void admit_slices(amf *a, const amf_ue *u, nas_snssai *allowed, size_t *nallowed, nas_snssai *rejected, size_t *nrej)
+{
+    for (unsigned k = 0; k < a->cfg.nslice_limit && *nallowed > 0; k++) {
+        const nas_snssai *lim = &a->cfg.slice_limit[k].s;
+        size_t n = 0;
+        if (!amf_snssai_in(allowed, *nallowed, lim) || amf_snssai_in(u->allowed, u->mm == MM_REGISTERED ? u->nallowed : 0, lim))
+            continue;
+        pthread_mutex_lock(&a->tmu);
+        for (const amf_ue *v = a->ues; v != NULL; v = v->next_all)
+            n += v != u && v->mm == MM_REGISTERED && amf_snssai_in(v->allowed, v->nallowed, lim);
+        pthread_mutex_unlock(&a->tmu);
+        if (n < a->cfg.slice_limit[k].max_ues)
+            continue;
+        for (size_t i = 0; i < *nallowed; i++)
+            if (amf_snssai_in(&allowed[i], 1, lim)) {
+                memmove(&allowed[i], &allowed[i + 1], (*nallowed - i - 1) * sizeof allowed[0]);
+                (*nallowed)--;
+                break;
+            }
+        if (*nrej < AMF_MAX_SLICE)
+            rejected[(*nrej)++] = *lim;
+        amf_count(a, "g5c_amf_slice_admission_total", "Slices left out of the allowed NSSAI because they hold their maximum number of UEs.", "result", "rejected");
+    }
+}
+
+/* MICO mode, extended DRX and the active timer are granted per registration, only when the UE asked and `amf.power_saving` allows (TS 24.501 5.3.10, 5.3.11, 5.3.5).
+ * The cycle is limited to what NGAP can carry (Paging-eDRX-Cycle ends at hf256); the paging time window is kept as requested. */
+static void negotiate_power_saving(amf *a, amf_ue *u, const reg_info *ri, nm_regacc *ra)
+{
+    u->mico = ri->mico && a->cfg.ps_mico;
+    ra->mico = u->mico;
+    u->has_edrx = ri->has_edrx && a->cfg.ps_edrx;
+    if (u->has_edrx) {
+        unsigned cycle = ri->edrx & 0x0f;
+        if (cycle > a->cfg.ps_edrx_max)
+            cycle = a->cfg.ps_edrx_max;
+        u->edrx = (uint8_t)((ri->edrx & 0xf0) | cycle);
+    }
+    ra->has_edrx = u->has_edrx;
+    ra->edrx = u->edrx;
+    u->t3324 = 0;
+    if (ri->has_t3324 && ri->t3324 != 0 && a->cfg.ps_psm)
+        u->t3324 = ri->t3324 < a->cfg.ps_t3324_max ? ri->t3324 : a->cfg.ps_t3324_max;
+    ra->t3324 = u->t3324;
+    if (u->mico)
+        amf_count(a, "g5c_amf_power_saving_total", "Power saving features granted at registration, by feature.", "feature", "mico");
+    if (u->has_edrx)
+        amf_count(a, "g5c_amf_power_saving_total", "Power saving features granted at registration, by feature.", "feature", "edrx");
+    if (u->t3324 != 0)
+        amf_count(a, "g5c_amf_power_saving_total", "Power saving features granted at registration, by feature.", "feature", "psm");
+}
+
+/* Why an idle UE cannot be paged now: in MICO mode it listens only after it has sent something itself; in power saving mode only until T3324 has run out. NULL: it can be. */
+static const char *unreachable_reason(const amf_ue *u)
+{
+    if (u->mico)
+        return "mico";
+    if (u->t3324 != 0 && g5c_now_seconds() - u->idle_at > u->t3324)
+        return "psm";
+    return NULL;
+}
+
 static void reg_proceed(amf_conn *c, amf_ue *u)
 {
     amf *a = c->a;
@@ -866,6 +947,7 @@ static void reg_proceed(amf_conn *c, amf_ue *u)
     } else {
         select_slices(a, u, &ri, allowed, &nallowed, rejected, &nrej);
     }
+    admit_slices(a, u, allowed, &nallowed, rejected, &nrej);
     if (nallowed == 0) {
         reg_reject(c, u, MM_CAUSE_NO_SLICES_AVAILABLE, "no network slice is available to the UE");
         return;
@@ -887,6 +969,7 @@ static void reg_proceed(amf_conn *c, amf_ue *u)
 
     /* PDU session status and reactivation (TS 24.501 5.5.1.2.4) */
     fill_common(a, &ra, u);
+    negotiate_power_saving(a, u, &ri, &ra);
     if (ri.has_psi_status) {
         (void)amf_psi_status_reconcile(a, u, ri.psi_status);
         ra.has_psi_status = true;
@@ -1226,6 +1309,15 @@ void gmm_page_start(amf_ue *u)
         return;
     if (u->ut[UT_PAGING].on)
         return; /* already being paged: the pending work is picked up by the service request */
+    {
+        const char *why = unreachable_reason(u);
+        if (why != NULL) { /* nobody listens: the transfer fails at once with the cause the SMF expects, a pending de-registration happens locally */
+            amf_count(u->a, "g5c_amf_paging_suppressed_total", "Pagings not attempted because the UE is in a power saving state, by reason.", "reason", why);
+            G5C_LOGI(AMF_LOG, "%s is not paged: %s", u->supi, why);
+            gmm_page_failed(u->a, u);
+            return;
+        }
+    }
     u->ut[UT_PAGING].tries = 1;
     amf_page_ue(u->a, u);
     ue_timer_start(u, UT_PAGING, u->a->cfg.t3513);
@@ -1441,6 +1533,7 @@ void gmm_ue_idle(amf *a, amf_ue *u)
         return;
     (void)amf_sm_deactivate_all(a, u);
     u->cm = CM_IDLE;
+    u->idle_at = g5c_now_seconds();
     u->sec.nh_valid = false; /* the AS keys belong to the connection that is gone */
     OPENSSL_cleanse(u->sec.kgnb, sizeof u->sec.kgnb);
     if (u->mm == MM_REGISTERED) {

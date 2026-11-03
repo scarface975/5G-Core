@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# The radio lab kit (backlog B-10): a gNB and a UE that talk simulated I/Q over ZeroMQ, our core, and nothing else to buy or plug in.
+#   g5c-radio-kit check      are the pieces there (gNB, UE, namespaces, the installed core)? says what is missing and how to get it
+#   g5c-radio-kit run        the whole lab: core, gNB, UE, a registration, a PDU session and a ping through the radio (exit 0 when the ping crossed it, 77 when a piece is missing)
+#   g5c-radio-kit sdr        what changes to use a software-defined radio instead of ZeroMQ (not run here)
+# The gNB is OCUDU, the UE is srsUE (srsRAN 4G in 5G SA mode); their paths are GNB_BIN and UE_BIN. The configurations are gnb.yml and ue.conf next to this script (the public test subscriber
+# of the guides); GNB_CONF and UE_CONF point elsewhere. Extra variables of the demo (DEMO_OAUTH2=1, DEMO_HOLD=60, DEMO_UE_DEBUG=1, DEMO_CIPHERING=NEA2) are passed on.
+set -uo pipefail
+HERE="$(cd "$(dirname "$0")" && pwd)"
+export GNB_BIN="${GNB_BIN:-/home/work/ocudu/build/apps/gnb/gnb}"
+export UE_BIN="${UE_BIN:-/home/work/srsRAN_4G/build/srsue/src/srsue}"
+[ -x "$UE_BIN" ] || UE_BIN=/home/work/srsRAN_4G/build/apps/srsue/srsue
+export GNB_CONF="${GNB_CONF:-$HERE/gnb.yml}" UE_CONF="${UE_CONF:-$HERE/ue.conf}"
+CORE_BIN="${G5C_BIN:-$HOME/.cache/g5c-bin/bin}"
+
+check() {
+  local miss=0
+  chk() { if [ -e "$2" ]; then printf '  ok       %s\n' "$1"; else printf '  MISSING  %s (%s)\n         %s\n' "$1" "$2" "$3"; miss=1; fi; }
+  chk "gNB (OCUDU)" "$GNB_BIN" "build OCUDU (https://gitlab.com/ocudu/ocudu or your OCUDU checkout) with ZeroMQ enabled; set GNB_BIN to build/apps/gnb/gnb"
+  chk "UE (srsUE, 5G SA)" "$UE_BIN" "build srsRAN 4G with ZeroMQ (cmake -DENABLE_ZEROMQ=ON); set UE_BIN to build/srsue/src/srsue"
+  chk "gNB configuration" "$GNB_CONF" "gnb.yml next to this script"
+  chk "UE configuration" "$UE_CONF" "ue.conf next to this script"
+  chk "our core, installed" "$CORE_BIN/amf" "scripts/c_install.sh builds and installs it"
+  if unshare -Urnm true 2>/dev/null; then echo "  ok       user, network and mount namespaces (no sudo needed)"; else echo "  MISSING  user + network namespaces (the lab runs unprivileged in them; or run it as root)"; miss=1; fi
+  return $miss
+}
+
+case "${1:-}" in
+  check) check; rc=$?; [ $rc = 0 ] && echo "radio kit: ready" || echo "radio kit: not ready"; exit $rc ;;
+  run)
+    check >/dev/null || { check; echo "radio kit: not ready"; exit 77; }
+    CORE="${CORE:-ours}" exec "$HERE/../demo/zmq_demo.sh" ;;
+  sdr)
+    cat <<'EOF'
+Real radio instead of ZeroMQ changes two blocks and nothing in the core:
+  gnb.yml   ru_sdr:  device_driver: uhd            (zmq -> uhd; the UHD driver of your SDR, e.g. a USRP B210)
+            device_args: type=b200
+            srate: 23.04                           (the rate your device supports for the 20 MHz cell)
+            cell_cfg: dl_arfcn / band               (a band you are licensed to transmit in, or a shielded setup)
+  the UE    a real phone or modem with a test SIM that carries the subscriber of the core (g5c-ctl or g5c-subscribers add it), PLMN 00101
+Transmitting needs a licence or a shielded enclosure. This path is NOT exercised in this repository: only the ZeroMQ lab is.
+EOF
+    ;;
+  *) sed -n 2,6p "$0"; exit 2 ;;
+esac
