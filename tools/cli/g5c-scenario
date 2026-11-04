@@ -124,7 +124,7 @@ class ClusterRunner:
         """Traffic profile of the load step (B-02): traffic_mbps per UE for traffic_ms with packets of traffic_size octets; expect_mbps is the per-UE rate the session AMBR allows."""
         env = dict(os.environ)
         for key, var in (("traffic_mbps", "G5C_LOAD_TRAFFIC_MBPS"), ("traffic_ms", "G5C_LOAD_TRAFFIC_MS"), ("traffic_size", "G5C_LOAD_TRAFFIC_SIZE"), ("expect_mbps", "G5C_LOAD_EXPECT_MBPS"),
-                         ("expect_dl_mbps", "G5C_LOAD_EXPECT_DL_MBPS"), ("max_loss_pct", "G5C_LOAD_ECHO_MAX_LOSS_PCT"), ("storm_seconds", "G5C_LOAD_STORM_SECONDS"), ("mobility", "G5C_LOAD_MOBILITY"), ("processes", "G5C_LOAD_PROCESSES")):
+                         ("expect_dl_mbps", "G5C_LOAD_EXPECT_DL_MBPS"), ("max_loss_pct", "G5C_LOAD_ECHO_MAX_LOSS_PCT"), ("storm_seconds", "G5C_LOAD_STORM_SECONDS"), ("mobility", "G5C_LOAD_MOBILITY"), ("mobility_kind", "G5C_LOAD_MOBILITY_KIND"), ("processes", "G5C_LOAD_PROCESSES")):
             if key in a:
                 env[var] = str(a[key])
         if a.get("echo"):

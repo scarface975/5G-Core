@@ -694,6 +694,8 @@ static void put_guti_identity(const ue_t *u, g5c_bytes *out)
     TK_ASSERT(nas_mobile_identity_encode(&id, out) == NAS_OK);
 }
 
+static bool g_clear_only; /* the initial registration carries only the cleartext IEs (G5C_LOAD_CLEAR_ONLY) */
+
 /* REGISTRATION REQUEST (plain encoding); with_guti: use the 5G-GUTI as the identity */
 static void build_reg_request(ue_t *u, uint8_t type, bool with_guti, g5c_bytes *out)
 {
@@ -714,17 +716,18 @@ static void build_reg_request(ue_t *u, uint8_t type, bool with_guti, g5c_bytes *
     nas_msg_set(&m, "5GS mobile identity", id.data, id.len);
     g5c_bytes_free(&id);
     nas_msg_set(&m, "UE security capability", u->cap, 4);
-    if (u->nssai_len > 0)
+    if (g_clear_only && !u->have_ctx) { /* TS 24.501 4.4.6: with no security context only the cleartext IEs may be sent; a core that checks (Open5GS) rejects the rest */
+    } else if (u->nssai_len > 0)
         nas_msg_set(&m, "Requested NSSAI", u->nssai, u->nssai_len);
     else
         nas_msg_set(&m, "Requested NSSAI", req_nssai, sizeof req_nssai);
-    if (u->req_mico) {
+    if (u->req_mico && !(g_clear_only && !u->have_ctx)) {
         uint8_t mico = 0;
         nas_msg_set(&m, "MICO indication", &mico, 1);
     }
-    if (u->req_edrx)
+    if (u->req_edrx && !(g_clear_only && !u->have_ctx))
         nas_msg_set(&m, "Requested extended DRX parameters", &u->edrx, 1);
-    if (u->t3324 != 0)
+    if (u->t3324 != 0 && !(g_clear_only && !u->have_ctx))
         nas_msg_set(&m, "T3324 value", &u->t3324, 1);
     TK_ASSERT(nas_msg_encode(&m, out) == NAS_OK);
     nas_msg_free(&m);

@@ -1715,36 +1715,6 @@ static void test_path_switch(void)
     gnb_close(&b);
 }
 
-static g5c_json *ho_required_pdu(const ue_t *u, int target_idx, uint32_t target_gnb_id, uint32_t target_tac, bool with_session)
-{
-    g5c_json *p = new_pdu("initiatingMessage", NGAP_PROC_HandoverPreparation, "reject"), *tid, *tn, *gid, *list;
-    uint8_t id[4] = {(uint8_t)(target_gnb_id >> 24), (uint8_t)(target_gnb_id >> 16), (uint8_t)(target_gnb_id >> 8), (uint8_t)target_gnb_id};
-    uint8_t plmn[3] = {0x00, 0xf1, 0x10}, cont[] = {0x0a, 0x0b, 0x0c, 0x0d};
-    (void)target_idx;
-    add_ie(p, NGAP_IE_AMF_UE_NGAP_ID, "reject", g5c_json_new_int((int64_t)u->amf_id));
-    add_ie(p, NGAP_IE_RAN_UE_NGAP_ID, "reject", g5c_json_new_int(u->ran_id));
-    add_ie(p, NGAP_IE_HandoverType, "reject", g5c_json_new_str("intra5gs"));
-    add_ie(p, NGAP_IE_Cause, "ignore", ng_cause_json("radioNetwork", "handover-desirable-for-radio-reason"));
-    tid = g5c_json_new_obj();
-    tn = g5c_json_set(tid, "targetRANNodeID", g5c_json_new_obj());
-    gid = g5c_json_set(g5c_json_set(tn, "globalRANNodeID", g5c_json_new_obj()), "globalGNB-ID", g5c_json_new_obj());
-    g5c_json_set(gid, "pLMNIdentity", hex_str(plmn, 3));
-    g5c_json_set(g5c_json_set(gid, "gNB-ID", g5c_json_new_obj()), "gNB-ID", bits_json(id, 32));
-    g5c_json_set(tn, "selectedTAI", tai_json(target_tac));
-    add_ie(p, NGAP_IE_TargetID, "reject", tid);
-    list = g5c_json_new_arr();
-    if (with_session) {
-        g5c_json *it = g5c_json_push(list, g5c_json_new_obj());
-        char *tr = encoded_hex("HandoverRequiredTransfer", g5c_json_new_obj());
-        g5c_json_set_int(it, "pDUSessionID", 1);
-        g5c_json_set_str(it, "handoverRequiredTransfer", tr);
-        free(tr);
-    }
-    add_ie(p, NGAP_IE_PDUSessionResourceListHORqd, "reject", list);
-    add_ie(p, NGAP_IE_SourceToTarget_TransparentContainer, "reject", hex_str(cont, sizeof cont));
-    return p;
-}
-
 static void test_n2_handover(void)
 {
     gnb_t a, b;

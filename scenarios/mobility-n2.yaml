@@ -1,0 +1,8 @@
+# N2 handover on the real daemons: every UE registers on gNB A, gets a PDU session and moves between two gNBs by N2 handovers (Handover Required to the AMF, Handover Request to the
+# target with the next hop derived from the UE's keys, the target's acknowledge with a new downlink tunnel, Handover Command, Handover Notify, release of the source). The SMF and the UPF follow.
+name: N2 handovers between two gNBs
+steps:
+  - load: {ues: 12, gnbs: 3, mobility: 4, mobility_kind: n2}
+  - assert: {metric: "amf:g5c_amf_handover_total{result=completed}", ">=": 48}
+  - assert: {metric: "amf:g5c_amf_registered_ues", "==": 0}
+  - assert: {metric: "smf:g5c_smf_pdu_sessions_active", "==": 0}

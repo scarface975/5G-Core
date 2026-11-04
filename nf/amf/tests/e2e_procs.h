@@ -488,8 +488,11 @@ static accept_info ue_register_ex(gnb_t *g, ue_t *u, uint32_t tac, bool with_gut
         g5c_bytes_free(&plain);
         ue_answer_auth(g, u, &a, tac, AUTH_OK);
         si = ue_handle_smc(g, u, tac, 1);
-        TK_ASSERT(si.rinmr); /* the initial message was not protected: the AMF asks for it again */
-        TK_ASSERT(si.int_alg == 2 && (si.enc_alg == 2 || u->cap[0] == 0x80));
+        TK_ASSERT(si.rinmr || g_clear_only); /* the initial message was not protected: our AMF asks for it again (another core may not need to) */
+        if (!g_clear_only) /* our AMF prefers NIA2 / NEA2; another core chooses by its own order (Open5GS: NEA0 first) */
+            TK_ASSERT(si.int_alg == 2 && (si.enc_alg == 2 || u->cap[0] == 0x80));
+        else
+            TK_ASSERT(si.int_alg >= 1 && si.int_alg <= 3 && si.enc_alg <= 3);
         plain = ue_receive_ics(g, u, u->smc_ul, &ics);
         parse_accept(u, &plain, &ai);
         g5c_bytes_free(&plain);
@@ -944,6 +947,89 @@ static void gnb_path_switch(gnb_t *to, int to_idx, ue_t *u, uint32_t new_ran_id,
     TK_ASSERT(g5c_json_len(ie_of(p, NGAP_IE_PDUSessionResourceSwitchedList)) == 1);
     g5c_json_free(p);
     u->ran_id = new_ran_id;
+}
+
+static g5c_json *ho_required_pdu(const ue_t *u, int target_idx, uint32_t target_gnb_id, uint32_t target_tac, bool with_session)
+{
+    g5c_json *p = new_pdu("initiatingMessage", NGAP_PROC_HandoverPreparation, "reject"), *tid, *tn, *gid, *list;
+    uint8_t id[4] = {(uint8_t)(target_gnb_id >> 24), (uint8_t)(target_gnb_id >> 16), (uint8_t)(target_gnb_id >> 8), (uint8_t)target_gnb_id};
+    uint8_t plmn[3] = {0x00, 0xf1, 0x10}, cont[] = {0x0a, 0x0b, 0x0c, 0x0d};
+    (void)target_idx;
+    add_ie(p, NGAP_IE_AMF_UE_NGAP_ID, "reject", g5c_json_new_int((int64_t)u->amf_id));
+    add_ie(p, NGAP_IE_RAN_UE_NGAP_ID, "reject", g5c_json_new_int(u->ran_id));
+    add_ie(p, NGAP_IE_HandoverType, "reject", g5c_json_new_str("intra5gs"));
+    add_ie(p, NGAP_IE_Cause, "ignore", ng_cause_json("radioNetwork", "handover-desirable-for-radio-reason"));
+    tid = g5c_json_new_obj();
+    tn = g5c_json_set(tid, "targetRANNodeID", g5c_json_new_obj());
+    gid = g5c_json_set(g5c_json_set(tn, "globalRANNodeID", g5c_json_new_obj()), "globalGNB-ID", g5c_json_new_obj());
+    g5c_json_set(gid, "pLMNIdentity", hex_str(plmn, 3));
+    g5c_json_set(g5c_json_set(gid, "gNB-ID", g5c_json_new_obj()), "gNB-ID", bits_json(id, 32));
+    g5c_json_set(tn, "selectedTAI", tai_json(target_tac));
+    add_ie(p, NGAP_IE_TargetID, "reject", tid);
+    list = g5c_json_new_arr();
+    if (with_session) {
+        g5c_json *it = g5c_json_push(list, g5c_json_new_obj());
+        char *tr = encoded_hex("HandoverRequiredTransfer", g5c_json_new_obj());
+        g5c_json_set_int(it, "pDUSessionID", 1);
+        g5c_json_set_str(it, "handoverRequiredTransfer", tr);
+        free(tr);
+    }
+    add_ie(p, NGAP_IE_PDUSessionResourceListHORqd, "reject", list);
+    add_ie(p, NGAP_IE_SourceToTarget_TransparentContainer, "reject", hex_str(cont, sizeof cont));
+    return p;
+}
+
+/* The N2 handover of the UE from gNB `src` to gNB `dst` (target id `dst_gnb_id`, tracking area `dst_tac`): Handover Required, the AMF's Handover Request to the target (checked: type, the
+ * capabilities, the next hop against the UE's own derivation, the session list), the target's acknowledge with a new downlink tunnel, the Handover Command to the source, the target's
+ * Handover Notify and the release of the source association. The target's identifiers (`tgt_ran` on the target) are the UE's from now on. `ncc_seen` is how many next hops the AMF has
+ * handed out before this handover. */
+static void gnb_n2_handover(gnb_t *src, gnb_t *dst, int dst_idx, uint32_t dst_gnb_id, uint32_t dst_tac, ue_t *u, uint32_t tgt_ran, uint32_t teid)
+{
+    g5c_json *p, *r;
+    int64_t tgt_amf_id = 0, id = 0, ncc = -1;
+    uint8_t nh[32], got[32];
+    const g5c_json *sc;
+    gnb_tx(src, ho_required_pdu(u, dst_idx, dst_gnb_id, dst_tac, true), 1);
+    p = rx_expect(dst, NGAP_PROC_HandoverResourceAllocation, "initiatingMessage", 4000);
+    TK_ASSERT(g5c_json_int(ie_of(p, NGAP_IE_AMF_UE_NGAP_ID), &id));
+    tgt_amf_id = id;
+    TK_ASSERT(strcmp(g5c_json_str(ie_of(p, NGAP_IE_HandoverType)), "intra5gs") == 0);
+    TK_ASSERT(ie_of(p, NGAP_IE_UEAggregateMaximumBitRate) != NULL && ie_of(p, NGAP_IE_UESecurityCapabilities) != NULL && ie_of(p, NGAP_IE_AllowedNSSAI) != NULL);
+    sc = ie_of(p, NGAP_IE_SecurityContext);
+    TK_ASSERT(g5c_json_get_int(sc, "nextHopChainingCount", &ncc));
+    TK_ASSERT(g5c_hex_decode(g5c_json_get_str(g5c_json_get(sc, "nextHopNH"), "hex"), got, 32) == 32);
+    ue_nh(u, (int)ncc, nh);
+    TK_ASSERT(memcmp(nh, got, 32) == 0);
+    TK_ASSERT(g5c_json_len(ie_of(p, NGAP_IE_PDUSessionResourceSetupListHOReq)) == 1);
+    g5c_json_free(p);
+    r = new_pdu("successfulOutcome", NGAP_PROC_HandoverResourceAllocation, "reject");
+    add_ie(r, NGAP_IE_AMF_UE_NGAP_ID, "ignore", g5c_json_new_int(tgt_amf_id));
+    add_ie(r, NGAP_IE_RAN_UE_NGAP_ID, "ignore", g5c_json_new_int(tgt_ran));
+    {
+        g5c_json *l = g5c_json_new_arr(), *it = g5c_json_push(l, g5c_json_new_obj()), *t = g5c_json_new_obj();
+        char *tr;
+        uint8_t cont[] = {0xaa, 0xbb};
+        g5c_json_set(t, "dL-NGU-UP-TNLInformation", gtp_tunnel_json(dst_idx, teid));
+        g5c_json_set(t, "qosFlowSetupResponseList", flow_list(1));
+        tr = encoded_hex("HandoverRequestAcknowledgeTransfer", t);
+        g5c_json_set_int(it, "pDUSessionID", 1);
+        g5c_json_set_str(it, "handoverRequestAcknowledgeTransfer", tr);
+        free(tr);
+        add_ie(r, NGAP_IE_PDUSessionResourceAdmittedList, "ignore", l);
+        add_ie(r, NGAP_IE_TargetToSource_TransparentContainer, "reject", hex_str(cont, sizeof cont));
+    }
+    gnb_tx(dst, r, 1);
+    p = rx_expect(src, NGAP_PROC_HandoverPreparation, "successfulOutcome", 3000);
+    TK_ASSERT(strcmp(g5c_json_str(ie_of(p, NGAP_IE_TargetToSource_TransparentContainer)), "aabb") == 0);
+    g5c_json_free(p);
+    r = new_pdu("initiatingMessage", NGAP_PROC_HandoverNotification, "ignore");
+    add_ie(r, NGAP_IE_AMF_UE_NGAP_ID, "reject", g5c_json_new_int(tgt_amf_id));
+    add_ie(r, NGAP_IE_RAN_UE_NGAP_ID, "reject", g5c_json_new_int(tgt_ran));
+    add_ie(r, NGAP_IE_UserLocationInformation, "ignore", uli_json(dst_tac, 0x300));
+    gnb_tx(dst, r, 1);
+    gnb_confirm_release(src, u); /* the source association is released */
+    u->amf_id = (uint64_t)tgt_amf_id;
+    u->ran_id = tgt_ran;
 }
 
 #endif

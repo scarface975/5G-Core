@@ -109,6 +109,12 @@ if(G5C_BASH AND UNIX)
   add_test(NAME cluster_mobility_xn COMMAND ${G5C_BASH} ${CMAKE_SOURCE_DIR}/deploy/run/g5c-cluster.sh ns scenario ${CMAKE_SOURCE_DIR}/scenarios/mobility-xn.yaml)
   set_tests_properties(cluster_mobility_xn PROPERTIES ENVIRONMENT "${_direct_env};G5C_RUN=${CMAKE_BINARY_DIR}/cluster-run-mobility" TIMEOUT 300
                        LABELS "integration;cluster" SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
+  add_test(NAME cluster_mobility_n2 COMMAND ${G5C_BASH} ${CMAKE_SOURCE_DIR}/deploy/run/g5c-cluster.sh ns scenario ${CMAKE_SOURCE_DIR}/scenarios/mobility-n2.yaml)
+  set_tests_properties(cluster_mobility_n2 PROPERTIES ENVIRONMENT "${_direct_env};G5C_RUN=${CMAKE_BINARY_DIR}/cluster-run-mobility-n2" TIMEOUT 300
+                       LABELS "integration;cluster" SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
+  # the tester edition against a core that is not ours (backlog I-01): scripted UEs against the Open5GS 2.8.0 oracle; skipped where Open5GS is not installed
+  add_test(NAME tester_vs_open5gs COMMAND ${G5C_BASH} ${CMAKE_SOURCE_DIR}/deploy/oracle/tester.sh 5 1)
+  set_tests_properties(tester_vs_open5gs PROPERTIES ENVIRONMENT "G5C_LOAD_BIN=$<TARGET_FILE:load_core>" TIMEOUT 300 LABELS "integration;cluster" SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
   # radio lab kit (backlog B-10): OCUDU gNB + srsUE over ZeroMQ against our core; skipped where the gNB or the UE is not installed
   add_test(NAME radio_kit COMMAND ${G5C_BASH} ${CMAKE_SOURCE_DIR}/deploy/radio-kit/g5c-radio-kit run)
   set_tests_properties(radio_kit PROPERTIES TIMEOUT 300 LABELS "integration;cluster" SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)

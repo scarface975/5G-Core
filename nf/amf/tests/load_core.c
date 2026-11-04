@@ -20,6 +20,8 @@
  *   G5C_LOAD_STORM_SECONDS  storm mode: every gNB sends Registration Requests back to back for this long (no waiting for the core to keep up) and counts what comes back: challenged
  *                      (admitted), refused with cause #22 congestion (amf.overload), or anything else. The challenged UEs are left to the AMF's timers. The run fails when a reply is neither
  *   G5C_LOAD_ADMIN_TOKEN / G5C_LOAD_NO_PROVISION  the bearer token of the UDM admin API (default: the cluster's test token); set NO_PROVISION when the subscribers exist already (tools/cli/g5c-tester)
+ *   G5C_LOAD_MOBILITY_KIND  n2: the moves of the mobility mode are N2 handovers (Handover Required / Request / Acknowledge / Command / Notify) instead of Xn path switches
+ *   G5C_LOAD_CLEAR_ONLY 1: the first Registration Request of a UE with no security context carries only the cleartext IEs (TS 24.501 4.4.6), as a core that checks it (Open5GS) requires
  *   G5C_LOAD_FANOUT    1: this process is one of several against the same core (tools/cli/g5c-fanout): the population counts of the core are not judged, the caller does that
  *   G5C_LOAD_MOBILITY  mobility mode (backlog B-09): every UE registers on one gNB, establishes its session and then moves between two gNBs (tracking areas 1 and 2) by this many Xn path switches, each checked
  *                      (next hop, chaining count, switched sessions); then it de-registers
@@ -146,17 +148,17 @@ static long scrape(const char *base, const char *name)
 
 static size_t n_amf_ues(void)
 {
-    return remote ? (size_t)scrape(amf_sbi, "g5c_amf_ue_contexts") : amf_ue_count(E.a);
+    return remote ? (size_t)(scrape(amf_sbi, "g5c_amf_ue_contexts") < 0 ? 0 : scrape(amf_sbi, "g5c_amf_ue_contexts")) : amf_ue_count(E.a);
 }
 
 static size_t n_smf_sessions(void)
 {
-    return remote ? (size_t)scrape(smf_sbi, "g5c_smf_pdu_sessions_active") : smf_session_count(E.s);
+    return remote ? (size_t)(scrape(smf_sbi, "g5c_smf_pdu_sessions_active") < 0 ? 0 : scrape(smf_sbi, "g5c_smf_pdu_sessions_active")) : smf_session_count(E.s);
 }
 
 static size_t n_upf_sessions(void)
 {
-    return remote ? (size_t)scrape(upf_sbi, "g5c_upf_sessions") : upf_sessions();
+    return remote ? (size_t)(scrape(upf_sbi, "g5c_upf_sessions") < 0 ? 0 : scrape(upf_sbi, "g5c_upf_sessions")) : upf_sessions();
 }
 
 /* the count a wave must reach: base + want */
@@ -647,6 +649,7 @@ static int chaos_main(unsigned n_ues, unsigned n_gnbs, unsigned seconds)
  * de-registers from wherever it ended. The run passes when every UE did all its moves and the core is empty at the end. */
 static atomic_long m_done, m_moves, m_fail;
 static unsigned mob_hops;
+static bool mob_n2; /* G5C_LOAD_MOBILITY_KIND=n2: N2 handovers (through the AMF, with the target's resource allocation) instead of Xn path switches */
 
 static void drain(gnb_t *g)
 {
@@ -707,7 +710,10 @@ static void *mobility_thread(void *arg)
         for (hop = 0; hop < mob_hops; hop++) {
             int to = 1 - at;
             drain(&g[to]);
-            gnb_path_switch(&g[to], to, &u, 100000 + (w->first + i) * 64 + hop, to == 0 ? 1 : 2, 0x200 + hop, 0x40000 + (w->first + i) * 64 + hop, (int)hop + 2);
+            if (mob_n2)
+                gnb_n2_handover(&g[at], &g[to], to, 3000 + 2 * w->idx + (uint32_t)to, to == 0 ? 1 : 2, &u, 100000 + (w->first + i) * 64 + hop, 0x40000 + (w->first + i) * 64 + hop);
+            else
+                gnb_path_switch(&g[to], to, &u, 100000 + (w->first + i) * 64 + hop, to == 0 ? 1 : 2, 0x200 + hop, 0x40000 + (w->first + i) * 64 + hop, (int)hop + 2);
             at = to;
             atomic_fetch_add(&m_moves, 1);
         }
@@ -745,6 +751,7 @@ static int mobility_main(unsigned n_ues, unsigned n_gnbs, unsigned hops)
     unsigned per = n_ues / n_gnbs, rem = n_ues % n_gnbs, next = 0;
     double t0;
     mob_hops = hops;
+    mob_n2 = getenv("G5C_LOAD_MOBILITY_KIND") != NULL && strcmp(getenv("G5C_LOAD_MOBILITY_KIND"), "n2") == 0;
     printf("mobility: %u UEs over %u workers, %u Xn path switches each\n", n_ues, n_gnbs, hops);
     fflush(stdout);
     for (unsigned i = 0; i < n_ues; i++) {
@@ -814,6 +821,7 @@ int main(void)
     g_amf_extra = extra;
     remote = env_uint("G5C_LOAD_REMOTE", 0) != 0;
     fanout = env_uint("G5C_LOAD_FANOUT", 0) != 0;
+    g_clear_only = env_uint("G5C_LOAD_CLEAR_ONLY", 0) != 0;
     if (remote) {
         const char *ep = getenv("G5C_LOAD_AMF_NGAP") != NULL ? getenv("G5C_LOAD_AMF_NGAP") : "127.2.0.5:38412", *colon = strrchr(ep, ':');
         static char ip[64];

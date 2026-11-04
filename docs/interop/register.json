@@ -47,6 +47,17 @@
       "evidence": "deploy/oracle/build_ueransim_eap.sh"
     },
     {
+      "id": "tester-vs-open5gs",
+      "kind": "UE + gNB (our scripted tester)",
+      "peer": "g5c-tester: scripted gNBs and UEs of this project",
+      "core": "Open5GS 2.8.0 (AMF, AUSF, UDM, SMF, UPF, unmodified)",
+      "result": "pass",
+      "what": "registration, 5G-AKA, security mode, PDU session and de-registration of 5 UEs at a core that is not ours; found and fixed that the scripted UE sent non-cleartext IEs in its first Registration Request (Open5GS rejects it, TS 24.501 4.4.6)",
+      "limits": "registration, sessions and de-registration only; Open5GS chooses NEA0 where ours chooses NEA2; 5 UEs, one gNB",
+      "reproduce": "deploy/oracle/tester.sh 5 1",
+      "evidence": "deploy/oracle/tester.sh"
+    },
+    {
       "id": "core-open5gs-udm-pcf",
       "kind": "core functions",
       "peer": "Open5GS 2.8.0 AMF, AUSF, SMF, PCF",
