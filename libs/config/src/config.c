@@ -126,6 +126,7 @@ void g5c_common_free(g5c_common *c)
     free(c->log_level);
     free(c->nrf_uri);
     free(c->scp_uri);
+    free(c->nf_set_id);
     free(c->events.syslog_host);
     free(c->events.syslog_proto);
     free(c->events.syslog_ca);
@@ -309,6 +310,14 @@ int g5c_common_parse(const g5c_json *root, g5c_common *out, char *err, size_t er
     out->oauth2_jwks_refresh_s = 600;
     if (need_str(root, "name", "config", &out->name, err, errcap) != 0)
         goto bad;
+    if (g5c_json_get(root, "nf_set_id") != NULL) {
+        const char *id = g5c_json_get_str(root, "nf_set_id");
+        if (id == NULL || id[0] == 0 || strlen(id) > 127) {
+            seterr(err, errcap, "invalid config: `nf_set_id` must be a set identifier (TS 23.003 28.12), at most 127 characters");
+            goto bad;
+        }
+        out->nf_set_id = g5c_xstrdup(id);
+    }
     if (!g5c_json_is(plmn, G5C_J_OBJECT) || !g5c_json_is(sbi, G5C_J_OBJECT)) {
         seterr(err, errcap, "invalid config: `plmn` and `sbi` sections are required");
         goto bad;

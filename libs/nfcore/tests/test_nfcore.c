@@ -59,7 +59,7 @@ static g5c_nf *make_nf(const char *nrf_uri)
     g5c_common c;
     g5c_nf *nf;
     snprintf(yaml, sizeof yaml,
-             "name: udm-test\nplmn: { mcc: '001', mnc: '01' }\nsbi: { address: 127.0.0.1, port: 1 }\n%s%s%s\n",
+             "name: udm-test\nnf_set_id: set1.udmset.5gc.mnc001.mcc001\nplmn: { mcc: '001', mnc: '01' }\nsbi: { address: 127.0.0.1, port: 1 }\n%s%s%s\n",
              nrf_uri ? "nrf: { uri: '" : "", nrf_uri ? nrf_uri : "", nrf_uri ? "' }" : "");
     j = g5c_yaml_parse(yaml, strlen(yaml), err, sizeof err);
     TK_ASSERT(j != NULL && g5c_common_parse(j, &c, err, sizeof err) == 0);
@@ -145,6 +145,7 @@ static void test_nrf_registration(void)
     TK_ASSERT(last_profile != NULL);
     TK_ASSERT(strcmp(g5c_json_get_str(last_profile, "nfType"), "UDM") == 0);
     TK_ASSERT(strcmp(g5c_json_get_str(last_profile, "nfInstanceId"), nf->instance_id) == 0);
+    TK_ASSERT(g5c_json_len(g5c_json_get(last_profile, "nfSetIdList")) == 1 && strcmp(g5c_json_str(g5c_json_at(g5c_json_get(last_profile, "nfSetIdList"), 0)), "set1.udmset.5gc.mnc001.mcc001") == 0);
     TK_ASSERT(g5c_json_len(g5c_json_get(last_profile, "nfServices")) == 2);
     {
         const g5c_json *s0 = g5c_json_at(g5c_json_get(last_profile, "nfServices"), 1);

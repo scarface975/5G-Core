@@ -1,0 +1,181 @@
+#!/usr/bin/env python3
+"""g5c-triage: reads a diagnostics bundle (tools/cli/g5c-diag) and says what is wrong in it, against the rules of docs/ops/known-issues.json (backlog I-04).
+
+  g5c-triage BUNDLE.tar.gz [--rules FILE] [--json] [--min-severity low|medium|high]
+  g5c-triage --directory DIR ...            a bundle that was already unpacked
+
+Each finding has the rule that matched, how many times, an example line, what to do about it and the runbook heading. Exit code 0 when nothing at or above the minimum severity was found, 1 when
+something was, 2 when the bundle cannot be read. The bundle has no keys and its identities are redacted: the analysis needs nothing else, and the report can be sent along with a support case.
+A rule that cannot be evaluated because the bundle lacks the part it reads (no metrics snapshot, for instance) is listed as "not checked", never as passed."""
+import argparse
+import json
+import re
+import sys
+import tarfile
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent.parent
+RULES = ROOT / "docs" / "ops" / "known-issues.json"
+SEV = {"low": 0, "medium": 1, "high": 2}
+OPS = {">=": lambda a, b: a >= b, "<=": lambda a, b: a <= b, ">": lambda a, b: a > b, "<": lambda a, b: a < b, "==": lambda a, b: a == b}
+
+
+class Bundle:
+    def __init__(self, files):
+        self.files = files  # path inside g5c-diag/ -> text
+
+    def of(self, kind, function="*"):
+        """(function name, text) of the files of a kind (conf, log, metrics) for one function or all."""
+        out = []
+        for p, t in sorted(self.files.items()):
+            parts = p.split("/")
+            if len(parts) == 2 and parts[0] == kind:
+                name = parts[1].rsplit(".", 1)[0]
+                if function in ("*", name):
+                    out.append((name, t))
+        return out
+
+
+def read_tar(path):
+    files = {}
+    with tarfile.open(path) as tf:
+        for m in tf.getmembers():
+            if m.isfile() and m.size < 64 * 1024 * 1024:
+                name = m.name.split("/", 1)[1] if "/" in m.name else m.name
+                files[name] = tf.extractfile(m).read().decode("utf-8", "replace")
+    return Bundle(files)
+
+
+def read_dir(path):
+    base = Path(path)
+    if (base / "g5c-diag").is_dir():
+        base = base / "g5c-diag"
+    return Bundle({str(p.relative_to(base)).replace("\\", "/"): p.read_text(errors="replace") for p in base.rglob("*") if p.is_file()})
+
+
+def series_sum(text, spec):
+    """The sum of the samples of a series in a Prometheus exposition; spec is name or name{label="v",...} (every label given must match). None when the name is absent."""
+    m = re.match(r'^([A-Za-z_:][A-Za-z0-9_:]*)(\{(.*)\})?$', spec)
+    name, want = m.group(1), dict(re.findall(r'(\w+)="([^"]*)"', m.group(3) or ""))
+    total, seen = 0.0, False
+    for ln in text.splitlines():
+        if not ln.startswith(name) or ln.startswith("#"):
+            continue
+        mm = re.match(r'^([A-Za-z_:][A-Za-z0-9_:]*)(\{([^}]*)\})?\s+(\S+)', ln)
+        if not mm or mm.group(1) != name:
+            continue
+        labels = dict(re.findall(r'(\w+)="([^"]*)"', mm.group(3) or ""))
+        if all(labels.get(k) == v for k, v in want.items()):
+            try:
+                total += float(mm.group(4))
+                seen = True
+            except ValueError:
+                pass
+    return total if seen else None
+
+
+def evaluate(rule, b):
+    """(status, details): status is 'found', 'ok' or 'not checked'; details is a dict with count/example/where."""
+    kind = rule["kind"]
+    fn = rule.get("function", "*")
+    if kind == "log":
+        logs = b.of("log", fn)
+        if not logs:
+            return "not checked", {"why": "no log of %s in the bundle" % fn}
+        rx, n, ex, where = re.compile(rule["pattern"]), 0, None, set()
+        for name, t in logs:
+            for ln in t.splitlines():
+                if rx.search(ln):
+                    n += 1
+                    where.add(name)
+                    ex = ex or ln.strip()[:240]
+        return ("found" if n >= rule.get("min", 1) else "ok"), {"count": n, "example": ex, "where": sorted(where)}
+    if kind == "warnings":
+        logs = b.of("log", "*")
+        if not logs:
+            return "not checked", {"why": "no logs in the bundle"}
+        worst = max(((sum(1 for ln in t.splitlines() if re.search(r"\b(WARN|ERROR)\b", ln)), name) for name, t in logs), default=(0, ""))
+        return ("found" if worst[0] >= rule.get("min", 50) else "ok"), {"count": worst[0], "where": [worst[1]]}
+    if kind == "metric":
+        ms = b.of("metrics", fn)
+        if not ms:
+            return "not checked", {"why": "no metrics snapshot of %s in the bundle" % fn}
+        vals = [(name, series_sum(t, rule["series"])) for name, t in ms]
+        vals = [(n, v) for n, v in vals if v is not None]
+        if not vals:
+            return "not checked", {"why": "series %s not in the snapshot" % rule["series"]}
+        hit = [(n, v) for n, v in vals if OPS[rule["op"]](v, rule["value"])]
+        return ("found" if hit else "ok"), {"count": int(sum(v for _, v in hit)), "where": [n for n, _ in hit], "example": "%s %s %s" % (rule["series"], hit[0][1] if hit else vals[0][1], "") if (hit or vals) else None}
+    if kind == "config":
+        confs = b.of("conf", fn)
+        if not confs:
+            return "not checked", {"why": "no configuration of %s in the bundle" % fn}
+        where = []
+        for name, t in confs:
+            if "present" in rule and re.search(rule["present"], t, re.M):
+                where.append(name)
+            if "absent" in rule and not re.search(rule["absent"], t, re.M):
+                where.append(name)
+        return ("found" if where else "ok"), {"count": len(where), "where": where}
+    if kind == "certificate":
+        t = b.files.get("certificates.txt")
+        if t is None:
+            return "not checked", {"why": "no certificates.txt in the bundle"}
+        soon = []
+        for ln in t.splitlines():
+            m = re.match(r"^(\S+)\s+expires .*\((-?\d+) days\)", ln)
+            if m and int(m.group(2)) <= rule["within_days"]:
+                soon.append("%s (%s days)" % (m.group(1), m.group(2)))
+        return ("found" if soon else "ok"), {"count": len(soon), "where": soon}
+    return "not checked", {"why": "unknown kind %s" % kind}
+
+
+def triage(b, rules):
+    out = []
+    for r in rules:
+        st, d = evaluate(r, b)
+        out.append(dict(rule=r["id"], title=r["title"], severity=r["severity"], advice=r.get("advice", ""), runbook=r.get("runbook", ""), status=st, **d))
+    return out
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(prog="g5c-triage", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("bundle", nargs="?")
+    ap.add_argument("--directory")
+    ap.add_argument("--rules", default=str(RULES))
+    ap.add_argument("--json", action="store_true")
+    ap.add_argument("--min-severity", default="low", choices=list(SEV))
+    a = ap.parse_args(argv)
+    try:
+        if not a.bundle and not a.directory:
+            raise ValueError("give a bundle (BUNDLE.tar.gz) or --directory")
+        b = read_dir(a.directory) if a.directory else read_tar(a.bundle)
+        if not b.files:
+            raise ValueError("the bundle is empty")
+        rules = json.loads(Path(a.rules).read_text())["rules"]
+    except (OSError, ValueError, tarfile.TarError, KeyError) as e:
+        print("g5c-triage: %s" % e, file=sys.stderr)
+        return 2
+    res = triage(b, rules)
+    found = [r for r in res if r["status"] == "found" and SEV[r["severity"]] >= SEV[a.min_severity]]
+    release = next((ln.split(":", 1)[1].strip() for ln in b.files.get("summary.txt", "").splitlines() if ln.startswith("release:")), "unknown")
+    if a.json:
+        print(json.dumps({"release": release, "findings": found, "notChecked": [r["rule"] for r in res if r["status"] == "not checked"], "checked": len(res)}, indent=2))
+    else:
+        print("g5c bundle, release %s: %d findings of %d rules checked" % (release, len(found), len([r for r in res if r["status"] != "not checked"])))
+        for r in sorted(found, key=lambda x: -SEV[x["severity"]]):
+            print("\n[%s] %s  (%s)" % (r["severity"].upper(), r["title"], r["rule"]))
+            print("  seen: %s%s" % (r.get("count", ""), " in " + ", ".join(r["where"]) if r.get("where") else ""))
+            if r.get("example"):
+                print("  e.g.: %s" % r["example"])
+            print("  do:   %s" % r["advice"])
+            if r["runbook"]:
+                print("  runbook: docs/ops/runbooks.md, \"%s\"" % r["runbook"])
+        nc = [r["rule"] for r in res if r["status"] == "not checked"]
+        if nc:
+            print("\nnot checked (the bundle lacks what they read): %s" % ", ".join(nc))
+    return 1 if found else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

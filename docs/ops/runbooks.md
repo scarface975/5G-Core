@@ -79,3 +79,6 @@ Edit > Preferences > Protocols > TLS > (Pre)-Master-Secret log filename to the s
 Keys and tokens are files named in the configuration (never values), mode 600, listed in `$RUN/keys`. `g5c-cluster.sh ns secrets` checks that none of them is in a log, a configuration
 or a state file and that K and OPc are not in the clear at rest. The UDM's master key encrypts K and OPc (AES-256-GCM, the SUPI as associated data): losing it makes the stored credentials
 unusable; keep a copy where the cluster is not.
+
+## NF sets
+Instances of one function that can replace each other form an NF set (TS 23.501 5.21): give each the same `nf_set_id` at the top of its configuration (for example `set1.udmset.5gc.mnc001.mcc001`) and the NRF profile carries it as `nfSetIdList`. A consumer, or the SCP, discovers the members with `target-nf-set-id=<id>` and falls back to another member when one fails (the SCP's reselection and quarantine apply within the answer). Check which instances share a set with `GET /nnrf-disc/v1/nf-instances?target-nf-type=<type>&requester-nf-type=<you>&target-nf-set-id=<id>`.

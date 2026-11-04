@@ -59,6 +59,7 @@ typedef struct {
     unsigned oauth2_leeway_s;       /* clock skew tolerated when checking exp / iat / nbf (default 5) */
     unsigned oauth2_jwks_refresh_s; /* how long the NRF's key set is trusted before it is fetched again (default 600) */
     char *scp_uri; /* `scp_client: { uri }`; NULL: direct communication */
+    char *nf_set_id; /* `nf_set_id`: the NF set (TS 23.501 5.21) this instance belongs to; it goes into the NRF profile as nfSetIdList. NULL: none */
     g5c_events_cfg events;
     g5c_overload_cfg overload;
     g5c_reload_cfg reload;

@@ -73,7 +73,7 @@ static char *query_one(const g5c_req *req, const char *name)
 /* ---- matching ---- */
 
 typedef struct {
-    char *target_type, *requester_type, *dnn, *supi, *amf_region, *amf_set, *locality, *target_id;
+    char *target_type, *requester_type, *dnn, *supi, *amf_region, *amf_set, *locality, *target_id, *nf_set;
     char **services;
     size_t nservices;
     g5c_json *snssais; /* array of {sst, sd?} */
@@ -92,6 +92,7 @@ static void q_free(disc_q *q)
     free(q->supi);
     free(q->amf_region);
     free(q->amf_set);
+    free(q->nf_set);
     free(q->locality);
     free(q->target_id);
     nrf_query_free(q->services, q->nservices);
@@ -363,6 +364,14 @@ static bool match_profile(const nrf *n, const g5c_json *doc, const char *id, con
         if (!found)
             return false;
     }
+    if (q->nf_set != NULL) {
+        const g5c_json *sl = g5c_json_get(doc, "nfSetIdList");
+        bool in = false;
+        for (size_t i = 0; sl != NULL && i < g5c_json_len(sl); i++)
+            in = in || (g5c_json_str(g5c_json_at(sl, i)) != NULL && strcasecmp(g5c_json_str(g5c_json_at(sl, i)), q->nf_set) == 0);
+        if (!in)
+            return false;
+    }
     if (q->amf_region != NULL || q->amf_set != NULL) {
         const g5c_json *ai = g5c_json_get(doc, "amfInfo");
         if (ai == NULL)
@@ -440,6 +449,7 @@ static void discover(void *ctx, const g5c_req *req, g5c_resp *resp)
     q.supi = query_one(req, "supi");
     q.amf_region = query_one(req, "amf-region-id");
     q.amf_set = query_one(req, "amf-set-id");
+    q.nf_set = query_one(req, "target-nf-set-id"); /* NF sets (TS 23.501 5.21.3): the instances that list this set in their profile's nfSetIdList */
     q.locality = query_one(req, "preferred-locality");
     q.target_id = query_one(req, "target-nf-instance-id");
     q.limit = 0;

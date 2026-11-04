@@ -484,6 +484,8 @@ g5c_nf_inst *g5c_nf_start(g5c_nf *nf, g5c_router *nf_routes, const g5c_nrf_reg *
         k->nrf = g5c_xstrdup(c->nrf_uri);
         k->profile = g5c_nrf_profile(nf->instance_id, reg->nf_type, c->address, g5c_server_port(r->server), scheme, c->mcc,
                                      c->mnc, reg->services, reg->nservices);
+        if (c->nf_set_id != NULL)
+            g5c_json_push_str(g5c_json_set(k->profile, "nfSetIdList", g5c_json_new_arr()), c->nf_set_id);
         for (size_t i = 0; i < g5c_json_len(reg->extra); i++)
             g5c_json_set(k->profile, g5c_json_key_at(reg->extra, i), g5c_json_dup(g5c_json_val_at(reg->extra, i)));
         pthread_mutex_init(&k->mu, NULL);

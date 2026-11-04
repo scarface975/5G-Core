@@ -374,7 +374,7 @@ static void test_discovery(const env_t *e)
         "\"nfServices\":[{\"serviceInstanceId\":\"a\",\"serviceName\":\"nsmf-pdusession\",\"versions\":[{\"apiVersionInUri\":\"v1\",\"apiFullVersion\":\"1.0.0\"}],\"scheme\":\"http\","
         "\"nfServiceStatus\":\"REGISTERED\"},{\"serviceInstanceId\":\"b\",\"serviceName\":\"nsmf-event-exposure\",\"scheme\":\"http\",\"nfServiceStatus\":\"REGISTERED\"}]";
     register_ok(e, SMF1, "SMF", smf_extra);
-    register_ok(e, UDM2, "UDM", "\"priority\":1,\"locality\":\"dc-a\",\"udmInfo\":{\"supiRanges\":[{\"start\":\"001010000000000\",\"end\":\"001010000009999\"}]},"
+    register_ok(e, UDM2, "UDM", "\"nfSetIdList\":[\"set1.udmset.5gc.mnc001.mcc001\"],\"priority\":1,\"locality\":\"dc-a\",\"udmInfo\":{\"supiRanges\":[{\"start\":\"001010000000000\",\"end\":\"001010000009999\"}]},"
                                 "\"nfServices\":[{\"serviceInstanceId\":\"c\",\"serviceName\":\"nudm-sdm\",\"scheme\":\"http\",\"nfServiceStatus\":\"REGISTERED\"},"
                                 "{\"serviceInstanceId\":\"d\",\"serviceName\":\"nudm-uecm\",\"scheme\":\"http\",\"nfServiceStatus\":\"REGISTERED\"}]");
     register_ok(e, AMF1, "AMF", "\"amfInfo\":{\"amfSetId\":\"1\",\"amfRegionId\":\"2\",\"taiList\":[{\"plmnId\":{\"mcc\":\"001\",\"mnc\":\"01\"},\"tac\":\"000002\"}]}");
@@ -392,6 +392,13 @@ static void test_discovery(const env_t *e)
     TK_ASSERT(st == 200 && n == 2 && strcmp(ids[0], UDM2) == 0 && strcmp(ids[1], UDM1) == 0);
     n = discover(e, "target-nf-type=UDM&requester-nf-type=AMF&limit=1", ids, &st);
     TK_ASSERT(n == 1 && strcmp(ids[0], UDM2) == 0);
+    /* by NF set (TS 23.501 5.21.3): only the instances whose profile lists the set, whatever the case of the query */
+    n = discover(e, "target-nf-type=UDM&requester-nf-type=AMF&target-nf-set-id=set1.udmset.5gc.mnc001.mcc001", ids, &st);
+    TK_ASSERT(st == 200 && n == 1 && strcmp(ids[0], UDM2) == 0);
+    n = discover(e, "target-nf-type=UDM&requester-nf-type=AMF&target-nf-set-id=SET1.udmset.5gc.mnc001.mcc001", ids, &st);
+    TK_ASSERT(n == 1);
+    n = discover(e, "target-nf-type=UDM&requester-nf-type=AMF&target-nf-set-id=set2.udmset.5gc.mnc001.mcc001", ids, &st);
+    TK_ASSERT(st == 200 && n == 0);
     /* by service: only the instance that offers it, and only that service in the answer */
     n = discover(e, "target-nf-type=UDM&requester-nf-type=AMF&service-names=nudm-uecm", ids, &st);
     TK_ASSERT(n == 1 && strcmp(ids[0], UDM2) == 0);

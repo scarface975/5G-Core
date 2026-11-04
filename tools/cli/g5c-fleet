@@ -1,0 +1,214 @@
+#!/usr/bin/env python3
+"""g5c-fleet: fleet management for large populations of devices (meters, trackers, sensors; backlog H-04). It works from the subscriber inventory and the charging records of the SMF and
+sits beside the admin API: nothing here talks to a running core.
+
+  g5c-fleet provision --groups GROUPS.json --group NAME --devices DEVICES.csv [--out FILE]
+        the devices of one group (a CSV with supi,k,opc and optionally msisdn, or one SUPI and key per line) turned into the CSV of g5c-subscribers with the group's template
+        (slices, DNNs, aggregate maximum bit rates), ready for `g5c-subscribers import --format csv ... --apply`
+  g5c-fleet report --groups GROUPS.json --inventory INV --cdr CDRFILE... [--now ISO] [--silent-hours 24] [--json] [--csv OUT]
+        per group: devices, active in the window, silent (registered in the inventory, no session in the window), never seen, sessions and volume in the window
+  g5c-fleet silent --groups GROUPS.json --inventory INV --cdr CDRFILE... [--now ISO] [--silent-hours 24] [--group NAME]
+        the silent and never-seen devices, one SUPI per line with when it was last seen (exit code 1 when there are any, for a cron job)
+
+GROUPS.json: {"groups": {"meters": {"prefix": "imsi-0010100", "slices": "1:000001", "dnns": "iot", "ue_ambr_ul": "100 Kbps", "ue_ambr_dl": "100 Kbps"},
+                         "trackers": {"supis": ["imsi-001010000000001"], "slices": "1", "dnns": "iot;internet"}}}
+A device belongs to the first group that lists its SUPI or whose prefix it has; the rest are in the group "(none)". INV is the JSON of `g5c-subscribers export`, its CSV, or one SUPI per line.
+The time of a device is the latest start or end of any of its sessions in the records (the SMF writes a record when a session is released: a device whose session is still open shows up
+as silent until it closes, so use a window longer than your longest session)."""
+import argparse
+import csv
+import json
+import re
+import sys
+from collections import defaultdict
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+SUPI = re.compile(r"^imsi-\d{6,15}$")
+HEX = re.compile(r"^[0-9a-fA-F]{32}$")
+
+
+def parse_time(s):
+    return datetime.strptime(s, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+
+
+def load_groups(path):
+    doc = json.loads(Path(path).read_text())
+    groups = doc.get("groups")
+    if not isinstance(groups, dict) or not groups:
+        raise ValueError("%s: needs a non-empty \"groups\" object" % path)
+    for name, g in groups.items():
+        if not isinstance(g, dict) or not (g.get("prefix") or g.get("supis")):
+            raise ValueError("group %s: needs \"prefix\" or \"supis\"" % name)
+        for s in g.get("supis", []):
+            if not SUPI.match(s):
+                raise ValueError("group %s: %r is not a SUPI (imsi-<digits>)" % (name, s))
+    return groups
+
+
+def group_of(groups, supi):
+    for name, g in groups.items():
+        if supi in g.get("supis", []) or (g.get("prefix") and supi.startswith(g["prefix"])):
+            return name
+    return "(none)"
+
+
+def load_inventory(path):
+    text = Path(path).read_text()
+    stripped = text.lstrip()
+    if stripped.startswith(("[", "{")):
+        doc = json.loads(text)
+        items = doc if isinstance(doc, list) else doc.get("subscribers", [])
+        return sorted({(i if isinstance(i, str) else i.get("supi")) for i in items if i})
+    rows = list(csv.reader(text.splitlines()))
+    if rows and rows[0] and rows[0][0].strip().lower() == "supi":
+        return sorted({r[0].strip() for r in rows[1:] if r and r[0].strip()})
+    return sorted({ln.split(",")[0].strip() for ln in text.splitlines() if ln.strip() and not ln.startswith("#")})
+
+
+def load_cdr(paths):
+    last, per = {}, defaultdict(list)
+    for p in paths:
+        for ln in Path(p).read_text().splitlines():
+            if not ln.strip():
+                continue
+            r = json.loads(ln)
+            supi = r.get("supi")
+            if not supi:
+                continue
+            t_end = parse_time(r["endTime"]) if r.get("endTime") else None
+            t_start = parse_time(r["startTime"]) if r.get("startTime") else None
+            seen = max(t for t in (t_start, t_end) if t is not None) if (t_start or t_end) else None
+            if seen is not None and (supi not in last or seen > last[supi]):
+                last[supi] = seen
+            per[supi].append((t_start, t_end, int(r.get("totalOctets", 0))))
+    return last, per
+
+
+def analyse(groups, inventory, last, per, now, hours):
+    cut = now - timedelta(hours=hours)
+    out = defaultdict(lambda: {"devices": 0, "active": 0, "silent": 0, "neverSeen": 0, "sessions": 0, "octets": 0})
+    silent = []
+    for supi in inventory:
+        g = out[group_of(groups, supi)]
+        g["devices"] += 1
+        if supi not in last:
+            g["neverSeen"] += 1
+            silent.append((supi, group_of(groups, supi), None))
+        elif last[supi] >= cut:
+            g["active"] += 1
+        else:
+            g["silent"] += 1
+            silent.append((supi, group_of(groups, supi), last[supi]))
+        for (a, b, octets) in per.get(supi, []):
+            t = b or a
+            if t is not None and t >= cut:
+                g["sessions"] += 1
+                g["octets"] += octets
+    return dict(out), silent
+
+
+def cmd_provision(a):
+    groups = load_groups(a.groups)
+    if a.group not in groups:
+        raise ValueError("no group %r in %s" % (a.group, a.groups))
+    g = groups[a.group]
+    rows, bad = [], []
+    for ln in Path(a.devices).read_text().splitlines():
+        if not ln.strip() or ln.startswith("#") or ln.lower().startswith("supi"):
+            continue
+        f = [x.strip() for x in ln.split(",")]
+        supi, k, opc = (f + ["", "", ""])[:3]
+        msisdn = f[3] if len(f) > 3 else ""
+        if not SUPI.match(supi) or not HEX.match(k) or not HEX.match(opc):
+            bad.append(supi or ln[:20])
+            continue
+        if group_of({a.group: g}, supi) != a.group:
+            bad.append(supi + " (not in group %s)" % a.group)
+            continue
+        rows.append([supi, k, opc, "", "", msisdn, g.get("slices", ""), g.get("dnns", ""), g.get("ue_ambr_ul", ""), g.get("ue_ambr_dl", "")])
+    if bad:
+        print("g5c-fleet: %d devices refused (%s)" % (len(bad), ", ".join(b.split()[0] if "(" not in b else b for b in bad[:5]) + (" ..." if len(bad) > 5 else "")), file=sys.stderr)
+        return 1
+    out = open(a.out, "w", newline="") if a.out else sys.stdout
+    w = csv.writer(out)
+    w.writerow(["supi", "k", "opc", "op", "amf", "msisdn", "slices", "dnns", "ue_ambr_ul", "ue_ambr_dl"])
+    w.writerows(rows)
+    if a.out:
+        out.close()
+    print("g5c-fleet: %d devices of group %s" % (len(rows), a.group), file=sys.stderr)
+    return 0
+
+
+def window(a):
+    now = parse_time(a.now) if a.now else datetime.now(timezone.utc).replace(microsecond=0)
+    return now, a.silent_hours
+
+
+def cmd_report(a):
+    groups = load_groups(a.groups)
+    now, hours = window(a)
+    res, _ = analyse(groups, load_inventory(a.inventory), *load_cdr(a.cdr), now, hours)
+    total = {k: sum(g[k] for g in res.values()) for k in ("devices", "active", "silent", "neverSeen", "sessions", "octets")}
+    if a.json:
+        print(json.dumps({"now": now.isoformat(), "silentHours": hours, "groups": res, "total": total}, indent=2, sort_keys=True))
+    else:
+        print("fleet at %s, window %d h" % (now.strftime("%Y-%m-%dT%H:%M:%SZ"), hours))
+        print("%-16s %8s %8s %8s %10s %9s %14s" % ("group", "devices", "active", "silent", "never seen", "sessions", "octets"))
+        for name in sorted(res):
+            g = res[name]
+            print("%-16s %8d %8d %8d %10d %9d %14d" % (name, g["devices"], g["active"], g["silent"], g["neverSeen"], g["sessions"], g["octets"]))
+        print("%-16s %8d %8d %8d %10d %9d %14d" % ("total", *[total[k] for k in ("devices", "active", "silent", "neverSeen", "sessions", "octets")]))
+    if a.csv:
+        with open(a.csv, "w", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(["group", "devices", "active", "silent", "neverSeen", "sessions", "octets"])
+            for name in sorted(res):
+                w.writerow([name] + [res[name][k] for k in ("devices", "active", "silent", "neverSeen", "sessions", "octets")])
+    return 0
+
+
+def cmd_silent(a):
+    groups = load_groups(a.groups)
+    now, hours = window(a)
+    _, silent = analyse(groups, load_inventory(a.inventory), *load_cdr(a.cdr), now, hours)
+    n = 0
+    for supi, g, t in silent:
+        if a.group and g != a.group:
+            continue
+        n += 1
+        print("%s\t%s\t%s" % (supi, g, t.strftime("%Y-%m-%dT%H:%M:%SZ") if t else "never seen"))
+    print("%d silent or never seen" % n, file=sys.stderr)
+    return 1 if n else 0
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(prog="g5c-fleet", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    p = sub.add_parser("provision")
+    p.add_argument("--groups", required=True)
+    p.add_argument("--group", required=True)
+    p.add_argument("--devices", required=True)
+    p.add_argument("--out")
+    for name in ("report", "silent"):
+        q = sub.add_parser(name)
+        q.add_argument("--groups", required=True)
+        q.add_argument("--inventory", required=True)
+        q.add_argument("--cdr", nargs="+", required=True)
+        q.add_argument("--now")
+        q.add_argument("--silent-hours", type=int, default=24)
+        if name == "report":
+            q.add_argument("--json", action="store_true")
+            q.add_argument("--csv")
+        else:
+            q.add_argument("--group")
+    a = ap.parse_args(argv)
+    try:
+        return {"provision": cmd_provision, "report": cmd_report, "silent": cmd_silent}[a.cmd](a)
+    except (ValueError, OSError, KeyError) as e:
+        print("g5c-fleet: %s" % e, file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())
