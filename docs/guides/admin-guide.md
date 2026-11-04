@@ -167,3 +167,6 @@ SMF (a function that dies loses its connected UEs; the registrations and session
 
 ## N2 multi-homing
 `amf.ngap.addresses: [10.0.0.5, 10.0.1.5]` replaces `address` and binds the N2 SCTP endpoint to every listed address (same family, same port); a gNB that is configured with both reaches the AMF over either path. Failover between the paths is the gNB's SCTP stack's business.
+
+## Roaming: the SEPP
+`sepp` (a function of its own, `configs/sepp.yaml`) sits at the edge of the network. A local function that needs another network sends its request there with the partner's apiRoot in `3gpp-Sbi-Target-apiRoot`; the SEPP checks the policy of that partner, sends the request to the partner's SEPP over TLS and returns the answer. A request from a partner arrives with `3gpp-Sbi-Originating-Network-Id`; the SEPP identifies the partner by it (and by `sources`, when given), applies the partner's policy (`allow_services`, `deny_path_contains`, `rate_per_s` / `burst`, `supi_must_be_local`) and delivers to the local function that the target apiRoot stands for (`local_targets`). Counters: `g5c_sepp_requests_total{partner,direction,result}`. Use `sbi.tls.allowed_peers` to pin the partner SEPP's certificate. The N32-c handshake and PRINS are not implemented; the relation between two networks is configured on both sides.

@@ -10,7 +10,9 @@ What is not built or not shown, by area, so nobody has to find it out. The row i
 | Data held for a UE in power saving until it is reachable | A-14 | The transfer is failed with UE_NOT_REACHABLE instead |
 | Time-based and event-based charging, rating, offline records in a standard format, the CHF in compose / Kubernetes, the CHF state across a restart | A-02 | Volume quota control is built; the rest is design work |
 | A separate NSACF shared by several AMFs | A-09 | Slice limits are counted per function instance |
-| UE policy (URSP), SEPP / roaming, edge branching (UL-CL), multi-PLMN and SNPN, IMS / VoNR | A-04 A-06 A-10 A-13 A-17 | Each is a design of its own (wave 3, not started) |
+| UE policy (URSP), edge branching (UL-CL), multi-PLMN and SNPN, IMS / VoNR | A-04 A-10 A-13 A-17 | Each is a design of its own (not started) |
+| SEPP: N32-c handshake, PRINS, a run against another vendor SEPP, body screening, the SEPP in the cluster script, compose and systemd | A-06 A-20 | The SEPP forwards in the TLS mode with configured partners |
+| Roaming scenarios against two real clusters | B-16 | The cases run in process against stand-ins |
 
 ## Test and emulation
 | Gap | Row | Why it is open |
@@ -39,4 +41,4 @@ What is not built or not shown, by area, so nobody has to find it out. The row i
 | An Nnwdaf SBI function, learned models | A-01 | `g5c-nwdaf` serves statistics over HTTP/1.1 |
 
 ## Wave 3 rows not started
-A-04 URSP, A-06 SEPP, A-10 edge branching, A-13 multi-PLMN, A-17 IMS, A-20 roaming screening, B-16 roaming scenarios, D-01 HSM, D-03 transport protection, E-01 fast path, E-02 multi-core, E-03 shared-state HA, F-05 OAM, H-03 edge hooks. Built to a first version or partly: A-01, C-04, E-04, E-05, G-02, G-03, H-01, H-04, I-04.
+A-04 URSP, A-10 edge branching, A-13 multi-PLMN, A-17 IMS, D-01 HSM, D-03 transport protection, E-01 fast path, E-02 multi-core, E-03 shared-state HA, F-05 OAM, H-03 edge hooks. Built to a first version or partly: A-01, A-06, A-20, B-16, C-04, E-04, E-05, G-02, G-03, H-01, H-04, I-04.

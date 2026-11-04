@@ -2,4 +2,4 @@
 # usage: g5c-entrypoint <nf> <config.yaml>   (nf: udm | pcf | udr | ausf | nssf | nef | scp | bsf | upf | g5c-ctl)
 set -eu
 nf="${1:?usage: g5c-entrypoint <nf> <config.yaml>}"; shift
-case "$nf" in udm|pcf|udr|ausf|nssf|nef|scp|bsf|upf|smf|amf|nrf|g5c-ctl) exec "/usr/local/bin/$nf" "$@" ;; *) echo "unknown nf: $nf" >&2; exit 2 ;; esac
+case "$nf" in udm|pcf|udr|ausf|nssf|nef|scp|bsf|chf|sepp|upf|smf|amf|nrf|g5c-ctl) exec "/usr/local/bin/$nf" "$@" ;; *) echo "unknown nf: $nf" >&2; exit 2 ;; esac

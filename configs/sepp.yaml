@@ -1,0 +1,24 @@
+# Sample SEPP configuration (Security Edge Protection Proxy, TS 23.501 6.2.17, TLS-protected N32-f). One SEPP per network: functions send requests for another network to it (with the
+# partner's apiRoot in 3gpp-Sbi-Target-apiRoot, via their SCP or directly), and it screens them and sends them to the partner's SEPP; requests from partners are screened and delivered.
+name: sepp-1
+plmn: { mcc: '001', mnc: '01' }
+sbi: { address: 0.0.0.0, port: 7792, tls: { cert: /etc/g5c/pki/sepp.crt, key: /etc/g5c/pki/sepp.key, ca: /etc/g5c/pki/ca.crt } }
+log: { level: info, json: true }
+
+sepp:
+  public_apiroot: 'https://sepp.5gc.mnc001.mcc001.3gppnetwork.org'    # what partners see in Location headers (topology hiding)
+  local_targets:                       # what a partner's target apiRoot stands for here
+    - { apiroot: 'https://udm.5gc.mnc001.mcc001.3gppnetwork.org', uri: 'https://udm:7773' }
+    - { apiroot: 'https://ausf.5gc.mnc001.mcc001.3gppnetwork.org', uri: 'https://ausf:7774' }
+  max_body: 1048576
+  partners:
+    - name: visited-de
+      plmn: '26201'                    # the value of 3gpp-Sbi-Originating-Network-Id it sends
+      domain: 5gc.mnc001.mcc262.3gppnetwork.org   # targets under this domain are sent to it
+      uri: 'https://sepp.5gc.mnc001.mcc262.3gppnetwork.org:7792'
+      sources: [ 192.0.2.10 ]          # addresses its SEPP connects from (empty: not checked)
+      allow_services: [ nudm-sdm, nudm-uecm, nausf-auth ]
+      deny_path_contains: [ /location ]
+      rate_per_s: 200
+      burst: 400
+      supi_must_be_local: true         # it may ask about our subscribers, not about anybody else's
