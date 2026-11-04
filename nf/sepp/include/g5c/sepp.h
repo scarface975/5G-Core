@@ -2,7 +2,7 @@
 /* SEPP: the Security Edge Protection Proxy (3GPP TS 23.501 6.2.17, TS 29.573, TS 33.501 13.2), in the TLS-protected mode of N32-f.
  *
  * A request for another network arrives from a local function with the apiRoot of its target in 3gpp-Sbi-Target-apiRoot. When that apiRoot is in the domain of a partner, the SEPP screens it
- * and sends it to the partner's SEPP (over TLS when the partner's `uri` is https), naming the originating network in 3gpp-Sbi-Originating-Network-Id. A request that arrives from a partner
+ * and sends it to the partner's SEPP (over TLS when the partner's `uri` is https), with the target apiRoot in 3gpp-Sbi-Target-apiRoot (TS 29.573 C.2.1.3). A request that arrives from a partner
  * SEPP is screened against that partner's policy and delivered to the local target it names. Screening is per partner: the services it may use, paths it may not touch, a request rate,
  * and the identities it may ask about. Locations that the partner's policy does not allow, and anything addressed to a target the SEPP does not serve, are refused with ProblemDetails.
  *

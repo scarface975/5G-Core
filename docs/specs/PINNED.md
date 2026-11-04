@@ -39,6 +39,13 @@ extract text with `tools/spec/spec_text.py`, check integrity with `python tools/
 | TS 29.514 | v16.23.0 | 16 | `29514-gn0.zip` | `e1a1e45fdaf16a26` |
 | TS 29.122 | v16.19.0 | 16 | `29122-gj0.zip` | `fb32407a667b2044` |
 | TS 29.521 | v16.11.0 | 16 | `29521-gb0.zip` | `1372f0ebb474cd71` |
+| TS 24.526 | v16.8.0 | 16 | `24526-g80.zip` | `b00328efe7ccd44b` |
+| TS 29.525 | v16.12.0 | 16 | `29525-gc0.zip` | `116719df156b657c` |
+| TS 29.573 | v16.11.0 | 16 | `29573-gb0.zip` | `cd7bb6ecb526d5ee` |
+| TS 29.520 | v16.15.0 | 16 | `29520-gf0.zip` | `e2b05a03a65eef8f` |
+| TS 28.532 | v16.21.0 | 16 | `28532-gl0.zip` | `86d1354bc6c27d04` |
+| TS 28.552 | v16.20.0 | 16 | `28552-gk0.zip` | `eecca88fde8f3a2c` |
+| TS 28.545 | v16.1.0 | 16 | `28545-g10.zip` | `7485edc60b6f9dcb` |
 
 Also downloaded but only cover pages (algorithm text is licensed ETSI SAGE material): TS 35.216, 35.217, 35.222, 35.223 (v16.0.0).
 Release policy: see ADR-0003 (Release 15 baseline, Release 16 ceiling, per-feature Release 17+ policy).

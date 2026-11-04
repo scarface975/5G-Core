@@ -13,10 +13,10 @@ sepp:
   max_body: 1048576
   partners:
     - name: visited-de
-      plmn: '26201'                    # the value of 3gpp-Sbi-Originating-Network-Id it sends
+      plmn: '26201'                    # the partner network (informational)
       domain: 5gc.mnc001.mcc262.3gppnetwork.org   # targets under this domain are sent to it
       uri: 'https://sepp.5gc.mnc001.mcc262.3gppnetwork.org:7792'
-      sources: [ 192.0.2.10 ]          # addresses its SEPP connects from (empty: not checked)
+      sources: [ 192.0.2.10 ]          # the addresses its SEPP connects from: how a request from it is recognised (TLS mode has no header for it; pin its certificate with sbi.tls.allowed_peers too)
       allow_services: [ nudm-sdm, nudm-uecm, nausf-auth ]
       deny_path_contains: [ /location ]
       rate_per_s: 200

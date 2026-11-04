@@ -12,16 +12,15 @@
 #include "g5c/testkit.h"
 
 static _Atomic int udm_hits;
-static char udm_last_via[128], udm_last_peer_net[64];
+static char udm_last_via[128];
 
 static void udm_get(void *ctx, const g5c_req *req, g5c_resp *resp)
 {
     g5c_json *o = g5c_json_new_obj();
-    const char *v = g5c_req_header(req, "via"), *n = g5c_req_header(req, "3gpp-sbi-originating-network-id");
+    const char *v = g5c_req_header(req, "via");
     (void)ctx;
     atomic_fetch_add(&udm_hits, 1);
     snprintf(udm_last_via, sizeof udm_last_via, "%s", v != NULL ? v : "");
-    snprintf(udm_last_peer_net, sizeof udm_last_peer_net, "%s", n != NULL ? n : "");
     g5c_json_set_str(o, "supi", g5c_req_param(req, "supi"));
     g5c_resp_json(resp, 200, o);
     g5c_json_free(o);
@@ -92,7 +91,7 @@ static int ask(g5c_client *cl, const char *sepp_url, const char *method, const c
 
 int main(void)
 {
-    node_t home, vis;
+    node_t home, home2, vis;
     g5c_server_cfg sc = {"127.0.0.1", 0, NULL};
     g5c_router *udm = g5c_router_new();
     g5c_server *udm_srv;
@@ -117,6 +116,9 @@ int main(void)
              "    - { name: other, plmn: '23401', domain: '5gc.mnc001.mcc234.3gppnetwork.org', uri: 'http://127.0.0.1:1', sources: [ '203.0.113.9' ], allow_services: [ '*' ] }\n",
              HOME_API, udm_url);
     start_node(&home, "sepp-home", "001", "01", cfg);
+    snprintf(cfg, sizeof cfg, "sepp:\n  local_targets: [ { apiroot: '%s', uri: '%s' } ]\n  partners:\n    - { name: elsewhere, plmn: '26201', domain: '5gc.mnc001.mcc262.3gppnetwork.org', uri: 'http://127.0.0.1:1', sources: [ '203.0.113.9' ], allow_services: [ '*' ] }\n",
+             HOME_API, udm_url);
+    start_node(&home2, "sepp-home2", "001", "01", cfg);
     snprintf(cfg, sizeof cfg,
              "sepp:\n  partners:\n    - { name: home, plmn: '00101', domain: '5gc.mnc001.mcc001.3gppnetwork.org', uri: '%s', allow_services: [ nudm-sdm, nudm-uecm ] }\n", home.url);
     start_node(&vis, "sepp-visited", "262", "01", cfg);
@@ -129,7 +131,7 @@ int main(void)
     TK_ASSERT(strcmp(g5c_json_get_str(j, "supi"), "imsi-001010000000001") == 0);
     g5c_json_free(j);
     g5c_resp_free(&r);
-    TK_ASSERT(strstr(udm_last_via, "SEPP-sepp-home") != NULL && strstr(udm_last_via, "SEPP-sepp-visited") != NULL && strcmp(udm_last_peer_net, "") == 0); /* the network id stays between the SEPPs; both are in the Via */
+    TK_ASSERT(strstr(udm_last_via, "SEPP-sepp-home") != NULL && strstr(udm_last_via, "SEPP-sepp-visited") != NULL); /* both SEPPs are in the Via chain */
 
     /* 2. a service the home network does not open to the visited one */
     ask(cl, vis.url, "GET", HOME_API, "/nausf-auth/v1/ue-authentications", NULL, NULL, &r);
@@ -150,22 +152,16 @@ int main(void)
     g5c_json_free(j);
     g5c_resp_free(&r);
 
-    /* 5. the home SEPP reached directly, as a partner it does not know, and from a wrong address */
-    ask(cl, home.url, "GET", HOME_API, SUPI_HOME, "3gpp-sbi-originating-network-id", "99999", &r);
-    TK_ASSERT(r.status == 403);
-    g5c_resp_free(&r);
-    ask(cl, home.url, "GET", HOME_API, SUPI_HOME, NULL, NULL, &r);
-    TK_ASSERT(r.status == 403); /* no network id at all */
-    g5c_resp_free(&r);
-    ask(cl, home.url, "GET", HOME_API, SUPI_HOME, "3gpp-sbi-originating-network-id", "23401", &r);
+    /* 5. a request that comes from an address no partner has (a third SEPP, home2, whose only partner connects from another address), and a partner reached for a target it does not know */
+    ask(cl, home2.url, "GET", HOME_API, SUPI_HOME, NULL, NULL, &r);
     j = g5c_resp_parse_json(&r);
-    TK_ASSERT(r.status == 403 && strstr(g5c_json_get_str(j, "detail"), "address") != NULL); /* the second partner is configured for another source address */
+    TK_ASSERT(r.status == 403 && strcmp(g5c_json_get_str(j, "cause"), "UNKNOWN_PARTNER") == 0);
     g5c_json_free(j);
     g5c_resp_free(&r);
     TK_ASSERT(udm_hits == 1);
 
     /* 6. a target the home SEPP does not deliver to */
-    ask(cl, home.url, "GET", "http://smf.5gc.mnc001.mcc001.3gppnetwork.org", "/nsmf-pdusession/v1/sm-contexts", "3gpp-sbi-originating-network-id", "26201", &r);
+    ask(cl, home.url, "GET", "http://smf.5gc.mnc001.mcc001.3gppnetwork.org", "/nsmf-pdusession/v1/sm-contexts", NULL, NULL, &r);
     TK_ASSERT(r.status == 403);
     g5c_resp_free(&r);
 
@@ -222,14 +218,18 @@ int main(void)
     g5c_client_free(cl);
     g5c_server_stop(vis.srv);
     g5c_server_stop(home.srv);
+    g5c_server_stop(home2.srv);
     g5c_server_stop(udm_srv);
     g5c_router_free(udm);
     g5c_router_free(vis.rt);
     g5c_router_free(home.rt);
+    g5c_router_free(home2.rt);
     sepp_destroy(vis.s);
     sepp_destroy(home.s);
+    sepp_destroy(home2.s);
     g5c_nf_free(vis.nf);
     g5c_nf_free(home.nf);
+    g5c_nf_free(home2.nf);
     printf("sepp: OK\n");
     return 0;
 }

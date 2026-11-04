@@ -8,10 +8,10 @@
  *     max_body: 1048576        timeout_ms: 5000
  *     partners:
  *       - name: visited-a
- *         plmn: '26201'                        MCC and MNC (the value of 3gpp-Sbi-Originating-Network-Id it sends)
+ *         plmn: '26201'                        MCC and MNC of the partner network (informational: the domain and the sources decide)
  *         domain: 5gc.mnc001.mcc262.3gppnetwork.org   targets under this domain are sent to this partner
  *         uri: https://sepp.partner.example:7792      its SEPP
- *         sources: [ 192.0.2.10 ]              addresses its SEPP connects from (empty: not checked)
+ *         sources: [ 192.0.2.10 ]              addresses its SEPP connects from: this is how a request from it is recognised (use sbi.tls.allowed_peers to pin its certificate too)
  *         allow_services: [ nudm-sdm, nausf-auth ]   the services it may use here ('*' for all); the first path segment of the request
  *         deny_path_contains: [ /location ]    paths it may not touch even within an allowed service
  *         rate_per_s: 100   burst: 200         token bucket for the requests it sends here
@@ -27,7 +27,6 @@
 #include "g5c/sepp.h"
 
 #define H_TARGET "3gpp-sbi-target-apiroot"
-#define H_NETID "3gpp-sbi-originating-network-id"
 #define MAX_PARTNERS 32
 #define MAX_LIST 16
 
@@ -206,6 +205,14 @@ sepp *sepp_from_config(const g5c_json *root, g5c_nf *nf, char *err, size_t errca
         (void)g5c_json_get_bool(e, "supi_must_be_local", &p->supi_local);
         p->tokens = p->burst;
     }
+    for (size_t i = 0; i < s->npart; i++)
+        for (size_t k = 0; k < s->part[i].nsources; k++)
+            for (size_t j = 0; j < i; j++)
+                for (size_t m = 0; m < s->part[j].nsources; m++)
+                    if (strcmp(s->part[i].sources[k], s->part[j].sources[m]) == 0) {
+                        snprintf(err, errcap, "invalid config: partners `%s` and `%s` both list the source address %s: a request could not be told apart", s->part[j].name, s->part[i].name, s->part[i].sources[k]);
+                        goto bad;
+                    }
     return s;
 bad:
     sepp_destroy(s);
@@ -293,7 +300,7 @@ static bool bucket_take(partner_t *p)
 static bool hop_by_hop(const char *n)
 {
     static const char *const l[] = {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailer", "transfer-encoding", "upgrade", "host", "content-length",
-                                    "content-type", H_TARGET, H_NETID, "via", NULL};
+                                    "content-type", H_TARGET, "via", NULL};
     for (size_t i = 0; l[i] != NULL; i++)
         if (strcmp(n, l[i]) == 0)
             return true;
@@ -346,7 +353,7 @@ static void relay(sepp *s, g5c_resp *resp, const g5c_resp *r, bool hide, const c
 static void sepp_proxy(void *ctx, const g5c_req *req, g5c_resp *resp)
 {
     sepp *s = ctx;
-    const char *target = g5c_req_header(req, H_TARGET), *netid = g5c_req_header(req, H_NETID), *hs;
+    const char *target = g5c_req_header(req, H_TARGET), *hs;
     partner_t *out = NULL, *in = NULL;
     char service[64], *url = NULL, *q = NULL;
     const char *via_in;
@@ -393,27 +400,17 @@ static void sepp_proxy(void *ctx, const g5c_req *req, g5c_resp *resp)
     } else { /* a partner SEPP asks a local function */
         bool local_ok = false;
         dir = "inbound";
-        if (netid == NULL) {
-            refuse(s, resp, 403, "UNKNOWN_PARTNER", "3gpp-Sbi-Originating-Network-Id is required", "-", dir, "unknown_partner");
-            return;
-        }
+        /* TS 29.573 5.3.3: with TLS between the SEPPs the peer is known by the connection it comes on (the certificate, pinned with sbi.tls.allowed_peers, and the address); there is no header
+         * that names the originating network. The partner is the one whose `sources` hold the address the request came from. */
         for (size_t i = 0; i < s->npart && in == NULL; i++)
-            if (strcmp(s->part[i].plmn, netid) == 0)
-                in = &s->part[i];
+            for (size_t k = 0; k < s->part[i].nsources && in == NULL; k++)
+                if (strcmp(s->part[i].sources[k], req->peer) == 0)
+                    in = &s->part[i];
         if (in == NULL) {
-            refuse(s, resp, 403, "UNKNOWN_PARTNER", "no roaming relation with that network", "-", dir, "unknown_partner");
+            refuse(s, resp, 403, "UNKNOWN_PARTNER", "no roaming relation with the address the request comes from", "-", dir, "unknown_partner");
             return;
         }
         pname = in->name;
-        if (in->nsources > 0) {
-            bool ok = false;
-            for (size_t i = 0; i < in->nsources && !ok; i++)
-                ok = strcmp(in->sources[i], req->peer) == 0;
-            if (!ok) {
-                refuse(s, resp, 403, "UNKNOWN_PARTNER", "the request does not come from an address of that partner", pname, dir, "spoofed_source");
-                return;
-            }
-        }
         for (size_t i = 0; i < s->nlocal && !local_ok; i++) {
             size_t l = strlen(s->local[i].apiroot);
             local_ok = strncasecmp(target, s->local[i].apiroot, l) == 0 && (target[l] == 0 || target[l] == '/');
@@ -471,9 +468,8 @@ static void sepp_proxy(void *ctx, const g5c_req *req, g5c_resp *resp)
     for (size_t i = 0; i < req->nheaders; i++)
         if (!hop_by_hop(req->headers[i].name))
             hv[nh++] = (g5c_kv){req->headers[i].name, req->headers[i].value};
-    if (out != NULL) { /* to a partner SEPP: name the target and this network */
+    if (out != NULL) { /* to a partner SEPP: the target apiRoot goes in the header (TS 29.573 C.2.1.3), the request URI is the partner SEPP's */
         hv[nh++] = (g5c_kv){H_TARGET, target};
-        hv[nh++] = (g5c_kv){H_NETID, s->local_plmn};
     }
     via_out = via_in != NULL ? g5c_xasprintf("%s, %s", via_in, s->name) : g5c_xstrdup(s->name); /* every SEPP the request passed */
     hv[nh++] = (g5c_kv){"via", via_out};
