@@ -19,7 +19,7 @@ Newest first. Versions follow `MAJOR.MINOR.PATCH[-rcN]` (docs/guides/release-pro
 - Kubernetes manifests generated from the compose model (`deploy/k8s/base`, `tools/gen/gen_k8s.py`), cross-checked, never applied; the compose SMF example now names the AMF's real port.
 - `tools/cli/g5c-compat`: the differential tests against Open5GS as a compatibility report (129 compared cases; every difference with its reason).
 - `tools/cli/g5c-atlas-live`: the Atlas fed by a running core (functions, release, the NRF's registry, KPIs since start and over the last minute).
-- The charging function `chf` (Nchf_ConvergedCharging: quota grants against balances, final unit indication, denial, charging data records) and the SMF as its trigger (`smf.chf`); `G5C_CHF=1` in the cluster.
+- The charging function `chf` (Nchf_ConvergedCharging: quota grants against balances, final unit indication, denial, charging data records) and the SMF as its trigger (`smf.chf`): the UPF reports each used-up quota, the SMF renews it at the CHF and re-arms the rule, and a session with no balance left is released; `G5C_CHF=1` in the cluster.
 - Slice admission control (`amf.slice_limits`, `smf.slice_limits`) and power saving (`amf.power_saving`: MICO, extended DRX, T3324; a UE that cannot be reached is not paged).
 - Mobility on the real daemons (Xn path switches, `G5C_LOAD_MOBILITY`, `scenarios/mobility-xn.yaml`) and one population from many load processes (`tools/cli/g5c-fanout`).
 - `tools/cli/g5c-tester` (the load generator against another core, and one bundle), the radio lab kit `deploy/radio-kit`, and the interoperability register `docs/interop`.

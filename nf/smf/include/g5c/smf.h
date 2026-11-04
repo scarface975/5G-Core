@@ -300,10 +300,11 @@ typedef struct {
     uint32_t rs_teid; /* IPv6: the TEID the UPF puts on router solicitations it forwards to us */
     const smf_policy *pol;
     bool want_usage; /* a usage reporting rule (URR 1 */
+    uint64_t charging_volume; /* online charging: a usage reporting rule (URR 3) that reports when this much volume has passed (the quota the CHF granted); 0: none */
 } smf_n4_est;
 
 /* Fixed ids: default PDRs 1 (uplink) and 2 (downlink), FAR 1 = uplink, FAR 2 = downlink, QER 1 = session AMBR, BAR 1. Flows */
-enum { SMF_URR_SESSION = 1, SMF_URR_MONITOR = 2, SMF_FAR_UL = 1, SMF_FAR_DL = 2, SMF_FAR_CP = 3, SMF_QER_SESSION = 1, SMF_BAR = 1, SMF_PDR_UL_DEFAULT = 1, SMF_PDR_DL_DEFAULT = 2, SMF_PDR_CP = 3,
+enum { SMF_URR_SESSION = 1, SMF_URR_MONITOR = 2, SMF_URR_CHARGING = 3, SMF_FAR_UL = 1, SMF_FAR_DL = 2, SMF_FAR_CP = 3, SMF_QER_SESSION = 1, SMF_BAR = 1, SMF_PDR_UL_DEFAULT = 1, SMF_PDR_DL_DEFAULT = 2, SMF_PDR_CP = 3,
        SMF_PDR_RS = 4 };
 int smf_n4_build_est(const smf_n4_est *in, uint8_t *out, size_t cap, size_t *len);
 
@@ -321,6 +322,7 @@ int smf_n4_parse_usage_for(const uint8_t *body, size_t blen, uint32_t urr_id, sm
 int smf_n4_build_mod_activate(const smf_an_tunnel *t, const char *dnn, uint8_t *out, size_t cap, size_t *len);
 int smf_n4_build_mod_deactivate(uint8_t *out, size_t cap, size_t *len);
 /* The N4 modification that takes a session from policy `oldp` to `newp` (ids already assigned) */
+int smf_n4_build_urr_threshold(uint32_t urr_id, uint64_t volume, uint8_t *out, size_t cap, size_t *len); /* Update URR with a new volume threshold */
 int smf_n4_build_policy_update(const smf_n4_est *ctx, const smf_policy *oldp, const smf_policy *newp, uint8_t *out, size_t cap, size_t *len, bool *changed);
 
 typedef struct {
@@ -384,6 +386,8 @@ typedef struct smf_sess {
     bool paging;        /* a downlink-data notification is being turned into a page */
     char *pcf_resource; /* SM policy association URI */
     char *chf_resource; /* charging data resource at the CHF; NULL without online charging */
+    uint64_t chf_granted; /* the quota in force, octets (the threshold of URR 3) */
+    bool chf_final;       /* the quota in force is the last one: when it is used up the session is released */
     char *pcf_notif;
     char *amf_status_uri;
     char *amf_n1n2_url;

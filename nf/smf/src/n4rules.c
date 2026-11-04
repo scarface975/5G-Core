@@ -83,6 +83,8 @@ static int create_pdr_far(uint8_t *out, size_t cap, size_t *pos, const smf_n4_es
         PUT(pfcp_put_u32(out, cap, pos, PFCP_IE_URR_ID, SMF_URR_SESSION));
     if (in->pol != NULL && in->pol->um_volume != 0 && id != SMF_PDR_RS)
         PUT(pfcp_put_u32(out, cap, pos, PFCP_IE_URR_ID, SMF_URR_MONITOR));
+    if (in->charging_volume != 0 && id != SMF_PDR_RS)
+        PUT(pfcp_put_u32(out, cap, pos, PFCP_IE_URR_ID, SMF_URR_CHARGING));
     for (size_t i = 0; i < nq; i++)
         PUT(pfcp_put_u32(out, cap, pos, PFCP_IE_QER_ID, qers[i]));
     pfcp_group_end(out, pos, m);
@@ -253,6 +255,19 @@ int smf_n4_build_est(const smf_n4_est *in, uint8_t *out, size_t cap, size_t *len
         PUT(pfcp_group_begin(out, cap, &pos, PFCP_IE_CREATE_URR, &m));
         PUT(pfcp_put_u32(out, cap, &pos, PFCP_IE_URR_ID, SMF_URR_MONITOR));
         PUT(pfcp_put_u8(out, cap, &pos, PFCP_IE_MEASUREMENT_METHOD, 0x02)); /* VOLUM */
+        PUT(pfcp_trigger_put(out, cap, &pos, PFCP_IE_REPORTING_TRIGGERS, PFCP_URT_VOLTH));
+        th[0] = 0x01; /* TOVOL */
+        for (int i = 0; i < 8; i++)
+            th[1 + i] = (uint8_t)(v >> (56 - 8 * i));
+        PUT(pfcp_put_ie(out, cap, &pos, PFCP_IE_VOLUME_THRESHOLD, th, sizeof th));
+        pfcp_group_end(out, &pos, m);
+    }
+    if (in->charging_volume != 0) { /* online charging: reports when the granted quota has passed; the volume counter starts again after each report */
+        uint8_t th[9];
+        uint64_t v = in->charging_volume;
+        PUT(pfcp_group_begin(out, cap, &pos, PFCP_IE_CREATE_URR, &m));
+        PUT(pfcp_put_u32(out, cap, &pos, PFCP_IE_URR_ID, SMF_URR_CHARGING));
+        PUT(pfcp_put_u8(out, cap, &pos, PFCP_IE_MEASUREMENT_METHOD, 0x03)); /* DURAT, VOLUM */
         PUT(pfcp_trigger_put(out, cap, &pos, PFCP_IE_REPORTING_TRIGGERS, PFCP_URT_VOLTH));
         th[0] = 0x01; /* TOVOL */
         for (int i = 0; i < 8; i++)
@@ -481,5 +496,21 @@ int smf_n4_parse_est_rsp(const smf_n4_msg *m, smf_n4_est_rsp *o)
         }
     }
     o->ok = o->cause == PFCP_CAUSE_ACCEPTED && o->up_seid != 0 && o->has_fteid;
+    return 0;
+}
+
+/* Session Modification body: Update URR (7.5.4.4) with a new volume threshold, the way the charging rule is re-armed after a new quota */
+int smf_n4_build_urr_threshold(uint32_t urr_id, uint64_t volume, uint8_t *out, size_t cap, size_t *len)
+{
+    size_t pos = 0, m;
+    uint8_t th[9];
+    th[0] = 0x01; /* TOVOL */
+    for (int i = 0; i < 8; i++)
+        th[1 + i] = (uint8_t)(volume >> (56 - 8 * i));
+    if (pfcp_group_begin(out, cap, &pos, PFCP_IE_UPDATE_URR, &m) != 0 || pfcp_put_u32(out, cap, &pos, PFCP_IE_URR_ID, urr_id) != 0 ||
+        pfcp_put_ie(out, cap, &pos, PFCP_IE_VOLUME_THRESHOLD, th, sizeof th) != 0)
+        return -1;
+    pfcp_group_end(out, &pos, m);
+    *len = pos;
     return 0;
 }

@@ -126,7 +126,7 @@ log: { level: $LOGLEVEL, json: $LOGJSON }" common
   [ "$SCPON" = 1 ] && common="$common_noscp
 scp_client: { uri: 'http://$A_SCP:7785' }"
   local chf_peer=""
-  [ "$CHFON" = 1 ] && chf_peer="  chf: { uri: 'http://$A_CHF:7787' }"
+  [ "$CHFON" = 1 ] && chf_peer="  chf: { uri: 'http://$A_CHF:7787', quota_bytes: ${G5C_CHF_QUOTA:-10485760} }"
   local bsf_peer="bsf: { enabled: false }"
   [ "$BSFON" = 1 ] && bsf_peer="bsf: { uri: 'http://$A_BSF:7786' }"
   [ "$OAUTH2ON" = 1 ] && [ "$DISCOVERY" = 1 ] && common="$common
@@ -179,6 +179,7 @@ $nrfline
 sbi: { address: $A_CHF, port: 7787 }
 chf:
   cdr_file: $RUN/state/chf-cdr.jsonl
+  max_grant_bytes: ${G5C_CHF_GRANT:-10485760}
 ${G5C_CHF_EXTRA:-}
 EOF
   cat > "$RUN/conf/nrf.yaml" <<EOF

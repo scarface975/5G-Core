@@ -149,10 +149,13 @@ static void read_units(const g5c_json *body, unit_req *u)
     }
 }
 
-static void debit(acct *a, uint64_t used)
+/* What the balance gives up for the volume reported: never more than it holds (the rest was used past the end of the credit and is not charged). */
+static void debit(chf *c, acct *a, uint64_t used)
 {
+    uint64_t d = a->balance == UNLIMITED ? used : (used < a->balance ? used : a->balance);
     if (a->balance != UNLIMITED)
-        a->balance -= used < a->balance ? used : a->balance;
+        a->balance -= d;
+    g5c_counter_add(g5c_counter_get(c->metrics, "g5c_chf_charged_bytes_total", "Volume charged to a balance (what it gave up).", NULL, 0), d);
 }
 
 static void release_reservation(csess *s)
@@ -324,7 +327,7 @@ static void h_update(void *ctx, const g5c_req *req, g5c_resp *resp)
         return;
     }
     release_reservation(s);
-    debit(s->ac, u.used);
+    debit(c, s->ac, u.used);
     s->used += u.used;
     s->ul += u.ul;
     s->dl += u.dl;
@@ -363,13 +366,12 @@ static void h_release(void *ctx, const g5c_req *req, g5c_resp *resp)
         return;
     }
     release_reservation(s);
-    debit(s->ac, u.used);
+    debit(c, s->ac, u.used);
     s->used += u.used;
     s->ul += u.ul;
     s->dl += u.dl;
     s->time_s += u.time_s;
     write_cdr(c, s, "release");
-    g5c_counter_add(g5c_counter_get(c->metrics, "g5c_chf_charged_bytes_total", "Volume charged (reported as used).", NULL, 0), u.used);
     drop(c, s);
     gauge(c);
     pthread_mutex_unlock(&c->mu);

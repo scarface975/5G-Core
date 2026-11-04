@@ -368,7 +368,7 @@ char *smf_nrf_amf_root(smf *s, const char *id)
 /* ---- CHF: Nchf_ConvergedCharging (TS 32.291), the SMF as the charging trigger function ---- */
 
 /* The charging data request of the session; the usage (NULL: none) of a release. */
-static g5c_json *chf_request(const smf *s, const smf_sess *ss, const smf_usage *u, uint32_t seq)
+static g5c_json *chf_request(const smf *s, const smf_sess *ss, const smf_usage *u, uint32_t seq, bool ask)
 {
     g5c_json *b = g5c_json_new_obj(), *mu = g5c_json_set(b, "multipleUnitUsage", g5c_json_new_arr()), *e = g5c_json_push(mu, g5c_json_new_obj());
     g5c_json *pi, *nf = g5c_json_set(b, "nfConsumerIdentification", g5c_json_new_obj());
@@ -378,9 +378,9 @@ static g5c_json *chf_request(const smf *s, const smf_sess *ss, const smf_usage *
     g5c_json_set_int(b, "invocationSequenceNumber", seq);
     g5c_json_set_str(b, "subscriberIdentifier", ss->supi);
     g5c_json_set_int(e, "ratingGroup", s->chf_rating_group);
-    if (u == NULL) {
+    if (ask)
         g5c_json_set_int(g5c_json_set(e, "requestedUnit", g5c_json_new_obj()), "totalVolume", (int64_t)s->chf_quota);
-    } else if (u->have) {
+    if (u != NULL && u->have) {
         g5c_json *uc = g5c_json_push(g5c_json_set(e, "usedUnitContainer", g5c_json_new_arr()), g5c_json_new_obj());
         g5c_json_set_int(uc, "totalVolume", (int64_t)u->total);
         g5c_json_set_int(uc, "uplinkVolume", (int64_t)u->ul);
@@ -398,19 +398,32 @@ static g5c_json *chf_request(const smf *s, const smf_sess *ss, const smf_usage *
     return b;
 }
 
-/* Opens the charging session and asks for the first quota. 0: granted (resource set), 1: the CHF refuses (no credit, unknown subscriber), -1: no answer. */
-int smf_chf_create(smf *s, const smf_sess *ss, char **resource)
+/* The granted unit of a charging answer: the volume (0: none) and whether it is the last quota; `denied` when the result code is not SUCCESS */
+static void chf_grant_of(const g5c_json *rsp, uint64_t *granted, bool *final, bool *denied)
 {
-    g5c_json *b = chf_request(s, ss, NULL, 0), *rsp;
+    const g5c_json *mi = g5c_json_at(g5c_json_get(rsp, "multipleUnitInformation"), 0);
+    const char *res = g5c_json_get_str(mi, "resultCode");
+    int64_t v = 0;
+    *granted = 0;
+    *final = g5c_json_get(mi, "finalUnitIndication") != NULL;
+    *denied = res != NULL && strcmp(res, "SUCCESS") != 0;
+    if (!*denied && g5c_json_get_int(g5c_json_get(mi, "grantedUnit"), "totalVolume", &v) && v > 0)
+        *granted = (uint64_t)v;
+}
+
+/* Opens the charging session and asks for the first quota. 0: granted (resource, granted, final set), 1: the CHF refuses (no credit, unknown subscriber), -1: no answer. */
+int smf_chf_create(smf *s, const smf_sess *ss, char **resource, uint64_t *granted, bool *final)
+{
+    g5c_json *b = chf_request(s, ss, NULL, 0, true), *rsp;
     char *url = g5c_xasprintf("%s/nchf-convergedcharging/v3/chargingdata", s->chf), err[160];
     g5c_resp r;
     int rc = -1;
     if (g5c_client_send_json(s->client, "POST", url, b, &r, err, sizeof err) == 0) {
         const char *loc = g5c_resp_header_get(&r, "location");
         if (r.status == 201 && loc != NULL && (rsp = g5c_resp_parse_json(&r)) != NULL) {
-            const g5c_json *mi = g5c_json_at(g5c_json_get(rsp, "multipleUnitInformation"), 0);
-            const char *res = g5c_json_get_str(mi, "resultCode");
-            rc = res == NULL || strcmp(res, "SUCCESS") == 0 ? 0 : 1;
+            bool denied;
+            chf_grant_of(rsp, granted, final, &denied);
+            rc = denied || *granted == 0 ? 1 : 0;
             if (rc == 0)
                 *resource = g5c_xstrdup(loc);
             g5c_json_free(rsp);
@@ -428,10 +441,36 @@ int smf_chf_create(smf *s, const smf_sess *ss, char **resource)
     return rc;
 }
 
+/* Reports the volume used under the quota in force and asks for the next. 0: a new quota (granted, final), 1: no quota (the CHF denies, or the balance is gone), -1: no answer. */
+int smf_chf_update(smf *s, const smf_sess *ss, const smf_usage *u, uint64_t *granted, bool *final)
+{
+    g5c_json *b = chf_request(s, ss, u, 1, true), *rsp;
+    char *url = g5c_xasprintf("%s/update", ss->chf_resource), err[160];
+    g5c_resp r;
+    int rc = -1;
+    if (g5c_client_send_json(s->client, "POST", url, b, &r, err, sizeof err) == 0) {
+        if (r.status == 200 && (rsp = g5c_resp_parse_json(&r)) != NULL) {
+            bool denied;
+            chf_grant_of(rsp, granted, final, &denied);
+            rc = denied || *granted == 0 ? 1 : 0;
+            g5c_json_free(rsp);
+        } else if (r.status == 404) {
+            rc = 1;
+        } else {
+            G5C_LOGE("g5c_smf", "CHF charging update answered %d", r.status);
+        }
+        g5c_resp_free(&r);
+    } else {
+        G5C_LOGE("g5c_smf", "CHF charging update: %s", err);
+    }
+    g5c_json_free(b);
+    free(url);
+    return rc;
+}
 /* Closes the charging session with what the UPF measured. */
 void smf_chf_release(smf *s, const smf_sess *ss, const smf_usage *u)
 {
-    g5c_json *b = chf_request(s, ss, u, 1);
+    g5c_json *b = chf_request(s, ss, u, 1, false);
     char *url = g5c_xasprintf("%s/release", ss->chf_resource), err[160];
     g5c_resp r;
     if (g5c_client_send_json(s->client, "POST", url, b, &r, err, sizeof err) == 0) {

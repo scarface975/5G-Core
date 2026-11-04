@@ -1,0 +1,9 @@
+# The balance runs out under traffic (run with G5C_CHF=1 G5C_CHF_QUOTA=50000 G5C_CHF_GRANT=50000 G5C_CHF_EXTRA='  default_balance_bytes: 120000'): the CHF grants the last
+# quota with the final unit indication and then nothing, and the SMF releases the PDU session. Nobody is charged for more than the balance (120000 each, two UEs) (traffic that still arrives before the UE confirms the release is not charged).
+name: no balance, the session is released
+steps:
+  - load: {ues: 2, gnbs: 2, traffic_mbps: 2, traffic_ms: 1500}
+    expect: fail
+  - assert: {metric: "smf:g5c_smf_charging_updates_total{result=denied}", ">=": 1}
+  - assert: {metric: "chf:g5c_chf_denied_total", ">=": 1}
+  - assert: {metric: "chf:g5c_chf_charged_bytes_total", "<=": 240000}

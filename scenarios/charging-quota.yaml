@@ -1,0 +1,9 @@
+# Quota control while the session is up (run with G5C_CHF=1 G5C_CHF_QUOTA=50000 G5C_CHF_GRANT=50000): each UE sends about 375 kB, so the UPF reports every
+# 50 kB, the SMF reports the volume to the CHF and arms the next quota at the UPF. The CHF has charged what the UPF measured, to within the last quota of each session.
+name: quota is renewed while traffic flows
+steps:
+  - load: {ues: 4, gnbs: 2, traffic_mbps: 2, traffic_ms: 1500}
+  - assert: {metric: "chf:g5c_chf_requests_total{operation=update,result=ok}", ">=": 20}
+  - assert: {metric: "smf:g5c_smf_charging_updates_total{result=granted}", ">=": 20}
+  - assert: {metric: "chf:g5c_chf_charged_bytes_total", ">=": 1000000}
+  - assert: {metric: "smf:g5c_smf_pdu_sessions_active", "==": 0}

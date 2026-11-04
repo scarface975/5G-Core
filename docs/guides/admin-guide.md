@@ -154,5 +154,5 @@ sessions are on the PCF and are not in the console yet.
 counts it (`g5c_sbi_requests_total{status}`), which the alert rules watch.
 
 ## What this release does not do
-Roaming (SEPP, home-routed sessions), non-3GPP access, EAP-TLS, rating and offline charging in a standard format (online charging with quota grants exists, the SMF does not yet send updates during a session), slice-specific authentication (NSSAA), RedCap, lawful intercept (a design is in `docs/security/lawful-intercept-design.md`), shared-state high availability of the AMF and
+Roaming (SEPP, home-routed sessions), non-3GPP access, EAP-TLS, rating and offline charging in a standard format (online charging with quota grants and renewal during the session exists, volume only), slice-specific authentication (NSSAA), RedCap, lawful intercept (a design is in `docs/security/lawful-intercept-design.md`), shared-state high availability of the AMF and
 SMF (a function that dies loses its connected UEs; the registrations and sessions come back from the state file), multi-PLMN.

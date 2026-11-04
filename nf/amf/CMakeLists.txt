@@ -125,6 +125,14 @@ if(G5C_BASH AND UNIX)
            ${G5C_BASH} ${CMAKE_SOURCE_DIR}/deploy/run/g5c-cluster.sh ns scenario ${CMAKE_SOURCE_DIR}/scenarios/charging-denied.yaml)
   set_tests_properties(cluster_charging_denied PROPERTIES ENVIRONMENT "${_direct_env};G5C_RUN=${CMAKE_BINARY_DIR}/cluster-run-charging-denied" TIMEOUT 300
                        LABELS "integration;cluster" SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
+  add_test(NAME cluster_charging_quota COMMAND /usr/bin/env "G5C_CHF=1" "G5C_CHF_QUOTA=50000" "G5C_CHF_GRANT=50000"
+           ${G5C_BASH} ${CMAKE_SOURCE_DIR}/deploy/run/g5c-cluster.sh ns scenario ${CMAKE_SOURCE_DIR}/scenarios/charging-quota.yaml)
+  set_tests_properties(cluster_charging_quota PROPERTIES ENVIRONMENT "${_direct_env};G5C_RUN=${CMAKE_BINARY_DIR}/cluster-run-charging-quota" TIMEOUT 300
+                       LABELS "integration;cluster" SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
+  add_test(NAME cluster_charging_exhausted COMMAND /usr/bin/env "G5C_CHF=1" "G5C_CHF_QUOTA=50000" "G5C_CHF_EXTRA=  default_balance_bytes: 120000\n  max_grant_bytes: 50000"
+           ${G5C_BASH} ${CMAKE_SOURCE_DIR}/deploy/run/g5c-cluster.sh ns scenario ${CMAKE_SOURCE_DIR}/scenarios/charging-exhausted.yaml)
+  set_tests_properties(cluster_charging_exhausted PROPERTIES ENVIRONMENT "${_direct_env};G5C_RUN=${CMAKE_BINARY_DIR}/cluster-run-charging-exhausted" TIMEOUT 300
+                       LABELS "integration;cluster" SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
   # user plane (backlog B-02): the PCF gives every session 1 Mbit/s, each UE offers 4, the UPF must hold them to about 1 and count what it drops
   add_test(NAME cluster_traffic_ambr COMMAND /usr/bin/env "G5C_AMBR_UL=1 Mbps" "G5C_AMBR_DL=1 Mbps"
            ${G5C_BASH} ${CMAKE_SOURCE_DIR}/deploy/run/g5c-cluster.sh ns scenario ${CMAKE_SOURCE_DIR}/scenarios/traffic-ambr.yaml)

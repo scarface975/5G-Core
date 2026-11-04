@@ -331,21 +331,25 @@ smf_dnn_cfg *smf_find_dnn(smf *s, const char *dnn)
 static void sess_teardown(smf *s, smf_sess *ss, const char *why)
 {
     smf_n4_msg r;
-    smf_usage usage;
+    smf_usage usage, cusage;
     memset(&usage, 0, sizeof usage);
+    memset(&cusage, 0, sizeof cusage);
     G5C_LOGI("g5c_smf", "releasing PDU session %u of %s (%s)", ss->psi, ss->supi, why);
     if (ss->upf != NULL && ss->up_seid != 0) {
         if (smf_n4_call(s->n4, ss->upf, PFCP_SESSION_DELETION_REQUEST, true, ss->up_seid, NULL, 0, &r) != 0)
             G5C_LOGW("g5c_smf", "N4 session deletion for %s/%u got no answer; the UPF will clean up on its own", ss->supi, ss->psi);
         else if (smf_n4_cause_of(&r) != PFCP_CAUSE_ACCEPTED)
             G5C_LOGW("g5c_smf", "N4 session deletion for %s/%u refused with cause %u", ss->supi, ss->psi, smf_n4_cause_of(&r));
-        else
+        else {
             (void)smf_n4_parse_usage(&r, &usage);
+            if (ss->chf_resource != NULL) /* what is left under the last quota: the earlier quotas were reported as they were used up */
+                (void)smf_n4_parse_usage_for(r.body, r.blen, SMF_URR_CHARGING, &cusage);
+        }
     }
     if (ss->up_seid != 0) /* a session that never reached the UPF has no record */
         smf_cdr_write(s, ss, &usage, why);
     if (ss->chf_resource != NULL)
-        smf_chf_release(s, ss, &usage);
+        smf_chf_release(s, ss, &cusage);
     if (ss->pcf_resource != NULL)
         smf_pcf_delete(s, ss->pcf_resource);
     if (ss->udm_registered)
@@ -801,7 +805,7 @@ static void create_ctx(void *ctx, const g5c_req *req, g5c_resp *resp)
                rc == 403 ? SMF_5GSM_USER_AUTH_FAILED : SMF_5GSM_NETWORK_FAILURE, "failed");
     ss->pcf_resource = resource;
     if (s->chf != NULL) { /* online charging: the CHF grants the first quota or the session is not set up (when charging is required) */
-        int cr = smf_chf_create(s, ss, &ss->chf_resource);
+        int cr = smf_chf_create(s, ss, &ss->chf_resource, &ss->chf_granted, &ss->chf_final);
         g5c_counter_inc(g5c_counter_get(s->metrics, "g5c_smf_charging_total", "Nchf_ConvergedCharging session openings by result.",
                                         &(g5c_label){"result", cr == 0 ? "granted" : cr > 0 ? "refused" : "failed"}, 1));
         if (cr != 0 && s->chf_required)
@@ -841,6 +845,7 @@ static void create_ctx(void *ctx, const g5c_req *req, g5c_resp *resp)
     smf_n4_local_addr(s->n4, est.smf_ip4);
     est.dnn = ss->dnn;
     est.want_usage = s->cdr_path != NULL || s->chf != NULL;
+    est.charging_volume = ss->chf_resource != NULL ? ss->chf_granted : 0;
     est.pdu_type = ss->pdu_type;
     est.has4 = ss->has4;
     est.has6 = ss->has6;
@@ -1325,6 +1330,7 @@ static void est_ctx(const smf_sess *ss, smf_n4_est *e)
 {
     memset(e, 0, sizeof *e);
     e->want_usage = ss->owner != NULL && (ss->owner->cdr_path != NULL || ss->owner->chf != NULL);
+    e->charging_volume = ss->chf_resource != NULL ? ss->chf_granted : 0;
     e->dnn = ss->dnn;
     e->pdu_type = ss->pdu_type;
     e->has4 = ss->has4;
@@ -1498,6 +1504,73 @@ static void job_usage(smf *s, void *arg)
     free(a);
 }
 
+/* ---- online charging: the quota in force has been used up (the UPF's usage report of URR 3) ---- */
+
+typedef struct {
+    char ref[37];
+    smf_usage us;
+} charge_arg;
+
+static void net_release(smf *s, smf_sess *ss, uint8_t cause5gsm, bool final, const char *status_cause);
+
+static void count_charging_update(smf *s, const char *result)
+{
+    g5c_label l = {"result", result};
+    g5c_counter_inc(g5c_counter_get(s->metrics, "g5c_smf_charging_updates_total", "Quota updates to the CHF, by result.", &l, 1));
+}
+
+/* Reports the volume to the CHF and arms the next quota at the UPF; no further quota ends the session (TS 32.299 5.2: final unit TERMINATE). The session stays locked: the CHF is a short call. */
+static void job_charging(smf *s, void *arg)
+{
+    charge_arg *a = arg;
+    smf_sess *ss = sess_lookup(s, a->ref, NULL, 0);
+    uint64_t g = 0;
+    bool final = false;
+    int cr;
+    if (ss == NULL) {
+        free(a);
+        return;
+    }
+    if (ss->chf_resource == NULL) {
+        smf_sess_unlock(ss);
+        free(a);
+        return;
+    }
+    if (ss->state == SMF_S_RELEASING) { /* the release is under way (the UE has not confirmed yet and traffic still reports): once is enough */
+        smf_sess_unlock(ss);
+        free(a);
+        return;
+    }
+    cr = smf_chf_update(s, ss, &a->us, &g, &final);
+    if (cr == 0) {
+        uint8_t body[64];
+        size_t bl = 0;
+        if (smf_n4_build_urr_threshold(SMF_URR_CHARGING, g, body, sizeof body, &bl) == 0 && n4_modify(s, ss, body, bl) == 0) {
+            ss->chf_granted = g;
+            ss->chf_final = final;
+            smf_persist_request(s);
+            count_charging_update(s, final ? "last_quota" : "granted");
+            smf_sess_unlock(ss);
+            free(a);
+            return;
+        }
+        count_charging_update(s, "rearm_failed");
+        smf_sess_unlock(ss);
+        free(a);
+        return;
+    }
+    if (cr < 0) { /* the CHF did not answer: the session goes on, the UPF reports again after another quota's worth */
+        count_charging_update(s, "failed");
+        smf_sess_unlock(ss);
+        free(a);
+        return;
+    }
+    G5C_LOGI("g5c_smf", "no more quota for PDU session %u of %s: releasing it", ss->psi, ss->supi);
+    count_charging_update(s, "denied");
+    net_release(s, ss, SMF_5GSM_REGULAR_DEACTIVATION, false, NULL);
+    free(a);
+}
+
 uint8_t smf_usage_report(smf *s, smf_upf *u, uint64_t cp_seid, const uint8_t *body, size_t len, uint64_t *up_seid)
 {
     char ref[37] = {0};
@@ -1525,6 +1598,12 @@ uint8_t smf_usage_report(smf *s, smf_upf *u, uint64_t cp_seid, const uint8_t *bo
         a->dl = us.dl;
         count_usage(s, "received");
         smf_defer(s, job_usage, a); /* not on the N4 receive thread: the PCF call and the N4 modification need it free */
+    }
+    if (smf_n4_parse_usage_for(body, len, SMF_URR_CHARGING, &us) == 0) {
+        charge_arg *a = g5c_xcalloc(1, sizeof *a);
+        memcpy(a->ref, ref, sizeof a->ref);
+        a->us = us;
+        smf_defer(s, job_charging, a);
     }
     return PFCP_CAUSE_ACCEPTED;
 }

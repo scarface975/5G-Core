@@ -37,7 +37,8 @@ int smf_udm_deregister(smf *s, const char *supi, uint8_t psi);
 int smf_pcf_create(smf *s, const smf_sess *ss, const g5c_json *dnn_cfg, const char *notif_uri, const g5c_json *serving_plmn, g5c_json **decision,
                    char **resource);
 void smf_pcf_delete(smf *s, const char *resource);
-int smf_chf_create(smf *s, const smf_sess *ss, char **resource);
+int smf_chf_create(smf *s, const smf_sess *ss, char **resource, uint64_t *granted, bool *final);
+int smf_chf_update(smf *s, const smf_sess *ss, const smf_usage *u, uint64_t *granted, bool *final);
 void smf_chf_release(smf *s, const smf_sess *ss, const smf_usage *u);
 
 /* Nnrf_NFDiscovery of the AMF instance `nf_instance_id` (what the AMF named as servingNfId) */
