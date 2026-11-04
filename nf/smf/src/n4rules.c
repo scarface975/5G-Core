@@ -227,9 +227,11 @@ int smf_n4_build_est(const smf_n4_est *in, uint8_t *out, size_t cap, size_t *len
             PUT(create_pdr(out, cap, &pos, in, r->pdr_dl, r->precedence, false, dl, ndl, q, 2));
     }
 
-    /* FARs: uplink towards the data network; downlink dropped until the AN tunnel is known */
+    /* FARs: uplink towards the data network; downlink buffered, without telling the SMF, until the AN tunnel is known */
     PUT(create_far(out, cap, &pos, SMF_FAR_UL, PFCP_AA_FORW, 1 /* CORE */, in->dnn, false));
-    PUT(create_far(out, cap, &pos, SMF_FAR_DL, PFCP_AA_DROP, -1, NULL, true));
+    /* downlink before the access tunnel is known (a UE that sends right after its session is up, and the reply comes before the N2 response has reached the UPF): buffered quietly, released when
+     * the tunnel is set (TS 29.244 5.2.1, BUFF with NOCP: the SMF is not told) */
+    PUT(create_far(out, cap, &pos, SMF_FAR_DL, PFCP_AA_BUFF | PFCP_AA_NOCP, -1, NULL, true));
     if (in->has6 && in->rs_teid != 0) {
         PUT(create_cp_rules(out, cap, &pos, in));
         PUT(create_cp_far(out, cap, &pos, in));

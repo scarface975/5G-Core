@@ -130,6 +130,9 @@ if(G5C_BASH AND UNIX)
            ${G5C_BASH} ${CMAKE_SOURCE_DIR}/deploy/run/g5c-cluster.sh ns scenario ${CMAKE_SOURCE_DIR}/scenarios/policy-script.yaml)
   set_tests_properties(cluster_policy_script PROPERTIES ENVIRONMENT "${_direct_env};G5C_RUN=${CMAKE_BINARY_DIR}/cluster-run-policy-script" TIMEOUT 300
                        LABELS "integration;cluster" SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
+  # the ORAN emulator's N2/NAS/N3 stack against the whole core (skipped where the emulator or its built drivers are not at ORAN_EMULATOR)
+  add_test(NAME oran_emulator_proof COMMAND ${G5C_BASH} ${CMAKE_SOURCE_DIR}/deploy/oran/prove.sh 8)
+  set_tests_properties(oran_emulator_proof PROPERTIES ENVIRONMENT "G5C_BUILD_DIR=${CMAKE_BINARY_DIR};G5C_RUN=${CMAKE_BINARY_DIR}/cluster-run-oran" TIMEOUT 400 LABELS "integration;cluster" SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
   # radio lab kit (backlog B-10): OCUDU gNB + srsUE over ZeroMQ against our core; skipped where the gNB or the UE is not installed
   add_test(NAME radio_kit COMMAND ${G5C_BASH} ${CMAKE_SOURCE_DIR}/deploy/radio-kit/g5c-radio-kit run)
   set_tests_properties(radio_kit PROPERTIES TIMEOUT 300 LABELS "integration;cluster" SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)

@@ -8,7 +8,7 @@ See the licensing policy in the strategy PDF, section 2.
 ## Where things are
 | Path | Purpose |
 |------|---------|
-| `guides/` | install, upgrade, admin guide, testing, release process, pilot plan, known gaps |
+| `guides/` | install, upgrade, admin guide, testing, release process, pilot plan, known gaps, to do, the ORAN emulator proof |
 | `history/update.md` | Append-only, newest-first build log. Update it every session or milestone |
 | `adr/` | Architecture decision records, `NNNN-title.md` (language, licensing, spec baseline, per-NF design) |
 | `specs/` | Pinned 3GPP documents and the clause -> module -> test traceability |

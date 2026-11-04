@@ -47,6 +47,17 @@
       "evidence": "deploy/oracle/build_ueransim_eap.sh"
     },
     {
+      "id": "ran-oran-emulator",
+      "kind": "gNB + UE emulator (the project's own ORAN_emulator, N2 / NAS / N3 stack)",
+      "peer": "ORAN_emulator n2_attach_test, n2_register_test, n2_session_test, n2_teardown_test, n2_multi_test",
+      "core": "ours (all functions, PLMN 999/70)",
+      "result": "pass",
+      "what": "NG Setup, registration with 5G-AKA and security mode, PDU session through SMF, PCF and UPF, GTP-U uplink and downlink (ICMP echo), release and de-registration; 16 UEs at once over one association, each with its own echo reply; our own counters agree",
+      "limits": "the emulator's N2, NAS and N3 drivers; its DPDK fronthaul and PHY layers are not part of this run. Found: the emulator's RAN node name had an underscore (not allowed in PrintableString), and its drivers never answered the Initial Context Setup Request that carries only a registration accept; both fixed in the emulator",
+      "reproduce": "ORAN_EMULATOR=<emulator>/oran deploy/oran/prove.sh",
+      "evidence": "deploy/oran/prove.sh"
+    },
+    {
       "id": "tester-vs-open5gs",
       "kind": "UE + gNB (our scripted tester)",
       "peer": "g5c-tester: scripted gNBs and UEs of this project",

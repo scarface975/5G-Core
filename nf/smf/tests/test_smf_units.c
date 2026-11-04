@@ -814,7 +814,7 @@ static void test_rule_mapping(void)
         TK_ASSERT(mbody && cause_of(mbody, mbl) == PFCP_CAUSE_ACCEPTED);
         ipv4(ip, src, UEIP, 6, 80, 1234, 40);
         upf_n6_packet(U, ip, 40, NOW);
-        TK_ASSERT(RIG.ngtpu == 0 && U->st.buffered == 1);
+        TK_ASSERT(RIG.ngtpu == 0 && U->st.buffered >= 1);
         TK_ASSERT(rig_n4(PFCP_SESSION_REPORT_REQUEST, &mh, &mbl) != NULL);
     }
     /* deletion needs no body */

@@ -8,6 +8,7 @@ Only what has been run and has evidence in this repository. A product that is no
 | UERANSIM nr-gnb and nr-ue (gNB + UE (simulator)) | Open5GS 2.8.0 core with our AMF in its place | pass | registration, authentication, security mode, PDU session through the Open5GS SMF and UPF, release and de-registration (recorded trace) |
 | UERANSIM nr-gnb and nr-ue (gNB + UE (simulator)) | Open5GS 2.8.0 AMF with our SMF and our UPF in its place | pass | PDU session establishment and release with PFCP between our SMF and our UPF, GTP-U through our UPF (recorded trace) |
 | UERANSIM nr-ue 3.3.0, patched copy (UE (simulator)) | ours (AUSF EAP-AKA') | pass with a patched peer | EAP-AKA' authentication against our AUSF: key derivation, AT_MAC and AT_RES verified by an independent implementation |
+| ORAN_emulator n2_attach_test, n2_register_test, n2_session_test, n2_teardown_test, n2_multi_test (gNB + UE emulator (the project's own ORAN_emulator, N2 / NAS / N3 stack)) | ours (all functions, PLMN 999/70) | pass | NG Setup, registration with 5G-AKA and security mode, PDU session through SMF, PCF and UPF, GTP-U uplink and downlink (ICMP echo), release and de-registration; 16 UEs at once over one association, each with its own echo reply; our own counters agree |
 | g5c-tester: scripted gNBs and UEs of this project (UE + gNB (our scripted tester)) | Open5GS 2.8.0 (AMF, AUSF, UDM, SMF, UPF, unmodified) | pass | registration, 5G-AKA, security mode, PDU session and de-registration of 5 UEs at a core that is not ours; found and fixed that the scripted UE sent non-cleartext IEs in its first Registration Request (Open5GS rejects it, TS 24.501 4.4.6) |
 | Open5GS 2.8.0 AMF, AUSF, SMF, PCF (core functions) | our UDM, UDR and PCF in their place | pass | Open5GS authenticates and sets up sessions against our UDM and UDR; Open5GS SMF takes policy from our PCF and follows a mid-session policy change with a PFCP update |
 | Open5GS 2.8.0 (core functions (differential)) | ours (nine functions) | 129 cases compared, 0 unexplained | the same requests to both cores, answers compared field by field; every difference has a stated reason |
@@ -37,6 +38,12 @@ Only what has been run and has evidence in this repository. A product that is no
 - Limits: stock UERANSIM 3.3.0 rejects the AT_KDF attribute of a conforming server (Length 1, RFC 5448 3.2); the copy built by build_ueransim_eap.sh accepts it
 - Run: `deploy/oracle/build_ueransim_eap.sh`
 - Evidence: `deploy/oracle/build_ueransim_eap.sh`
+
+**ORAN_emulator n2_attach_test, n2_register_test, n2_session_test, n2_teardown_test, n2_multi_test**
+
+- Limits: the emulator's N2, NAS and N3 drivers; its DPDK fronthaul and PHY layers are not part of this run. Found: the emulator's RAN node name had an underscore (not allowed in PrintableString), and its drivers never answered the Initial Context Setup Request that carries only a registration accept; both fixed in the emulator
+- Run: `ORAN_EMULATOR=<emulator>/oran deploy/oran/prove.sh`
+- Evidence: `deploy/oran/prove.sh`
 
 **g5c-tester: scripted gNBs and UEs of this project**
 

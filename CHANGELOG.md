@@ -22,6 +22,7 @@ Newest first. Versions follow `MAJOR.MINOR.PATCH[-rcN]` (docs/guides/release-pro
 - The charging function `chf` (Nchf_ConvergedCharging: quota grants against balances, final unit indication, denial, charging data records) and the SMF as its trigger (`smf.chf`): the UPF reports each used-up quota, the SMF renews it at the CHF and re-arms the rule, and a session with no balance left is released; `G5C_CHF=1` in the cluster.
 - Slice admission control (`amf.slice_limits`, `smf.slice_limits`) and power saving (`amf.power_saving`: MICO, extended DRX, T3324; a UE that cannot be reached is not paged).
 - Mobility on the real daemons (Xn path switches, `G5C_LOAD_MOBILITY`, `scenarios/mobility-xn.yaml`) and one population from many load processes (`tools/cli/g5c-fanout`).
+- The ORAN emulator proof (`deploy/oran/prove.sh`, `docs/guides/oran-emulator.md`): its N2, NAS and N3 stack against the whole core. The SMF now buffers downlink before the access tunnel is known; the test namespace gateway is 10.45.0.1; `docs/guides/todo.md`.
 - The SEPP `nf/sepp` (roaming edge in the TLS mode of N32-f, with per-partner screening) and its roaming cases.
 - Wave 3, third part: `policy.scripts` (policy as code, a bounded condition language) at the PCF, `amf.ngap.addresses` (SCTP multi-homing), `g5c-init --preset campus`.
 - Wave 3, second part: `tools/cli/g5c-nwdaf` (analytics from the counters), extension hooks (`libs/nfcore` hook.h, `smf.cdr.sink_command`), `g5c_smf_pdu_sessions_by_slice`.

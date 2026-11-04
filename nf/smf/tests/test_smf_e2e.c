@@ -784,12 +784,13 @@ static void test_happy_path(void)
         uint8_t got[200];
         TK_ASSERT(dn_recv(got, sizeof got, &n) && n == 60 && memcmp(got, buf, 60) == 0);
     }
-    /* downlink is dropped until the gNB tunnel is known */
+    /* downlink before the gNB tunnel is known is buffered quietly, and released when the tunnel is set */
     ip4pkt(buf, dnip, ue, 6, 443, 40000, 60);
     dn_send(buf, 60);
     TK_ASSERT(!gnb_recv(&teid, &qfi, &plen));
 
     TK_ASSERT(activate(ref, 0x7001) == 200);
+    TK_ASSERT(gnb_recv(&teid, &qfi, &plen) && teid == 0x7001 && qfi == 1 && plen == 60); /* the one that waited */
     dn_send(buf, 60);
     TK_ASSERT(gnb_recv(&teid, &qfi, &plen) && teid == 0x7001 && qfi == 1 && plen == 60);
     {   /* traffic matching the voice rule rides the GBR flow */

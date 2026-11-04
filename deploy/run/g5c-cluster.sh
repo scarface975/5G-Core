@@ -426,7 +426,8 @@ cmd_down() { for nf in $(echo $NFS | tr ' ' '\n' | tac); do stop_nf "$nf"; done;
 in_ns_prepare() {
   ip link set lo up
   ip tuntap add name "$N6_DEV" mode tun 2>/dev/null
-  ip addr add "${UE_POOL%/*}/16" dev "$N6_DEV" 2>/dev/null || ip addr add 10.45.0.1/16 dev "$N6_DEV"
+  # the data network's gateway is the first host address of the pool (10.45.0.1 for 10.45.0.0/16), not the network address: a UE that pings it must reach the namespace itself
+  ip addr add "$(echo "${UE_POOL%/*}" | awk -F. '{printf "%s.%s.%s.1", $1, $2, $3}')/16" dev "$N6_DEV" 2>/dev/null || ip addr add 10.45.0.1/16 dev "$N6_DEV"
   ip link set "$N6_DEV" up
 }
 
@@ -452,6 +453,7 @@ cmd_ns() {
     secrets) do_secrets; rc=$? ;;
     keylog) do_keylog; rc=$? ;;
     scenario) do_scenario "$@"; rc=$? ;;
+    exec) "$@"; rc=$? ;; # a command of your own inside the namespace, the cluster up (deploy/oran/prove.sh)
     shell) echo "inside the namespace; the cluster is up (exit to stop it)"; bash -i; ;;
     *) echo "unknown ns mode $what"; rc=2 ;;
   esac
