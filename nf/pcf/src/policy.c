@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "expr.h"
 #include "g5c/config.h"
 #include "g5c/pcf.h"
 
@@ -49,6 +50,12 @@ void pcf_policy_free(pcf_policy *p)
     free(p->dnns);
     free(p->um_throttle.uplink);
     free(p->um_throttle.downlink);
+    for (size_t i = 0; i < p->nscripts; i++) {
+        free(p->scripts[i].when);
+        pcf_expr_free(p->scripts[i].expr);
+        pcf_profile_free(&p->scripts[i].profile);
+    }
+    free(p->scripts);
     memset(p, 0, sizeof *p);
 }
 
@@ -257,7 +264,7 @@ static int cmp_names(const void *a, const void *b)
 
 int pcf_policy_parse(const g5c_json *j, bool is_config, pcf_policy *out, char *err, size_t cap)
 {
-    static const char *const k_cfg[] = {"default", "dnns", "rfsp", "usage_monitoring", NULL};
+    static const char *const k_cfg[] = {"default", "dnns", "rfsp", "usage_monitoring", "scripts", NULL};
     static const char *const k_sub[] = {"default", "dnns", NULL};
     const g5c_json *d, *dn;
     size_t n = 0;
@@ -332,6 +339,39 @@ int pcf_policy_parse(const g5c_json *j, bool is_config, pcf_policy *out, char *e
             if (pcf_ambr_parse(g5c_json_get(um, "throttle"), &out->um_throttle, err, cap) != 0)
                 goto bad;
             out->um_volume = (uint64_t)th;
+        }
+        if (!is_null(g5c_json_get(j, "scripts"))) { /* policy as code: `scripts: [ { when: "dnn == 'iot' and supi startswith 'imsi-00101'", session_ambr: {...}, default_qos: {...} } ]` */
+            const g5c_json *sl = g5c_json_get(j, "scripts");
+            if (!g5c_json_is(sl, G5C_J_ARRAY) || g5c_json_len(sl) > 64) {
+                snprintf(err, cap, "invalid type: policy.scripts must be a list of at most 64 entries");
+                goto bad;
+            }
+            out->scripts = g5c_xcalloc(g5c_json_len(sl) ? g5c_json_len(sl) : 1, sizeof *out->scripts);
+            for (size_t i = 0; i < g5c_json_len(sl); i++) {
+                const g5c_json *e = g5c_json_at(sl, i);
+                const char *when = g5c_json_get_str(e, "when");
+                g5c_json *body;
+                char perr[200];
+                pcf_script *sc = &out->scripts[i];
+                out->nscripts = i + 1;
+                if (!g5c_json_is(e, G5C_J_OBJECT) || when == NULL) {
+                    snprintf(err, cap, "invalid value: policy.scripts[%zu] needs `when` (a condition) and the profile keys", i);
+                    goto bad;
+                }
+                sc->when = g5c_xstrdup(when);
+                sc->expr = pcf_expr_parse(when, perr, sizeof perr);
+                if (sc->expr == NULL) {
+                    snprintf(err, cap, "invalid value: policy.scripts[%zu].when: %s", i, perr);
+                    goto bad;
+                }
+                body = g5c_json_dup(e);
+                (void)g5c_json_remove(body, "when");
+                if (parse_profile(body, &sc->profile, err, cap) != 0) {
+                    g5c_json_free(body);
+                    goto bad;
+                }
+                g5c_json_free(body);
+            }
         }
     }
     return 0;
@@ -541,6 +581,8 @@ static const pcf_profile *find_dnn(const pcf_policy *p, const char *dnn)
 void pcf_session_info_free(pcf_session_info *s)
 {
     free(s->dnn);
+    free(s->supi);
+    free(s->sd);
     free(s->subs_ambr.uplink);
     free(s->subs_ambr.downlink);
     g5c_json_free(s->subs_def_qos);
@@ -552,6 +594,9 @@ pcf_session_info pcf_session_info_dup(const pcf_session_info *s)
     pcf_session_info d;
     memset(&d, 0, sizeof d);
     d.dnn = g5c_xstrdup(s->dnn);
+    d.supi = s->supi != NULL ? g5c_xstrdup(s->supi) : NULL;
+    d.sd = s->sd != NULL ? g5c_xstrdup(s->sd) : NULL;
+    d.sst = s->sst;
     if (s->has_ambr) {
         d.has_ambr = true;
         d.subs_ambr.uplink = g5c_xstrdup(s->subs_ambr.uplink);
@@ -583,7 +628,7 @@ static pcf_rule rule_dup(const pcf_rule *r)
 
 pcf_resolved pcf_resolve(const pcf_session_info *s, const pcf_policy *cfg, const pcf_policy *sub)
 {
-    const pcf_profile *layers[4];
+    const pcf_profile *layers[5];
     size_t nl = 0;
     pcf_resolved r;
     bool got;
@@ -592,6 +637,16 @@ pcf_resolved pcf_resolve(const pcf_session_info *s, const pcf_policy *cfg, const
         layers[nl++] = find_dnn(sub, s->dnn);
     if (sub != NULL && sub->has_default)
         layers[nl++] = &sub->default_profile;
+    for (size_t i = 0; i < cfg->nscripts; i++) { /* policy scripts: the first whose condition holds adds its profile below the subscriber's layers */
+        pcf_expr_ctx c = {s->supi, s->dnn, s->sd, s->sst, 0};
+        int64_t q = 0;
+        if (s->subs_def_qos != NULL && g5c_json_int(g5c_json_get(s->subs_def_qos, "5qi"), &q))
+            c.qi5 = (int)q;
+        if (pcf_expr_eval(cfg->scripts[i].expr, &c)) {
+            layers[nl++] = &cfg->scripts[i].profile;
+            break;
+        }
+    }
     if (find_dnn(cfg, s->dnn))
         layers[nl++] = find_dnn(cfg, s->dnn);
     layers[nl++] = &cfg->default_profile;

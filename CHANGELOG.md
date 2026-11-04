@@ -22,6 +22,7 @@ Newest first. Versions follow `MAJOR.MINOR.PATCH[-rcN]` (docs/guides/release-pro
 - The charging function `chf` (Nchf_ConvergedCharging: quota grants against balances, final unit indication, denial, charging data records) and the SMF as its trigger (`smf.chf`): the UPF reports each used-up quota, the SMF renews it at the CHF and re-arms the rule, and a session with no balance left is released; `G5C_CHF=1` in the cluster.
 - Slice admission control (`amf.slice_limits`, `smf.slice_limits`) and power saving (`amf.power_saving`: MICO, extended DRX, T3324; a UE that cannot be reached is not paged).
 - Mobility on the real daemons (Xn path switches, `G5C_LOAD_MOBILITY`, `scenarios/mobility-xn.yaml`) and one population from many load processes (`tools/cli/g5c-fanout`).
+- Wave 3, third part: `policy.scripts` (policy as code, a bounded condition language) at the PCF, `amf.ngap.addresses` (SCTP multi-homing), `g5c-init --preset campus`.
 - Wave 3, second part: `tools/cli/g5c-nwdaf` (analytics from the counters), extension hooks (`libs/nfcore` hook.h, `smf.cdr.sink_command`), `g5c_smf_pdu_sessions_by_slice`.
 - Wave 3, first part: `tools/cli/g5c-fleet` (fleet reports, group provisioning), `tools/cli/g5c-triage` (diagnostics bundle analyser), `tools/cli/g5c-conform` (conformance monitor for captures), NF sets (`nf_set_id`, `target-nf-set-id`).
 - `tools/cli/g5c-tester` (the load generator against another core, and one bundle), the radio lab kit `deploy/radio-kit`, and the interoperability register `docs/interop`.

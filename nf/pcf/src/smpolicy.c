@@ -184,6 +184,15 @@ static void create(void *ctx, const g5c_req *req, g5c_resp *resp)
         goto out_info;
     }
     info.dnn = g5c_xstrdup(dnn);
+    info.supi = g5c_xstrdup(supi);
+    {
+        const g5c_json *sl = g5c_json_get(raw, "sliceInfo");
+        int64_t sst = 0;
+        const char *sd = g5c_json_get_str(sl, "sd");
+        if (g5c_json_get_int(sl, "sst", &sst))
+            info.sst = (int)sst;
+        info.sd = sd != NULL ? g5c_xstrdup(sd) : NULL;
+    }
     info.subs_def_qos = (q != NULL && !g5c_json_is(q, G5C_J_NULL)) ? g5c_json_dup(q) : NULL;
     dec = decide(p, NULL, &info, &sub, have);
     if (have)

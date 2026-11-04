@@ -9,6 +9,7 @@
 #include "g5c/pcf.h"
 #include "g5c/testkit.h"
 #include "g5c/udr.h"
+#include "expr.h"
 
 #define ADMIN "admin-token-0123456789"
 #define SUPI "imsi-001010000000001"
@@ -1370,11 +1371,107 @@ static void test_policy_authorization(void)
     }
 }
 
+static bool cond(const char *src, const pcf_expr_ctx *c)
+{
+    char err[120];
+    pcf_expr *e = pcf_expr_parse(src, err, sizeof err);
+    bool r;
+    if (e == NULL)
+        TK_FAIL("condition %s: %s", src, err);
+    r = pcf_expr_eval(e, c);
+    pcf_expr_free(e);
+    return r;
+}
+
+static void test_expressions(void)
+{
+    pcf_expr_ctx c = {"imsi-001010000000007", "iot", "000001", 1, 9};
+    char err[120];
+    TK_ASSERT(cond("dnn == 'iot'", &c) && !cond("dnn == 'internet'", &c) && cond("dnn != 'internet'", &c));
+    TK_ASSERT(cond("supi startswith 'imsi-00101'", &c) && cond("supi endswith '07'", &c) && cond("supi contains '0000'", &c) && !cond("supi startswith 'imsi-26201'", &c));
+    TK_ASSERT(cond("sst == 1 and sd == '000001'", &c) && cond("sst >= 1 and sst < 2", &c) && !cond("sst > 1", &c) && cond("qi5 == 9", &c));
+    TK_ASSERT(cond("dnn in ['internet', 'iot']", &c) && !cond("dnn in ['ims', 'plant']", &c) && cond("sst in [1, 2, 3]", &c));
+    TK_ASSERT(cond("plmn == 'imsi-' or plmn == '00101'", &c) && cond("not (dnn == 'ims')", &c) && cond("not not dnn == 'iot'", &c));
+    TK_ASSERT(cond("dnn == 'x' or sst == 1 and qi5 == 9", &c) && !cond("(dnn == 'x' or sst == 1) and qi5 == 8", &c)); /* and binds tighter than or */
+    TK_ASSERT(!cond("sst == 'one'", &c) && cond("sst != 'one'", &c)); /* a string and a number never equal; no error */
+    TK_ASSERT(pcf_expr_parse("colour == 'red'", err, sizeof err) == NULL && strstr(err, "unknown field") != NULL);
+    TK_ASSERT(pcf_expr_parse("dnn == ", err, sizeof err) == NULL);
+    TK_ASSERT(pcf_expr_parse("dnn == 'x' junk", err, sizeof err) == NULL && strstr(err, "unexpected") != NULL);
+    TK_ASSERT(pcf_expr_parse("(dnn == 'x'", err, sizeof err) == NULL && pcf_expr_parse("dnn == 'x", err, sizeof err) == NULL);
+    {
+        char big[600], deep[80];
+        memset(big, 'a', sizeof big - 1);
+        big[sizeof big - 1] = 0;
+        TK_ASSERT(pcf_expr_parse(big, err, sizeof err) == NULL && strstr(err, "400") != NULL);
+        memset(deep, '(', 40);
+        strcpy(deep + 40, "sst == 1");
+        TK_ASSERT(pcf_expr_parse(deep, err, sizeof err) == NULL); /* nested too deep, and not closed */
+    }
+    {
+        char many[400] = "sst == 1";
+        for (int i = 0; i < 20; i++)
+            strcat(many, " or sst == 1");
+        TK_ASSERT(pcf_expr_parse(many, err, sizeof err) == NULL && strstr(err, "64 nodes") != NULL);
+    }
+}
+
+static void test_scripts(void)
+{
+    pcf_policy cfg = parse_policy("default: { session_ambr: { uplink: '1 Gbps', downlink: '2 Gbps' } }\n"
+                                  "scripts:\n"
+                                  "  - when: \"dnn == 'iot' and supi startswith 'imsi-00101'\"\n"
+                                  "    session_ambr: { uplink: '1 Mbps', downlink: '2 Mbps' }\n"
+                                  "    default_qos: { qi5: 7, arp_priority: 10 }\n"
+                                  "  - when: \"dnn == 'iot'\"\n"
+                                  "    session_ambr: { uplink: '9 Mbps', downlink: '9 Mbps' }\n",
+                                  true),
+                bad;
+    pcf_session_info s = info_for("iot", NULL, NULL), t = info_for("internet", NULL, NULL), u = info_for("iot", "{\"uplink\":\"50 Mbps\",\"downlink\":\"100 Mbps\"}", NULL);
+    pcf_resolved r;
+    char err[200];
+    g5c_json *j = Y("scripts:\n  - when: \"dnn == \"\n    session_ambr: { uplink: '1 Mbps', downlink: '1 Mbps' }\n");
+    s.supi = g5c_xstrdup("imsi-001010000000001");
+    t.supi = g5c_xstrdup("imsi-001010000000001");
+    u.supi = g5c_xstrdup("imsi-001010000000001");
+    s.sst = t.sst = u.sst = 1;
+    r = pcf_resolve(&s, &cfg, NULL);
+    TK_ASSERT(strcmp(r.ambr.uplink, "1 Mbps") == 0 && r.qos.qi5 == 7 && r.qos.arp_priority == 10); /* the first script that holds */
+    pcf_resolved_free(&r);
+    r = pcf_resolve(&t, &cfg, NULL);
+    TK_ASSERT(strcmp(r.ambr.uplink, "1 Gbps") == 0); /* no script holds: the operator default */
+    pcf_resolved_free(&r);
+    free(s.supi);
+    s.supi = g5c_xstrdup("imsi-262010000000001");
+    r = pcf_resolve(&s, &cfg, NULL);
+    TK_ASSERT(strcmp(r.ambr.uplink, "9 Mbps") == 0); /* the first does not hold, the second does */
+    pcf_resolved_free(&r);
+    r = pcf_resolve(&u, &cfg, NULL);
+    TK_ASSERT(strcmp(r.ambr.uplink, "1 Mbps") == 0); /* a script is operator policy: it overrides the subscribed AMBR (the subscriber's own policy document would override it) */
+    pcf_resolved_free(&r);
+    TK_ASSERT(pcf_policy_parse(j, true, &bad, err, sizeof err) == -1 && strstr(err, "scripts[0].when") != NULL);
+    g5c_json_free(j);
+    j = Y("scripts:\n  - session_ambr: { uplink: '1 Mbps', downlink: '1 Mbps' }\n");
+    TK_ASSERT(pcf_policy_parse(j, true, &bad, err, sizeof err) == -1 && strstr(err, "needs `when`") != NULL);
+    g5c_json_free(j);
+    j = Y("scripts:\n  - when: \"sst == 1\"\n    surprise: 1\n");
+    TK_ASSERT(pcf_policy_parse(j, true, &bad, err, sizeof err) == -1);
+    g5c_json_free(j);
+    j = Y("scripts:\n  - when: \"sst == 1\"\n    session_ambr: { uplink: '1 Mbps', downlink: '1 Mbps' }\n");
+    TK_ASSERT(pcf_policy_parse(j, false, &bad, err, sizeof err) == -1); /* subscriber documents have no scripts */
+    g5c_json_free(j);
+    pcf_policy_free(&cfg);
+    pcf_session_info_free(&s);
+    pcf_session_info_free(&t);
+    pcf_session_info_free(&u);
+}
+
 int main(void)
 {
     g5c_log_init("error", false);
     test_bitrates();
     test_resolution();
+    test_expressions();
+    test_scripts();
     test_decision_shape();
     test_validation();
     test_policy_roundtrip();

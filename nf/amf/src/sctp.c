@@ -316,7 +316,39 @@ int amf_sctp_start(amf *a, char *err, size_t cap)
     set_opt_int(fd, IPPROTO_SCTP, SCTP_RECVRCVINFO, 1);
     set_opt_int(fd, IPPROTO_SCTP, SCTP_NODELAY, 1);
     set_sack(fd);
-    if (bind(fd, (struct sockaddr *)&ss, sl) != 0 || listen(fd, 64) != 0) {
+    if (bind(fd, (struct sockaddr *)&ss, sl) != 0) {
+        snprintf(err, cap, "cannot listen on %s:%u (SCTP): %s", a->cfg.ngap_addr, a->cfg.ngap_port, strerror(errno));
+        close(fd);
+        return -1;
+    }
+    if (a->cfg.n_ngap_extra > 0) { /* the other addresses of the endpoint, on the port the first bind got (SCTP_SOCKOPT_BINDX_ADD, RFC 6458 9.1) */
+        struct sockaddr_storage bs;
+        socklen_t bl = sizeof bs;
+        uint8_t packed[8 * sizeof(struct sockaddr_in6)];
+        size_t used = 0;
+        uint16_t port;
+        if (getsockname(fd, (struct sockaddr *)&bs, &bl) != 0)
+            port = a->cfg.ngap_port;
+        else
+            port = ntohs(bs.ss_family == AF_INET ? ((struct sockaddr_in *)&bs)->sin_port : ((struct sockaddr_in6 *)&bs)->sin6_port);
+        for (unsigned i = 0; i < a->cfg.n_ngap_extra; i++) {
+            struct sockaddr_storage xs;
+            socklen_t xl;
+            if (!addr_parse(a->cfg.ngap_extra[i], port, &xs, &xl) || xs.ss_family != ss.ss_family) {
+                snprintf(err, cap, "invalid NGAP address `%s` (not an address of the same family as `%s`)", a->cfg.ngap_extra[i], a->cfg.ngap_addr);
+                close(fd);
+                return -1;
+            }
+            memcpy(packed + used, &xs, xl);
+            used += xl;
+        }
+        if (setsockopt(fd, IPPROTO_SCTP, 100 /* SCTP_SOCKOPT_BINDX_ADD */, packed, (socklen_t)used) != 0) {
+            snprintf(err, cap, "cannot add the extra N2 addresses to the SCTP endpoint: %s", strerror(errno));
+            close(fd);
+            return -1;
+        }
+    }
+    if (listen(fd, 64) != 0) {
         snprintf(err, cap, "cannot listen on %s:%u (SCTP): %s", a->cfg.ngap_addr, a->cfg.ngap_port, strerror(errno));
         close(fd);
         return -1;
@@ -346,7 +378,7 @@ int amf_sctp_start(amf *a, char *err, size_t cap)
         return -1;
     }
     a->reader_on = true;
-    G5C_LOGI(AMF_LOG, "N2 (SCTP) listening on %s:%u", a->cfg.ngap_addr, a->bound_port);
+    G5C_LOGI(AMF_LOG, "N2 (SCTP) listening on %s:%u%s", a->cfg.ngap_addr, a->bound_port, a->cfg.n_ngap_extra > 0 ? " and other addresses (multi-homed)" : "");
     return 0;
 }
 

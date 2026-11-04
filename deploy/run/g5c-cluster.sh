@@ -125,6 +125,8 @@ log: { level: $LOGLEVEL, json: $LOGJSON }" common
   common="$common_noscp"
   [ "$SCPON" = 1 ] && common="$common_noscp
 scp_client: { uri: 'http://$A_SCP:7785' }"
+  local ngap_line="ngap: { address: $A_AMF, port: 38412 }"
+  [ -n "${G5C_AMF_N2_ALT:-}" ] && ngap_line="ngap: { addresses: [ $A_AMF, $G5C_AMF_N2_ALT ], port: 38412 }" # G5C_AMF_N2_ALT: a second N2 address, the endpoint is multi-homed
   local chf_peer="" cdr_sink=""
   [ "${G5C_CDR_SINK:-0}" = 1 ] && cdr_sink=", sink_command: '/usr/bin/tee -a $RUN/state/cdr-sink.jsonl'"
   [ "$CHFON" = 1 ] && chf_peer="  chf: { uri: 'http://$A_CHF:7787', quota_bytes: ${G5C_CHF_QUOTA:-10485760} }"
@@ -257,6 +259,7 @@ policy:
   rfsp: 1
   default:
     session_ambr: { uplink: ${G5C_AMBR_UL:-1 Gbps}, downlink: ${G5C_AMBR_DL:-2 Gbps} }
+${G5C_PCF_POLICY_EXTRA:-}
 EOF
   cat > "$RUN/conf/upf.yaml" <<EOF
 name: upf-1
@@ -295,7 +298,7 @@ sbi: { address: $A_AMF, port: 7777 }
 amf:
   self_uri: 'http://$A_AMF:7777'
   guami: { region: 2, set: 1, pointer: 0 }
-  ngap: { address: $A_AMF, port: 38412 }
+  $ngap_line
   tais: [ $TAIS ]
 $AMF_SEC
   slices: [ { sst: 1 } ]

@@ -53,6 +53,15 @@ typedef struct {
     size_t nrules;
 } pcf_profile;
 
+/* A policy script (config only, `policy.scripts`): when the condition holds for the session, the profile is a layer of its policy, below the subscriber's own and above the operator's DNN profile.
+ * The first script whose condition holds counts. The condition language is documented in nf/pcf/src/expr.c. */
+typedef struct pcf_expr pcf_expr;
+typedef struct {
+    char *when;
+    pcf_expr *expr;
+    pcf_profile profile;
+} pcf_script;
+
 /* Operator policy (configuration) and per-subscriber overrides share this shape. */
 typedef struct {
     bool has_default; /* configuration always has a (possibly empty) default */
@@ -64,6 +73,8 @@ typedef struct {
     uint16_t rfsp;
     uint64_t um_volume; /* config only, `usage_monitoring.volume_threshold` */
     pcf_ambr um_throttle; /* `usage_monitoring.throttle`: the session AMBR once the threshold is reached */
+    pcf_script *scripts;  /* config only, `scripts` */
+    size_t nscripts;
 } pcf_policy;
 
 /* Parse (strict: unknown fields and wrong types are errors). 0 / -1 with err. */
@@ -82,6 +93,8 @@ bool pcf_is_gbr_5qi(uint8_t qi5);
 
 typedef struct {
     char *dnn;
+    char *supi, *sd; /* for the conditions of policy scripts; sd is 6 hex digits or NULL */
+    int sst;
     bool has_ambr;
     pcf_ambr subs_ambr;
     g5c_json *subs_def_qos; /* may be NULL */

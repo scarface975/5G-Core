@@ -11,6 +11,7 @@ Asks for what is missing when it runs in a terminal (--yes takes the defaults an
 Nothing is started and nothing outside --dir is changed. The functions talk to each other on loopback addresses (127.2.0.x); only the N2 (AMF) and N3 (UPF) addresses face the radio
 network. Existing files are kept: run it again with the same --dir to add what is missing, remove a file to have it made anew."""
 import argparse
+import json
 import os
 import re
 import secrets
@@ -22,6 +23,37 @@ HERE = Path(__file__).resolve().parent
 CLUSTER = HERE / "g5c-cluster.sh"
 
 
+CAMPUS_GROUPS = {"groups": {
+    "staff": {"prefix": "imsi-{plmn}01", "slices": "1", "dnns": "internet", "ue_ambr_ul": "50 Mbps", "ue_ambr_dl": "200 Mbps"},
+    "machines": {"prefix": "imsi-{plmn}02", "slices": "1:000001", "dnns": "plant", "ue_ambr_ul": "20 Mbps", "ue_ambr_dl": "20 Mbps"},
+    "sensors": {"prefix": "imsi-{plmn}03", "slices": "1:000002", "dnns": "plant", "ue_ambr_ul": "1 Mbps", "ue_ambr_dl": "1 Mbps"}}}
+
+CAMPUS_GUIDE = """# Campus network starter pack
+
+Written by `g5c-init --preset campus` next to the configurations. A private network with three kinds of device, each with its own subscriber numbers, slice and DNN:
+
+| Group | SUPI prefix | Slice | DNN | Rates (up / down) |
+|---|---|---|---|---|
+| staff | imsi-{plmn}01... | 1 (eMBB) | internet | 50 / 200 Mbit/s |
+| machines | imsi-{plmn}02... | 1 : 000001 | plant | 20 / 20 Mbit/s |
+| sensors | imsi-{plmn}03... | 1 : 000002 | plant | 1 / 1 Mbit/s |
+
+`groups.json` is that table for `tools/cli/g5c-fleet`. The PLMN {mcc}/{mnc} is a private-use identity: replace it with the one your regulator assigns before any real SIM leaves the building.
+
+## Add devices
+1. Put the devices of a group in a CSV (`supi,k,opc` per line; `devices-template.csv` shows the form).
+2. `tools/cli/g5c-fleet provision --groups groups.json --group machines --devices machines.csv --out machines-subscribers.csv`
+3. `tools/cli/g5c-subscribers import --format csv machines-subscribers.csv --apply ...` (with the admin options of START-HERE.md)
+
+The slices and the `plant` DNN must also exist in the configurations: add `{{ sst: 1, sd: '000001' }}` and `{{ sst: 1, sd: '000002' }}` to `amf.slices`, `smf.slices` and `nssf.slices`, and a `plant` entry to `smf.dnns` (a pool of its own), then restart those functions or send them SIGHUP where the section reloads.
+
+## Keep an eye on it
+* `tools/cli/g5c-fleet report --groups groups.json --inventory inventory.json --cdr {run}/state/cdr.jsonl` : which devices are active, silent, never seen.
+* `tools/cli/g5c-diag` then `tools/cli/g5c-triage <bundle>` : what is wrong, in words.
+* `smf.slice_limits` and `amf.slice_limits` cap a group's sessions and UEs so that sensors cannot crowd out staff.
+
+Local breakout and edge applications are not part of this pack: there is one UPF and one data network.
+"""
 def ask(prompt, default, interactive, check=None):
     if not interactive:
         return default
@@ -46,11 +78,12 @@ def main():
     ap.add_argument("--systemd", action="store_true", help="also write systemd units for these configurations under <dir>/systemd (see START-HERE.md)")
     ap.add_argument("--bin-dir", default="/usr/local/bin", help="where the function binaries are installed (for --systemd)")
     ap.add_argument("--pin-peers", action="store_true", help="each function accepts client certificates only from the functions that call it (needs TLS)")
+    ap.add_argument("--preset", choices=["campus"], help="campus: also write a starter pack for a private network (device groups, a guide) and default to the private-use PLMN 999/99")
     ap.add_argument("--yes", action="store_true", help="take defaults, never ask")
     a = ap.parse_args()
     interactive = sys.stdin.isatty() and not a.yes
-    mcc = a.mcc or ask("Mobile country code (3 digits)", "001", interactive, lambda v: re.fullmatch(r"\d{3}", v))
-    mnc = a.mnc or ask("Mobile network code (2 or 3 digits)", "01", interactive, lambda v: re.fullmatch(r"\d{2,3}", v))
+    mcc = a.mcc or ask("Mobile country code (3 digits)", "999" if a.preset == "campus" else "001", interactive, lambda v: re.fullmatch(r"\d{3}", v))
+    mnc = a.mnc or ask("Mobile network code (2 or 3 digits)", "99" if a.preset == "campus" else "01", interactive, lambda v: re.fullmatch(r"\d{2,3}", v))
     tac = a.tac or ask("Tracking area codes, comma separated", "1,2", interactive, lambda v: re.fullmatch(r"\d+(\s*,\s*\d+)*", v))
     n2 = a.n2_address or ask("N2 address of the AMF (what the gNB connects to)", "127.2.0.5", interactive, lambda v: re.fullmatch(r"[0-9.]+|[0-9a-fA-F:]+", v))
     n3 = a.n3_address or ask("N3 address of the UPF", n2 if n2 != "127.2.0.5" else "127.2.0.7", interactive, lambda v: re.fullmatch(r"[0-9.]+|[0-9a-fA-F:]+", v))
@@ -122,6 +155,15 @@ sudo systemctl daemon-reload && sudo systemctl enable --now g5c.target
 The units run `%s/<function>` with `%s/conf/<function>.yaml`. The UPF unit adds the capability it needs for the TUN device.
 """ % (run, run, run, run, run, run, run, a.bin_dir, run)) if a.systemd else ""
     guide = guide.replace("{systemd_section}", sysd)
+    if a.preset == "campus":
+        camp = run / "campus"
+        camp.mkdir(exist_ok=True)
+        plmn = mcc + mnc
+        groups = json.loads(json.dumps(CAMPUS_GROUPS).replace("{plmn}", plmn))
+        (camp / "groups.json").write_text(json.dumps(groups, indent=2) + "\n", encoding="utf-8")
+        (camp / "devices-template.csv").write_text("supi,k,opc\nimsi-%s0200000001,<32 hex>,<32 hex>\n" % plmn, encoding="utf-8")
+        (camp / "README.md").write_text(CAMPUS_GUIDE.format(plmn=plmn, mcc=mcc, mnc=mnc, run=run), encoding="utf-8")
+        guide += "\n## Campus starter pack\nSee `%s/campus/README.md`: three device groups, the commands to add devices, and what to watch.\n" % run
     (run / "START-HERE.md").write_text(guide, encoding="utf-8")
     print("g5c-init: %d configurations, secrets%s in %s" % (nconf, "" if a.no_tls else ", a CA and certificates", run))
     print("next: read %s" % (run / "START-HERE.md"))

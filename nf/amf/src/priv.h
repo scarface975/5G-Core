@@ -45,6 +45,8 @@ typedef struct {
     uint8_t plmn[3];
     amf_guami_id id;
     char ngap_addr[64];
+    char ngap_extra[7][64]; /* `amf.ngap.addresses` after the first: the other local addresses of the multi-homed N2 endpoint (SCTP bindx) */
+    unsigned n_ngap_extra;
     uint16_t ngap_port;
     uint16_t capacity;
     amf_tai tai[AMF_MAX_TAI];

@@ -161,3 +161,9 @@ SMF (a function that dies loses its connected UEs; the registrations and session
 
 ## Extension hooks
 `smf.cdr.sink_command` (absolute path and arguments), `sink_timeout_s` (default 10) and `sink_queue` (default 1024) hand every charging record, as one line of JSON on standard input, to a program of yours (contract `g5c-hook/1`, `libs/nfcore/include/g5c/hook.h`): the program runs with an empty environment except `G5C_HOOK` and `G5C_HOOK_API`, exit status 0 means taken, a program that does not finish is killed with whatever it started, and a full queue drops the newest item. Counters: `g5c_hook_items_total{hook,result}`. The record is also written to `smf.cdr.file`; write anything you cannot lose to a file first, the hook is not retried.
+
+## Policy scripts
+`policy.scripts` at the PCF: a list of `{ when: "<condition>", session_ambr: {...}, default_qos: {...} }`. The first entry whose condition holds for the session adds its profile to the session's policy, below the subscriber's own policy document and above the operator's DNN profile. A condition is built from the fields `supi`, `dnn`, `sst`, `sd`, `plmn` and `qi5` (the subscribed default 5QI), strings in single quotes, numbers, `==` `!=` `<` `<=` `>` `>=`, `startswith` `endswith` `contains`, `in [a, b]`, `and` `or` `not` and parentheses. It has no loops and no calls and is limited to 400 characters; a mistake is reported when the configuration is read. Example: `when: "dnn == 'iot' and supi startswith 'imsi-00101'"`.
+
+## N2 multi-homing
+`amf.ngap.addresses: [10.0.0.5, 10.0.1.5]` replaces `address` and binds the N2 SCTP endpoint to every listed address (same family, same port); a gNB that is configured with both reaches the AMF over either path. Failover between the paths is the gNB's SCTP stack's business.

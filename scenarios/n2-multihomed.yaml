@@ -1,0 +1,7 @@
+# A multi-homed N2 endpoint (run with G5C_AMF_N2_ALT=127.2.0.6): the AMF's SCTP endpoint holds two local addresses (TS 38.412 6.2), so a gNB can reach it on either. Two waves, one to each
+# address, both complete.
+name: gNBs reach the AMF on both of its N2 addresses
+steps:
+  - load: {ues: 10, gnbs: 2, amf_ngap: "127.2.0.5:38412"}
+  - load: {ues: 10, gnbs: 2, amf_ngap: "127.2.0.6:38412"}
+  - assert: {metric: "amf:g5c_amf_registrations_total{result=accepted}", ">=": 20}

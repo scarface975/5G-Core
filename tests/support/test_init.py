@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """deploy/run/g5c-init: twelve configurations with the chosen PLMN, tracking areas and addresses, fresh secrets, a PKI, and a guide; a second run keeps what exists."""
+import importlib.machinery
+import json
 import re
 import stat
 import subprocess
@@ -50,6 +52,17 @@ def main():
         check("a second run keeps the secrets", p.returncode == 0 and (d / "keys" / "master.key").read_text() == before)
         p = subprocess.run([sys.executable, str(TOOL), "--dir", str(d), "--mcc", "26", "--yes"], capture_output=True, text=True, stdin=subprocess.DEVNULL)
         check("an invalid MCC is refused", p.returncode != 0 and "--mcc" in p.stderr, p.stderr)
+    # --preset campus: the private-use PLMN by default, device groups that g5c-fleet accepts, and the guide
+    with tempfile.TemporaryDirectory() as d2:
+        d2 = Path(d2) / "campus-cfg"
+        p = subprocess.run([sys.executable, str(TOOL), "--dir", str(d2), "--preset", "campus", "--no-tls", "--yes"], capture_output=True, text=True, stdin=subprocess.DEVNULL)
+        check("campus preset: generated with the private-use PLMN 999/99", p.returncode == 0 and "mcc: '999'" in (d2 / "conf" / "amf.yaml").read_text() and "mnc: '99'" in (d2 / "conf" / "amf.yaml").read_text(), p.stdout + p.stderr)
+        groups = json.loads((d2 / "campus" / "groups.json").read_text())
+        fleet = importlib.machinery.SourceFileLoader("g5c_fleet", str(ROOT / "tools" / "cli" / "g5c-fleet")).load_module()
+        check("campus preset: three groups with the PLMN in their prefixes, accepted by g5c-fleet", sorted(groups["groups"]) == ["machines", "sensors", "staff"] and groups["groups"]["staff"]["prefix"] == "imsi-9999901" and
+              sorted(fleet.load_groups(d2 / "campus" / "groups.json")) == ["machines", "sensors", "staff"], groups)
+        check("campus preset: a device of a group falls in that group", fleet.group_of(groups["groups"], "imsi-999990200000007") == "machines" and fleet.group_of(groups["groups"], "imsi-999991000000001") == "(none)")
+        check("campus preset: the guide and the pointer in START-HERE", "Campus network starter pack" in (d2 / "campus" / "README.md").read_text() and "campus/README.md" in (d2 / "START-HERE.md").read_text())
     print("init: PASS" if ok else "init: FAIL")
     return 0 if ok else 1
 

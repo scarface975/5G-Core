@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LicenseRef-Proprietary
-add_library(g5c_pcf STATIC src/policy.c src/pcf.c src/smpolicy.c src/ampolicy.c src/admin.c src/policyauth.c src/bsfreg.c)
+add_library(g5c_pcf STATIC src/expr.c src/policy.c src/pcf.c src/smpolicy.c src/ampolicy.c src/admin.c src/policyauth.c src/bsfreg.c)
 target_include_directories(g5c_pcf PUBLIC include)
 target_link_libraries(g5c_pcf PUBLIC g5c_nfcore g5c_sbi g5c_base pthread)
 
@@ -8,6 +8,7 @@ target_link_libraries(pcf g5c_pcf)
 
 add_executable(test_pcf tests/test_pcf.c)
 target_link_libraries(test_pcf g5c_pcf g5c_udr g5c_bsf g5c_testkit)
+target_include_directories(test_pcf PRIVATE src)
 add_test(NAME pcf_policy_and_services COMMAND test_pcf)
 
 install(TARGETS pcf RUNTIME DESTINATION bin)

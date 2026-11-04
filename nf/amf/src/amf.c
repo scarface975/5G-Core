@@ -781,7 +781,7 @@ amf *amf_from_config(const g5c_json *root, g5c_nf *nf, char *err, size_t cap)
                                         "network_name", "timers", "paging_tries", "workers", "self_uri", "state_file", "reachable_grace",
                                         "max_unauthenticated", "inject", "overload", "power_saving", "slice_limits", NULL};
     static const char *const k_guami[] = {"region", "set", "pointer", NULL};
-    static const char *const k_ngap[] = {"address", "port", NULL};
+    static const char *const k_ngap[] = {"address", "addresses", "port", NULL};
     static const char *const k_sec[] = {"integrity", "ciphering", NULL};
     static const char *const k_timers[] = {"t3502", "t3510", "t3512", "t3513", "t3522", "t3550", "t3555", "t3560", "t3570", NULL};
     static const char *const k_name[] = {"full", "short", NULL};
@@ -872,6 +872,24 @@ amf *amf_from_config(const g5c_json *root, g5c_nf *nf, char *err, size_t cap)
                 goto fail;
             }
             snprintf(cf->ngap_addr, sizeof cf->ngap_addr, "%s", ad);
+        }
+        if (g5c_json_get(n, "addresses") != NULL) { /* multi-homing (TS 38.412 6.2): the first is the primary, up to seven more are bound to the same SCTP endpoint */
+            const g5c_json *l = g5c_json_get(n, "addresses");
+            if (ad != NULL || !g5c_json_is(l, G5C_J_ARRAY) || g5c_json_len(l) < 1 || g5c_json_len(l) > 8) {
+                snprintf(err, cap, "invalid config: `amf.ngap.addresses` is a list of 1 to 8 addresses and replaces `address`");
+                goto fail;
+            }
+            for (size_t i = 0; i < g5c_json_len(l); i++) {
+                const char *s = g5c_json_str(g5c_json_at(l, i));
+                if (s == NULL || strlen(s) >= sizeof cf->ngap_addr) {
+                    snprintf(err, cap, "invalid config: `amf.ngap.addresses[%zu]` must be an address", i);
+                    goto fail;
+                }
+                if (i == 0)
+                    snprintf(cf->ngap_addr, sizeof cf->ngap_addr, "%s", s);
+                else
+                    snprintf(cf->ngap_extra[cf->n_ngap_extra++], sizeof cf->ngap_extra[0], "%s", s);
+            }
         }
         if (g5c_json_get(n, "port") != NULL) {
             if (!g5c_json_get_int(n, "port", &v) || v < 0 || v > 65535) {

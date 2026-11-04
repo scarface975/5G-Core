@@ -120,6 +120,16 @@ if(G5C_BASH AND UNIX)
            ${G5C_BASH} ${CMAKE_SOURCE_DIR}/deploy/run/g5c-cluster.sh ns scenario ${CMAKE_SOURCE_DIR}/scenarios/cdr-sink.yaml)
   set_tests_properties(cluster_cdr_sink PROPERTIES ENVIRONMENT "${_direct_env};G5C_RUN=${CMAKE_BINARY_DIR}/cluster-run-cdr-sink" TIMEOUT 300
                        LABELS "integration;cluster" SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
+  # SCTP multi-homing (backlog E-04): the AMF's N2 endpoint has two local addresses
+  add_test(NAME cluster_n2_multihomed COMMAND /usr/bin/env "G5C_AMF_N2_ALT=127.2.0.6"
+           ${G5C_BASH} ${CMAKE_SOURCE_DIR}/deploy/run/g5c-cluster.sh ns scenario ${CMAKE_SOURCE_DIR}/scenarios/n2-multihomed.yaml)
+  set_tests_properties(cluster_n2_multihomed PROPERTIES ENVIRONMENT "${_direct_env};G5C_RUN=${CMAKE_BINARY_DIR}/cluster-run-n2-multihomed" TIMEOUT 300
+                       LABELS "integration;cluster" SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
+  # policy as code (backlog G-02): a script of the PCF, not the default, decides the session rate
+  add_test(NAME cluster_policy_script COMMAND /usr/bin/env "G5C_PCF_POLICY_EXTRA=  scripts: [ { when: \"supi startswith 'imsi-00101'\", session_ambr: { uplink: 1 Mbps, downlink: 1 Mbps } } ]"
+           ${G5C_BASH} ${CMAKE_SOURCE_DIR}/deploy/run/g5c-cluster.sh ns scenario ${CMAKE_SOURCE_DIR}/scenarios/policy-script.yaml)
+  set_tests_properties(cluster_policy_script PROPERTIES ENVIRONMENT "${_direct_env};G5C_RUN=${CMAKE_BINARY_DIR}/cluster-run-policy-script" TIMEOUT 300
+                       LABELS "integration;cluster" SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
   # radio lab kit (backlog B-10): OCUDU gNB + srsUE over ZeroMQ against our core; skipped where the gNB or the UE is not installed
   add_test(NAME radio_kit COMMAND ${G5C_BASH} ${CMAKE_SOURCE_DIR}/deploy/radio-kit/g5c-radio-kit run)
   set_tests_properties(radio_kit PROPERTIES TIMEOUT 300 LABELS "integration;cluster" SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)

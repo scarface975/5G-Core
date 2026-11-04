@@ -30,12 +30,13 @@ What is not built or not shown, by area, so nobody has to find it out. The row i
 |---|---|---|
 | Kubernetes: nothing applied, no image built, no Helm chart, no operator | F-04 | No container runtime here |
 | Hot reload covers a few sections | F-06 | The rest is listed as restart-required |
-| Shared-state high availability, SCTP multi-homing, autoscaling | E-03 E-04 E-05 | NF sets are in the NRF; the rest is wave 3, not started |
+| Shared-state high availability, a gNB-side multi-homed association with path failover, autoscaling | E-03 E-04 E-05 | NF sets are in the NRF and the AMF binds several N2 addresses; the rest is not started |
 | HSM / PKCS#11, IPsec / DTLS on N2 N3 N4 | D-01 D-03 | Need an HSM (or SoftHSM) and strongSwan; not started |
 | UPF fast path (AF_XDP / DPDK), multi-core scaling | E-01 E-02 | Need a NIC and a many-core host |
-| OAM interfaces (TS 28.5xx), policy scripting | F-05 G-02 | Not started |
+| OAM interfaces (TS 28.5xx) | F-05 | Not started |
+| Policy scripts at the NSSF, reload of policy.scripts by SIGHUP, a dry-run tool | G-02 | The PCF reads them at start |
 | Hooks for authentication vectors and for other functions | G-03 | The contract exists (`hook.h`), only the SMF charging record uses it |
 | An Nnwdaf SBI function, learned models | A-01 | `g5c-nwdaf` serves statistics over HTTP/1.1 |
 
 ## Wave 3 rows not started
-A-04 URSP, A-06 SEPP, A-10 edge branching, A-13 multi-PLMN, A-17 IMS, A-20 roaming screening, B-16 roaming scenarios, D-01 HSM, D-03 transport protection, E-01 fast path, E-02 multi-core, E-03 shared-state HA, E-04 multi-homing, F-05 OAM, G-02 policy scripting, H-01 private-network pack, H-03 edge hooks. Built to a first version or partly: A-01, C-04, E-05, G-03, H-04, I-04.
+A-04 URSP, A-06 SEPP, A-10 edge branching, A-13 multi-PLMN, A-17 IMS, A-20 roaming screening, B-16 roaming scenarios, D-01 HSM, D-03 transport protection, E-01 fast path, E-02 multi-core, E-03 shared-state HA, F-05 OAM, H-03 edge hooks. Built to a first version or partly: A-01, C-04, E-04, E-05, G-02, G-03, H-01, H-04, I-04.

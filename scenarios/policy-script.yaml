@@ -1,0 +1,6 @@
+# Policy as code (run with G5C_PCF_POLICY_EXTRA holding a `scripts:` entry, as the ctest cluster_policy_script does): the operator default gives every session 1 Gbit/s, a script whose
+# condition names the load generator's subscribers (supi startswith 'imsi-00101') gives them 1 Mbit/s, and the UPF enforces it: each UE offers 4 Mbit/s and gets about 1.
+name: a policy script limits the session rate
+steps:
+  - load: {ues: 4, gnbs: 2, traffic_mbps: 4, traffic_ms: 1500, expect_mbps: 1}
+  - assert: {metric: "upf:g5c_upf_dropped_packets_total{reason=rate_limit}", ">=": 100}
