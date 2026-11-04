@@ -1,0 +1,22 @@
+{
+  "note": "Procedure rules of g5c-conform: what must be seen in the signalling of one UE (NGAP / NAS), one N4 session or the N2 interface, and in what order. A rule checks the messages that are visible in a capture: after the Security Mode Command the NAS messages are ciphered, so only the NGAP transport shows. `then` lists the milestones that must follow the trigger in this order (a milestone is a phrase of the ladder line); `unless` phrases end the check (a reject, a failure). `answers` lists requests with the phrases that count as an answer and the time allowed in seconds.",
+  "rules": [
+    {"id": "REG-FLOW", "scope": "ue", "severity": "high", "clause": "TS 24.501 5.5.1.2, TS 33.501 6.1.2", "title": "a registration that is accepted goes through authentication and security mode before the context is set up",
+     "trigger": "Registration request", "then": ["Authentication request", "Authentication response", "Security mode command", "InitialContextSetupRequest"], "unless": ["Registration reject", "Authentication reject", "Authentication failure (Non-5G authentication unacceptable)"], "needs": "InitialContextSetupRequest"},
+    {"id": "REG-CTX", "scope": "ue", "severity": "medium", "clause": "TS 24.501 5.5.1.2.2", "title": "a registration request ends in a context setup or a reject",
+     "trigger": "Registration request", "then": ["InitialContextSetupRequest"], "unless": ["Registration reject", "Authentication reject", "UEContextReleaseCommand", "ErrorIndication"]},
+    {"id": "N2-ANSWERS", "scope": "ue", "severity": "high", "clause": "TS 38.413 8.3.1, 8.2.1, 8.3.3", "title": "NGAP requests are answered",
+     "answers": [{"request": "InitialContextSetupRequest", "response": ["InitialContextSetupResponse", "InitialContextSetupFailure"], "within_s": 10},
+                 {"request": "PDUSessionResourceSetupRequest", "response": ["PDUSessionResourceSetupResponse", "PDUSessionResourceSetupFailure"], "within_s": 10},
+                 {"request": "UEContextReleaseCommand", "response": ["UEContextReleaseComplete"], "within_s": 10},
+                 {"request": "PDUSessionResourceReleaseCommand", "response": ["PDUSessionResourceReleaseResponse"], "within_s": 10}]},
+    {"id": "AUTH-TIMER", "scope": "ue", "severity": "medium", "clause": "TS 24.501 10.2.2 (T3560)", "title": "an Authentication request is answered within T3560 (6 s)",
+     "answers": [{"request": "Authentication request", "response": ["Authentication response", "Authentication failure"], "within_s": 6}]},
+    {"id": "N2-SETUP", "scope": "n2", "severity": "high", "clause": "TS 38.413 8.7.1", "title": "an NG Setup Request is answered",
+     "answers": [{"request": "NGSetupRequest", "response": ["NGSetupResponse", "NGSetupFailure"], "within_s": 5}]},
+    {"id": "N4-ESTABLISH", "scope": "n4", "severity": "high", "clause": "TS 29.244 7.5.2", "title": "a PFCP Session Establishment Request is answered",
+     "answers": [{"request": "PFCP Session Establishment Request", "response": ["PFCP Session Establishment Response"], "within_s": 5}]},
+    {"id": "N4-DELETE", "scope": "n4", "severity": "medium", "clause": "TS 29.244 7.5.6", "title": "a PFCP Session Deletion Request is answered",
+     "answers": [{"request": "PFCP Session Deletion Request", "response": ["PFCP Session Deletion Response"], "within_s": 5}]}
+  ]
+}

@@ -106,6 +106,8 @@ accept's rejected NSSAI; a PDU session on it is refused. The SMF's `smf.dnns` gi
 | `tools/cli/g5c-subscribers`, `tools/cli/g5c-kpi` | Bulk import / export of subscribers; service KPIs from one definition file (above). |
 | `tools/cli/g5c-fanout`, `tools/cli/g5c-tester` | One population from many load processes (`--processes`, `--slice K/N` over hosts); the load generator pointed at a core (`--amf ip:port --subscribers URL`) with storms, mobility and traffic, and `pack` for one bundle. |
 | `tools/cli/g5c-interop`, `deploy/radio-kit/g5c-radio-kit` | The interoperability register (`docs/interop`) checked; the radio lab (OCUDU gNB + srsUE over ZeroMQ against our core) in one command. |
+| `tools/cli/g5c-nwdaf` | Analytics from the functions' counters (NF load, slice load, registration anomaly) as JSON in the Nnwdaf shape and as Prometheus series. |
+| `tools/cli/g5c-fleet`, `tools/cli/g5c-triage`, `tools/cli/g5c-conform` | Fleet reports and group provisioning for device populations; a diagnostics bundle checked against known issues (`docs/ops/known-issues.json`); a capture checked against the procedure rules (`docs/conformance/procedures.json`). |
 | `tools/cli/g5c-scenario`, `scenarios/` | A test as YAML steps (load, kill, restart, impair a link, assert on metrics and KPIs, HTTP calls); `deploy/run/g5c-cluster.sh ns scenario FILE...` runs them against a private cluster. |
 | `tools/cli/g5c-api` | The same runs from CI or a notebook over HTTP with a bearer token (start, status, stop, list). |
 | `tools/cli/g5c-dn` | The data network behind N6 for scenarios: DNS, HTTP (`/bytes/N`, `/delay/MS`), UDP echo, a RADIUS server for slice authentication. |
@@ -156,3 +158,6 @@ counts it (`g5c_sbi_requests_total{status}`), which the alert rules watch.
 ## What this release does not do
 Roaming (SEPP, home-routed sessions), non-3GPP access, EAP-TLS, rating and offline charging in a standard format (online charging with quota grants and renewal during the session exists, volume only), slice-specific authentication (NSSAA), RedCap, lawful intercept (a design is in `docs/security/lawful-intercept-design.md`), shared-state high availability of the AMF and
 SMF (a function that dies loses its connected UEs; the registrations and sessions come back from the state file), multi-PLMN.
+
+## Extension hooks
+`smf.cdr.sink_command` (absolute path and arguments), `sink_timeout_s` (default 10) and `sink_queue` (default 1024) hand every charging record, as one line of JSON on standard input, to a program of yours (contract `g5c-hook/1`, `libs/nfcore/include/g5c/hook.h`): the program runs with an empty environment except `G5C_HOOK` and `G5C_HOOK_API`, exit status 0 means taken, a program that does not finish is killed with whatever it started, and a full queue drops the newest item. Counters: `g5c_hook_items_total{hook,result}`. The record is also written to `smf.cdr.file`; write anything you cannot lose to a file first, the hook is not retried.

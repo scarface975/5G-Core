@@ -125,7 +125,8 @@ log: { level: $LOGLEVEL, json: $LOGJSON }" common
   common="$common_noscp"
   [ "$SCPON" = 1 ] && common="$common_noscp
 scp_client: { uri: 'http://$A_SCP:7785' }"
-  local chf_peer=""
+  local chf_peer="" cdr_sink=""
+  [ "${G5C_CDR_SINK:-0}" = 1 ] && cdr_sink=", sink_command: '/usr/bin/tee -a $RUN/state/cdr-sink.jsonl'"
   [ "$CHFON" = 1 ] && chf_peer="  chf: { uri: 'http://$A_CHF:7787', quota_bytes: ${G5C_CHF_QUOTA:-10485760} }"
   local bsf_peer="bsf: { enabled: false }"
   [ "$BSFON" = 1 ] && bsf_peer="bsf: { uri: 'http://$A_BSF:7786' }"
@@ -277,7 +278,7 @@ smf:
   self_uri: 'http://$A_SMF:7776'
 $smf_peers
   state_file: $RUN/state/smf-state.json
-  cdr: { file: $RUN/state/cdr.jsonl }
+  cdr: { file: $RUN/state/cdr.jsonl$cdr_sink }
   n4: { address: $A_SMF, port: 8805, heartbeat: { interval: 2, failures: 3 }, lost_after: 10 }
   upfs:
     - { name: upf-1, address: $A_UPF, port: 8805, dnns: [internet] }

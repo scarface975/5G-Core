@@ -135,5 +135,7 @@ void smf_cdr_write(smf *s, const smf_sess *ss, const smf_usage *u, const char *c
         G5C_COUNT(s->metrics, "g5c_smf_cdr_errors_total", "Charging data records that could not be written.");
     }
     pthread_mutex_unlock(&s->cdr_mu);
+    if (line != NULL)
+        g5c_hook_emit(s->cdr_hook, line);
     free(line);
 }

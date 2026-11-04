@@ -1,0 +1,247 @@
+#!/usr/bin/env python3
+"""g5c-nwdaf: network data analytics from the counters the functions already export (backlog A-01, first version). It samples the /metrics of the functions you name, keeps a window of samples,
+and serves three analytics in the shape of Nnwdaf_AnalyticsInfo (TS 29.520 AnalyticsData) and as Prometheus series:
+
+  NF_LOAD                 per function: its load (UE contexts or PDU sessions held), SBI requests per second and the share of server errors over the window
+  SLICE_LOAD_LEVEL        per S-NSSAI: PDU sessions held (needs the SMF's g5c_smf_pdu_sessions_by_slice) and the share of the total
+  REGISTRATION_ANOMALY    the registration rate of the AMF against its own recent past: a rate more than `--sigma` standard deviations from the mean of the window is abnormal, and so is a
+                          rejected share above `--reject-share`
+
+  g5c-nwdaf serve --nf amf=http://127.2.0.5:7777 --nf smf=http://... [--port 8100] [--bind 127.0.0.1] [--interval 5] [--window 60] [--sigma 3] [--reject-share 20]
+  g5c-nwdaf once  --nf ... [--samples 3] [--interval 2]          sample, print the three analytics as JSON, exit
+
+GET /nnwdaf-analyticsinfo/v1/analytics?event-id=NF_LOAD|SLICE_LOAD_LEVEL|REGISTRATION_ANOMALY, GET /metrics. This is an HTTP/1.1 JSON service for operators and dashboards: it is not an SBI
+function (no HTTP/2, no NRF registration, no OAuth2), and the analytics are statistics over counters, not learned models. It only READS the functions. Bind it to a trusted interface."""
+import argparse
+import importlib.machinery
+import importlib.util
+import json
+import math
+import sys
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from urllib.parse import parse_qs, urlparse
+
+HERE = Path(__file__).resolve().parent
+LOAD_GAUGES = ("g5c_amf_ue_contexts", "g5c_smf_pdu_sessions_active", "g5c_upf_sessions")
+
+
+def load_mod(name):
+    ld = importlib.machinery.SourceFileLoader(name.replace("-", "_"), str(HERE / name))
+    spec = importlib.util.spec_from_loader(name.replace("-", "_"), ld)
+    mod = importlib.util.module_from_spec(spec)
+    ld.exec_module(mod)
+    return mod
+
+
+def value(samples, name, **labels):
+    """Sum of the samples of a series (None when it is absent)."""
+    tot, seen = 0.0, False
+    for n, l, v in samples:
+        if n == name and all(l.get(k) == w for k, w in labels.items()):
+            tot += v
+            seen = True
+    return tot if seen else None
+
+
+class Window:
+    """The last `size` samples: (time, {function: [(name, labels, value)]})."""
+
+    def __init__(self, size):
+        self.size, self.items = size, []
+
+    def add(self, t, per_fn):
+        self.items = (self.items + [(t, per_fn)])[-self.size:]
+
+
+def nf_load(win):
+    out = []
+    if not win.items:
+        return out
+    t1, last = win.items[-1]
+    t0, first = win.items[0]
+    dt = max(t1 - t0, 1e-9)
+    for fn in sorted(last):
+        load = next((value(last[fn], g) for g in LOAD_GAUGES if value(last[fn], g) is not None), None)
+        req1, req0 = value(last[fn], "g5c_sbi_requests_total"), value(first.get(fn, []), "g5c_sbi_requests_total")
+        err1, err0 = value(last[fn], "g5c_sbi_requests_total", status="500") or 0, value(first.get(fn, []), "g5c_sbi_requests_total", status="500") or 0
+        for st in ("501", "502", "503", "504"):
+            err1 += value(last[fn], "g5c_sbi_requests_total", status=st) or 0
+            err0 += value(first.get(fn, []), "g5c_sbi_requests_total", status=st) or 0
+        rate = (req1 - (req0 or 0)) / dt if req1 is not None else None
+        share = 100.0 * (err1 - err0) / (req1 - req0) if req1 is not None and req0 is not None and req1 - req0 > 0 else None
+        out.append({"nfInstanceName": fn, "nfLoadLevelAverage": load, "requestsPerSecond": None if rate is None else round(rate, 2),
+                    "serverErrorSharePercent": None if share is None else round(share, 2), "samples": len(win.items)})
+    return out
+
+
+def slice_load(win):
+    if not win.items:
+        return []
+    _, last = win.items[-1]
+    rows = {}
+    for fn, samples in last.items():
+        for n, l, v in samples:
+            if n == "g5c_smf_pdu_sessions_by_slice":
+                rows[l.get("snssai", "?")] = rows.get(l.get("snssai", "?"), 0) + v
+    total = sum(rows.values())
+    return [{"snssai": s, "pduSessions": int(v), "sharePercent": round(100.0 * v / total, 1) if total else 0.0} for s, v in sorted(rows.items())]
+
+
+def registration_anomaly(win, sigma, reject_share):
+    """The rates between consecutive samples of the AMF's registration counter; the newest is compared with the mean and spread of the older ones."""
+    pts = []
+    for t, per in win.items:
+        for fn, samples in per.items():
+            v = value(samples, "g5c_amf_registrations_total")
+            if v is not None:
+                pts.append((t, v, value(samples, "g5c_amf_registrations_total", result="rejected") or 0))
+    if len(pts) < 5:
+        return {"status": "not enough samples", "samples": len(pts), "needed": 5}
+    rates = [(b[1] - a[1]) / max(b[0] - a[0], 1e-9) for a, b in zip(pts, pts[1:])]
+    hist, now = rates[:-1], rates[-1]
+    mean = sum(hist) / len(hist)
+    sd = math.sqrt(sum((r - mean) ** 2 for r in hist) / len(hist))
+    floor = max(sd, 0.05 * mean, 0.5)  # a flat history has no spread: a change of a few registrations a second is not an anomaly
+    z = (now - mean) / floor
+    total_d, rej_d = pts[-1][1] - pts[0][1], pts[-1][2] - pts[0][2]
+    share = 100.0 * rej_d / total_d if total_d > 0 else 0.0
+    reasons = []
+    if abs(z) > sigma:
+        reasons.append("rate %.1f/s is %.1f spreads %s the mean %.1f/s" % (now, abs(z), "above" if z > 0 else "below", mean))
+    if share > reject_share and total_d >= 10:
+        reasons.append("%.0f %% of the registrations in the window were rejected" % share)
+    return {"status": "abnormal" if reasons else "normal", "ratePerSecond": round(now, 2), "meanPerSecond": round(mean, 2), "zScore": round(z, 2), "rejectedSharePercent": round(share, 1),
+            "reasons": reasons, "samples": len(pts)}
+
+
+def analytics(win, event, a):
+    if event == "NF_LOAD":
+        return {"nfLoadLevelInfos": nf_load(win)}
+    if event == "SLICE_LOAD_LEVEL":
+        return {"sliceLoadLevelInfos": slice_load(win)}
+    if event == "REGISTRATION_ANOMALY":
+        return {"registrationAnomaly": registration_anomaly(win, a.sigma, a.reject_share)}
+    return None
+
+
+def metrics_text(win, a):
+    lines = ["# TYPE g5c_nwdaf_nf_load gauge"]
+    for r in nf_load(win):
+        if r["nfLoadLevelAverage"] is not None:
+            lines.append('g5c_nwdaf_nf_load{function="%s"} %s' % (r["nfInstanceName"], r["nfLoadLevelAverage"]))
+    lines.append("# TYPE g5c_nwdaf_slice_sessions gauge")
+    for r in slice_load(win):
+        lines.append('g5c_nwdaf_slice_sessions{snssai="%s"} %d' % (r["snssai"], r["pduSessions"]))
+    an = registration_anomaly(win, a.sigma, a.reject_share)
+    lines += ["# TYPE g5c_nwdaf_registration_abnormal gauge", "g5c_nwdaf_registration_abnormal %d" % (1 if an.get("status") == "abnormal" else 0), ""]
+    return "\n".join(lines)
+
+
+class Sampler:
+    def __init__(self, nfs, size):
+        self.kpi = load_mod("g5c-kpi")
+        self.live = load_mod("g5c-atlas-live")
+        self.nfs, self.win, self.lock = nfs, Window(size), threading.Lock()
+
+    def one(self, item):
+        name, url = item
+        code, text = self.live.curl(url + "/metrics")
+        return name, ([(n, l, v) for n, l, v in self.kpi.parse_exposition(text)] if code == 200 else [])
+
+    def sample(self):
+        with ThreadPoolExecutor(max_workers=max(2, len(self.nfs))) as ex:
+            per = dict(ex.map(self.one, self.nfs))
+        with self.lock:
+            self.win.add(time.time(), per)
+
+
+def make_handler(sm, a):
+    class H(BaseHTTPRequestHandler):
+        def log_message(self, *x):
+            pass
+
+        def send(self, code, body, ctype):
+            self.send_response(code)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_GET(self):
+            u = urlparse(self.path)
+            with sm.lock:
+                if u.path == "/metrics":
+                    return self.send(200, metrics_text(sm.win, a).encode(), "text/plain; version=0.0.4")
+                if u.path == "/nnwdaf-analyticsinfo/v1/analytics":
+                    ev = (parse_qs(u.query).get("event-id") or [""])[0]
+                    res = analytics(sm.win, ev, a)
+                    if res is None:
+                        return self.send(400, json.dumps({"title": "Bad Request", "status": 400, "cause": "MANDATORY_QUERY_PARAM_INCORRECT",
+                                                          "detail": "event-id is one of NF_LOAD, SLICE_LOAD_LEVEL, REGISTRATION_ANOMALY"}).encode(), "application/problem+json")
+                    return self.send(200, json.dumps(res).encode(), "application/json")
+            self.send(404, b"not found", "text/plain")
+
+    return H
+
+
+def parse_nfs(items):
+    out = []
+    for it in items:
+        name, sep, url = it.partition("=")
+        if not sep or not url.startswith(("http://", "https://")):
+            raise SystemExit("g5c-nwdaf: --nf takes NAME=URL (got %r)" % it)
+        out.append((name, url.rstrip("/")))
+    if not out:
+        raise SystemExit("g5c-nwdaf: name at least one function with --nf NAME=URL")
+    return out
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(prog="g5c-nwdaf", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    for name in ("serve", "once"):
+        s = sub.add_parser(name)
+        s.add_argument("--nf", action="append", default=[], metavar="NAME=URL")
+        s.add_argument("--interval", type=float, default=5.0)
+        s.add_argument("--window", type=int, default=60, help="samples kept")
+        s.add_argument("--sigma", type=float, default=3.0)
+        s.add_argument("--reject-share", type=float, default=20.0)
+    sub.choices["serve"].add_argument("--port", type=int, default=8100)
+    sub.choices["serve"].add_argument("--bind", default="127.0.0.1")
+    sub.choices["once"].add_argument("--samples", type=int, default=3)
+    a = ap.parse_args(argv)
+    sm = Sampler(parse_nfs(a.nf), max(a.window, 5))
+    if a.cmd == "once":
+        for i in range(max(a.samples, 1)):
+            if i:
+                time.sleep(a.interval)
+            sm.sample()
+        print(json.dumps({ev: analytics(sm.win, ev, a) for ev in ("NF_LOAD", "SLICE_LOAD_LEVEL", "REGISTRATION_ANOMALY")}, indent=2))
+        return 0
+
+    def loop():
+        while True:
+            try:
+                sm.sample()
+            except Exception as e:  # a function that does not answer is an empty sample, not the end of the service
+                print("g5c-nwdaf: sampling: %s" % e, file=sys.stderr)
+            time.sleep(a.interval)
+
+    sm.sample()
+    threading.Thread(target=loop, daemon=True).start()
+    srv = ThreadingHTTPServer((a.bind, a.port), make_handler(sm, a))
+    print("g5c-nwdaf: http://%s:%d/ (reads %d functions every %.0f s)" % (a.bind, srv.server_address[1], len(sm.nfs), a.interval), flush=True)
+    try:
+        srv.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

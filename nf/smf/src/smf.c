@@ -73,6 +73,7 @@ void smf_destroy(smf *s)
     free(s->amf);
     free(s->instance_id);
     free(s->self_uri);
+    g5c_hook_free(s->cdr_hook);
     free(s->cdr_path);
     pthread_mutex_destroy(&s->cdr_mu);
     pthread_mutex_destroy(&s->mu);
@@ -382,7 +383,7 @@ smf *smf_from_config(const g5c_json *root, g5c_nf *nf, char *err, size_t cap)
         G5C_LOGW("g5c_smf", "FAILURE INJECTION is configured (smf.inject): this function misbehaves on purpose");
     }
     if (g5c_json_get(c, "cdr") != NULL) { /* charging data records: `cdr: { file: <path> }` */
-        static const char *const k_cdr[] = {"file", NULL};
+        static const char *const k_cdr[] = {"file", "sink_command", "sink_timeout_s", "sink_queue", NULL};
         const g5c_json *cd = g5c_json_get(c, "cdr");
         const char *path;
         if (!g5c_json_is(cd, G5C_J_OBJECT) || g5c_json_check_keys(cd, k_cdr, "smf.cdr", err, cap) != 0) {
@@ -396,6 +397,17 @@ smf *smf_from_config(const g5c_json *root, g5c_nf *nf, char *err, size_t cap)
             goto fail;
         }
         s->cdr_path = g5c_xstrdup(path);
+        if (g5c_json_get(cd, "sink_command") != NULL) {
+            int64_t to = 10, qm = 1024;
+            if (g5c_json_get_str(cd, "sink_command") == NULL || (g5c_json_get(cd, "sink_timeout_s") != NULL && (!g5c_json_get_int(cd, "sink_timeout_s", &to) || to < 1 || to > 300)) ||
+                (g5c_json_get(cd, "sink_queue") != NULL && (!g5c_json_get_int(cd, "sink_queue", &qm) || qm < 1 || qm > 1000000))) {
+                snprintf(err, cap, "invalid config: `smf.cdr` takes `sink_command` (an absolute path), `sink_timeout_s` 1..=300 and `sink_queue` 1..=1000000");
+                goto fail;
+            }
+            s->cdr_hook = g5c_hook_new("cdr_sink", g5c_json_get_str(cd, "sink_command"), (unsigned)qm, (unsigned)to, s->metrics, err, cap);
+            if (s->cdr_hook == NULL)
+                goto fail;
+        }
     }
     if (g5c_json_get(c, "release_guard_ms") != NULL) {
         if (!g5c_json_get_int(c, "release_guard_ms", &v) || v < 100 || v > 600000) {

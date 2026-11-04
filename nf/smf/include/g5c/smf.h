@@ -23,6 +23,7 @@
 #include "g5c/json.h"
 #include "g5c/metrics.h"
 #include "g5c/multipart.h"
+#include "g5c/hook.h"
 #include "g5c/nfcore.h"
 #include "g5c/pfcp_ie.h"
 #include "g5c/sbi.h"
@@ -454,11 +455,18 @@ typedef struct smf {
         unsigned max_sessions;
     } slice_limit[8]; /* `smf.slice_limits`: PDU sessions admitted per S-NSSAI (network slice admission control, TS 23.501 5.15.11) */
     unsigned nslice_limit;
+    struct {
+        uint8_t sst;
+        bool has_sd;
+        uint32_t sd;
+    } slice_seen[16]; /* the slices that have had sessions: their gauge goes to zero instead of vanishing */
+    unsigned nslice_seen;
     char *chf;                 /* `smf.chf.uri`: the CHF of Nchf_ConvergedCharging; NULL: no charging */
     unsigned chf_rating_group; /* `smf.chf.rating_group` */
     uint64_t chf_quota;        /* `smf.chf.quota_bytes`: the volume asked for */
     bool chf_required;         /* `smf.chf.required`: a session is refused when the CHF refuses or cannot be reached */
     char *cdr_path;            /* `smf.cdr.file`: one JSON record per released PDU session */
+    g5c_hook *cdr_hook;        /* `smf.cdr.sink_command`: a program that receives each record as a line of JSON (extension hook cdr_sink, contract g5c-hook/1) */
     pthread_mutex_t cdr_mu;
     uint64_t cdr_seq;
     pthread_mutex_t pmu;

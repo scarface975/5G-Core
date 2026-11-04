@@ -1,0 +1,124 @@
+#!/usr/bin/env python3
+"""g5c-conform: a conformance monitor for recorded signalling (backlog C-04). It reads a capture the way g5c-ladder does (NGAP, the visible NAS, PFCP) and checks each UE, each N4 session and
+the N2 interface against the procedure rules of docs/conformance/procedures.json: what must follow what, and which requests must be answered in time. The core under observation can be anyone's:
+the rules say what the specifications say, not what our functions do.
+
+  g5c-conform CAPTURE.pcap[ng] [--rules FILE] [--json]             needs tshark
+  g5c-conform --from-tsv ROWS.tsv [--rules FILE] [--json]         the rows of `g5c-ladder --tsv` (no tshark needed)
+
+Exit code 0 when no rule was violated, 1 when one was, 2 when the input cannot be read. Each violation names the rule, the clause, the UE or session and the frames. What is not visible cannot be
+judged: NAS messages after the Security Mode Command are ciphered, so a rule that needs them is not applied ("not applicable"), never passed by guessing. Rules and capture are matched by the
+phrases of the ladder lines, so a capture without NGAP / PFCP in it is reported as having nothing to check."""
+import argparse
+import importlib.machinery
+import importlib.util
+import json
+import sys
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+RULES = HERE.parent.parent / "docs" / "conformance" / "procedures.json"
+
+
+def load_ladder():
+    ld = importlib.machinery.SourceFileLoader("g5c_ladder", str(HERE / "g5c-ladder"))
+    spec = importlib.util.spec_from_loader("g5c_ladder", ld)
+    mod = importlib.util.module_from_spec(spec)
+    ld.exec_module(mod)
+    return mod
+
+
+def first(evs, phrase, start=0):
+    return next((i for i in range(start, len(evs)) if phrase in evs[i]["info"]), None)
+
+
+def check_sequence(rule, evs):
+    """None when the rule does not apply, else a list of violation texts (empty: kept)."""
+    i = first(evs, rule["trigger"])
+    if i is None:
+        return None
+    if any(first(evs, u) is not None for u in rule.get("unless", [])):
+        return None if "needs" in rule else []
+    if "needs" in rule and first(evs, rule["needs"]) is None:
+        return None
+    out, pos = [], i
+    for ph in rule["then"]:
+        j = first(evs, ph, pos)
+        if j is None:
+            out.append("%r never follows %r" % (ph, rule["trigger"]) if pos == i else "%r is missing before the context setup (or comes out of order)" % ph)
+            break
+        pos = j
+    return out
+
+
+def check_answers(rule, evs):
+    out, applied = [], False
+    for a in rule["answers"]:
+        for i, e in enumerate(evs):
+            if a["request"] not in e["info"]:
+                continue
+            applied = True
+            j = next((k for k in range(i + 1, len(evs)) if any(r in evs[k]["info"] for r in a["response"])), None)
+            if j is None:
+                out.append("frame %d: %s was not answered" % (e["n"], a["request"]))
+            elif evs[j]["t"] - e["t"] > a["within_s"]:
+                out.append("frame %d: %s answered after %.1f s (allowed %s s, frame %d)" % (e["n"], a["request"], evs[j]["t"] - e["t"], a["within_s"], evs[j]["n"]))
+    return out if applied else None
+
+
+def run(rows, rules):
+    ld = load_ladder()
+    ues, n4, _ = ld.build(rows)
+    groups = [("ue", "UE " + name, evs) for (kind, name), evs in ues.items() if kind == "UE"]
+    groups += [("n2", "N2", evs) for (kind, name), evs in ues.items() if kind == "N2"]
+    groups += [("n4", "N4 session from frame %s" % key, evs) for key, evs in n4.items()]
+    viol, applied, na = [], {}, {}
+    for r in rules:
+        for scope, title, evs in groups:
+            if scope != r["scope"]:
+                continue
+            res = check_answers(r, evs) if "answers" in r else check_sequence(r, evs)
+            if res is None:
+                na[r["id"]] = na.get(r["id"], 0) + 1
+                continue
+            applied[r["id"]] = applied.get(r["id"], 0) + 1
+            for msg in res:
+                viol.append({"rule": r["id"], "severity": r["severity"], "clause": r["clause"], "where": title, "what": msg, "title": r["title"]})
+    return viol, applied, na, len(groups)
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(prog="g5c-conform", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("capture", nargs="?")
+    ap.add_argument("--from-tsv")
+    ap.add_argument("--rules", default=str(RULES))
+    ap.add_argument("--json", action="store_true")
+    a = ap.parse_args(argv)
+    try:
+        if not a.capture and not a.from_tsv:
+            raise ValueError("give a capture or --from-tsv")
+        ld = load_ladder()
+        text = Path(a.from_tsv).read_text() if a.from_tsv else ld.run_tshark(a.capture)
+        rows = ld.parse_rows(text)
+        rules = json.loads(Path(a.rules).read_text())["rules"]
+    except (OSError, ValueError, KeyError, SystemExit) as e:
+        print("g5c-conform: %s" % (e if not isinstance(e, SystemExit) else e.code), file=sys.stderr)
+        return 2
+    viol, applied, na, ngroups = run(rows, rules)
+    if a.json:
+        print(json.dumps({"violations": viol, "applied": applied, "notApplicable": na, "groups": ngroups}, indent=2))
+    else:
+        print("%d groups (UEs, N4 sessions, N2) checked against %d rules: %d violations" % (ngroups, len(rules), len(viol)))
+        for v in viol:
+            print("\n[%s] %s  (%s, %s)\n  %s: %s" % (v["severity"].upper(), v["title"], v["rule"], v["clause"], v["where"], v["what"]))
+        kept = sorted(r["id"] for r in rules if applied.get(r["id"]) and not any(v["rule"] == r["id"] for v in viol))
+        if kept:
+            print("\nkept: %s" % ", ".join(kept))
+        never = sorted(r["id"] for r in rules if not applied.get(r["id"]))
+        if never:
+            print("not applicable (nothing in the capture to judge): %s" % ", ".join(never))
+    return 1 if viol else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

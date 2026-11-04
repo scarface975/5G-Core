@@ -115,6 +115,11 @@ if(G5C_BASH AND UNIX)
   # the tester edition against a core that is not ours (backlog I-01): scripted UEs against the Open5GS 2.8.0 oracle; skipped where Open5GS is not installed
   add_test(NAME tester_vs_open5gs COMMAND ${G5C_BASH} ${CMAKE_SOURCE_DIR}/deploy/oracle/tester.sh 5 1)
   set_tests_properties(tester_vs_open5gs PROPERTIES ENVIRONMENT "G5C_LOAD_BIN=$<TARGET_FILE:load_core>" TIMEOUT 300 LABELS "integration;cluster" SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
+  # extension hooks (backlog G-03): every charging record also goes to a program
+  add_test(NAME cluster_cdr_sink COMMAND /usr/bin/env "G5C_CDR_SINK=1"
+           ${G5C_BASH} ${CMAKE_SOURCE_DIR}/deploy/run/g5c-cluster.sh ns scenario ${CMAKE_SOURCE_DIR}/scenarios/cdr-sink.yaml)
+  set_tests_properties(cluster_cdr_sink PROPERTIES ENVIRONMENT "${_direct_env};G5C_RUN=${CMAKE_BINARY_DIR}/cluster-run-cdr-sink" TIMEOUT 300
+                       LABELS "integration;cluster" SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
   # radio lab kit (backlog B-10): OCUDU gNB + srsUE over ZeroMQ against our core; skipped where the gNB or the UE is not installed
   add_test(NAME radio_kit COMMAND ${G5C_BASH} ${CMAKE_SOURCE_DIR}/deploy/radio-kit/g5c-radio-kit run)
   set_tests_properties(radio_kit PROPERTIES TIMEOUT 300 LABELS "integration;cluster" SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
@@ -201,6 +206,10 @@ if(G5C_BASH AND UNIX)
     add_test(NAME fanout_tool COMMAND ${G5C_PYTHON} ${CMAKE_SOURCE_DIR}/tests/support/test_fanout.py)
     add_test(NAME triage_tool COMMAND ${G5C_PYTHON} ${CMAKE_SOURCE_DIR}/tests/support/test_triage.py)
     set_tests_properties(triage_tool PROPERTIES LABELS "unit")
+    add_test(NAME conform_tool COMMAND ${G5C_PYTHON} ${CMAKE_SOURCE_DIR}/tests/support/test_conform.py)
+    set_tests_properties(conform_tool PROPERTIES LABELS "unit")
+    add_test(NAME nwdaf_tool COMMAND ${G5C_PYTHON} ${CMAKE_SOURCE_DIR}/tests/support/test_nwdaf.py)
+    set_tests_properties(nwdaf_tool PROPERTIES LABELS "unit")
     add_test(NAME fleet_tool COMMAND ${G5C_PYTHON} ${CMAKE_SOURCE_DIR}/tests/support/test_fleet.py)
     set_tests_properties(fleet_tool PROPERTIES LABELS "unit")
     add_test(NAME tester_tool COMMAND ${G5C_PYTHON} ${CMAKE_SOURCE_DIR}/tests/support/test_tester.py)

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LicenseRef-Proprietary
-add_library(g5c_nfcore STATIC src/nfcore.c src/disc.c src/oauth.c src/events.c src/overload.c src/reload.c src/authz.c)
+add_library(g5c_nfcore STATIC src/nfcore.c src/disc.c src/oauth.c src/events.c src/overload.c src/reload.c src/authz.c src/hook.c)
 target_include_directories(g5c_nfcore PUBLIC include)
 target_link_libraries(g5c_nfcore PUBLIC g5c_sbi g5c_base pthread)
 
@@ -29,3 +29,8 @@ add_executable(test_authz tests/test_authz.c)
 target_link_libraries(test_authz g5c_nfcore g5c_testkit)
 add_test(NAME nfcore_authz COMMAND test_authz)
 set_property(TEST nfcore_authz APPEND PROPERTY LABELS component)
+
+add_executable(test_hook tests/test_hook.c)
+target_link_libraries(test_hook g5c_nfcore g5c_testkit)
+add_test(NAME nfcore_hook COMMAND test_hook)
+set_property(TEST nfcore_hook APPEND PROPERTY LABELS component)

@@ -1,0 +1,8 @@
+# Extension hook cdr_sink (run with G5C_CDR_SINK=1, the SMF then passes every charging record to `tee -a <run>/state/cdr-sink.jsonl`): one record per released PDU session reaches the program.
+name: every charging record reaches the cdr_sink hook
+steps:
+  - load: {ues: 20, gnbs: 2}
+  - assert: {metric: "smf:g5c_smf_cdrs_written_total", ">=": 20}
+  - assert: {metric: "smf:g5c_hook_items_total{hook=cdr_sink,result=ok}", ">=": 20}
+  - assert: {metric: "smf:g5c_hook_items_total{hook=cdr_sink,result=failed}", "==": 0}
+  - assert: {metric: "smf:g5c_hook_items_total{hook=cdr_sink,result=dropped}", "==": 0}

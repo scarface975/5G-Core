@@ -31,6 +31,54 @@ static void count_op(smf *s, const char *op, const char *result)
 static void update_gauge(smf *s)
 {
     g5c_gauge_set(g5c_gauge_get(s->metrics, "g5c_smf_pdu_sessions_active", "PDU sessions held by the SMF.", NULL, 0), (int64_t)smf_session_count(s));
+    {   /* the sessions per slice (the labels of a slice that once had sessions stay, at zero) */
+        struct {
+            uint8_t sst;
+            bool has_sd;
+            uint32_t sd;
+            int64_t n;
+        } cnt[16];
+        unsigned nc = 0;
+        pthread_mutex_lock(&s->mu);
+        for (unsigned k = 0; k < s->nslice_seen && nc < 16; k++) {
+            cnt[nc].sst = s->slice_seen[k].sst;
+            cnt[nc].has_sd = s->slice_seen[k].has_sd;
+            cnt[nc].sd = s->slice_seen[k].sd;
+            cnt[nc++].n = 0;
+        }
+        for (const smf_sess *o = s->sessions; o != NULL; o = o->next) {
+            unsigned k = 0;
+            if (o->dead)
+                continue;
+            while (k < nc && !(cnt[k].sst == o->sst && cnt[k].has_sd == o->has_sd && (!o->has_sd || cnt[k].sd == o->sd)))
+                k++;
+            if (k == nc && nc < 16) {
+                cnt[nc].sst = o->sst;
+                cnt[nc].has_sd = o->has_sd;
+                cnt[nc].sd = o->sd;
+                cnt[nc++].n = 0;
+            }
+            if (k < nc)
+                cnt[k].n++;
+        }
+        s->nslice_seen = 0;
+        for (unsigned k = 0; k < nc; k++) {
+            s->slice_seen[k].sst = cnt[k].sst;
+            s->slice_seen[k].has_sd = cnt[k].has_sd;
+            s->slice_seen[k].sd = cnt[k].sd;
+            s->nslice_seen++;
+        }
+        pthread_mutex_unlock(&s->mu);
+        for (unsigned k = 0; k < nc; k++) {
+            char sn[24];
+            g5c_label l = {"snssai", sn};
+            if (cnt[k].has_sd)
+                snprintf(sn, sizeof sn, "%u-%06X", cnt[k].sst, cnt[k].sd);
+            else
+                snprintf(sn, sizeof sn, "%u", cnt[k].sst);
+            g5c_gauge_set(g5c_gauge_get(s->metrics, "g5c_smf_pdu_sessions_by_slice", "PDU sessions held by the SMF, per S-NSSAI.", &l, 1), cnt[k].n);
+        }
+    }
     if (s->ndnns > 0)
         for (size_t i = 0; i < s->ndnns; i++) {
             g5c_label l = {"dnn", s->dnns[i].dnn};
