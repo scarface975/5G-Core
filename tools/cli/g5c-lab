@@ -78,14 +78,21 @@ def main(argv=None):
     if not chosen:
         print("g5c-lab: no exercise %s (g5c-lab list)" % a.n, file=sys.stderr)
         return 2
-    bad = 0
+    bad = skipped = 0
     for e in chosen:
         ok, rc, out = run_one(e, a.keep)
+        if rc == 77:   # the exercise needs something this host lacks (user and network namespaces, tcpdump): not a failure
+            skipped += 1
+            print("SKIP  %-3s %s" % (e["id"], e["title"]))
+            print("\n".join("      " + ln for ln in out.strip().splitlines()[-2:]))
+            continue
         print("%s  %-3s %s" % ("PASS" if ok else "FAIL", e["id"], e["title"]))
         if not ok:
             bad += 1
             print("\n".join("      " + ln for ln in out.strip().splitlines()[-12:]))
-    return 1 if bad else 0
+    if bad:
+        return 1
+    return 77 if skipped == len(chosen) else 0   # 77 is the code ctest treats as skipped
 
 
 if __name__ == "__main__":
