@@ -7,7 +7,17 @@ jobs:
       - uses: actions/checkout@v4
       - run: sudo apt-get update && sudo apt-get install -y cmake pkg-config libssl-dev libnghttp2-dev libuv1-dev
       - name: Build and test (plain, then under ASan + UBSan)
-        run: bash scripts/c_check.sh
+        run: |
+          set +e
+          bash scripts/c_check.sh 2>&1 | tee check.log
+          rc=${PIPESTATUS[0]}
+          if [ "$rc" -ne 0 ]; then
+            # the failing tests and the first lines of what they printed, as annotations (the log itself is visible only to signed-in users)
+            names=$(grep -E '^\s+[0-9]+ - .*\((Failed|Timeout|Not Run)' check.log | sed 's/  */ /g' | tr '\n' ';')
+            echo "::error title=failed tests::${names:0:900}"
+            grep -nE 'FAIL|assertion failed|Assertion|ERROR|error:|SKIP' check.log | head -40 | cut -c1-200 | while IFS= read -r l; do echo "::warning::${l}"; done
+          fi
+          exit $rc
   static-analysis:
     runs-on: ubuntu-latest
     steps:
