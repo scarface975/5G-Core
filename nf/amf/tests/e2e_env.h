@@ -380,8 +380,17 @@ static void gnb_open(gnb_t *g, int idx)
     sa.sin_family = AF_INET;
     sa.sin_port = htons(g_ngap_port_override != 0 ? g_ngap_port_override : amf_ngap_port(E.a));
     inet_pton(AF_INET, g_ngap_ip, &sa.sin_addr);
-    if (connect(g->fd, (struct sockaddr *)&sa, sizeof sa) != 0)
-        TK_FAIL("a gNB cannot connect to the AMF (%s)", strerror(errno));
+    /* A blocking SCTP connect can be interrupted by a signal and report EINTR while the association is still coming up, or find it already up and say EISCONN (seen on a loaded CI
+     * runner under ASan). Neither is a failure: wait for the association and look at the socket's own error. */
+    if (connect(g->fd, (struct sockaddr *)&sa, sizeof sa) != 0 && errno != EISCONN) {
+        int err = 0;
+        socklen_t el = sizeof err;
+        struct pollfd pf = {g->fd, POLLOUT, 0};
+        if (errno != EINTR && errno != EINPROGRESS && errno != EALREADY)
+            TK_FAIL("a gNB cannot connect to the AMF (%s)", strerror(errno));
+        if (poll(&pf, 1, 10000) != 1 || getsockopt(g->fd, SOL_SOCKET, SO_ERROR, &err, &el) != 0 || err != 0)
+            TK_FAIL("a gNB cannot connect to the AMF (%s)", err != 0 ? strerror(err) : "the association did not come up");
+    }
 }
 
 static void gnb_close(gnb_t *g)
