@@ -12,6 +12,13 @@ Entry template:
 - Next:
 ```
 
+## 2026-11-05 - Phase 9 - possible-now backlog, ORAN emulator proof, CI green
+- Built: the ORAN emulator proof (`deploy/oran`); the SMF buffers downlink until the AN tunnel is known; SMF N4 timers (request, heartbeat, association retry, lost-after) on the virtual clock; reload of the whole PCF `policy` section and `g5c-policy-eval`; `memberof` and device groups in policy scripts; hooks: UDM `auth_hook`, AMF `event_hook`, PCF `decision_hook`; SEPP N32-c security capability negotiation (the PRINS-only operations answered 501); UDM device groups (`groups`, GetGroupIdentifiers, `internalGroupIds`); six more `g5c-conform` rules and whole-word phrase matching; `g5c-pm` with 19 TS 28.552 measurements, per-S-NSSAI subcounters for registrations, files and a read-only view.
+- Spec clauses covered: TS 29.573 6.1.4.2 and 5.2 (N32-c), TS 28.552 5.1-5.4 (measurement names and clauses, checked against the pinned text), TS 38.413 8.2-8.7 and TS 24.501 5.6.1 (conformance rules), TS 29.503 (GetGroupIdentifiers).
+- Tests added / status: 156 tests, all passing (153 under ASan + UBSan); lint clean; GitHub Actions green on 674c0c2 after `g5c-lab` learned to report a skipped exercise as a skip (the runner has no network namespaces).
+- Known gaps: URSP delivery (nothing here decodes it), PRINS, one source of group membership for the UDM and the PCF, the UPF's own timers under warp, a million-subscriber run, HSM, IPsec/DTLS (see `guides/known-gaps.md`).
+- Next: `guides/todo.md`.
+
 ## Status board
 | NF / component | Phase | Status | Notes |
 |---|---|---|---|

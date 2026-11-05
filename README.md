@@ -4,6 +4,14 @@ A clean-room implementation of a 5G standalone (SA) core network, written in C17
 
 Third-party stacks (Open5GS, UERANSIM, srsRAN) appear only as interoperability peers and behavioural oracles for differential testing; none of their code is used.
 
+## Status
+
+Release candidate 0.9.0-rc1. All twelve functions and the optional CHF and SEPP are built and tested. The suite has 156 tests (153 under ASan + UBSan); lint, including `gcc -fanalyzer`, is clean, and the GitHub Actions workflow (build and test plain and under ASan + UBSan, static analysis, fuzz smoke) is green.
+
+**Proven end to end.** The ORAN emulator's N2, NAS and N3 stack (NG Setup, registration with 5G-AKA, PDU session, GTP-U echo through the UPF, release; 16 UEs at once) runs against the whole core in a private network namespace with no root: `ORAN_EMULATOR=<path>/oran bash deploy/oran/prove.sh` (see `docs/guides/oran-emulator.md`). The same run checks the extension hooks and the TS 28.552 measurement files against the core's own counters. Other peers that were run are listed in `docs/interop` (OCUDU gNB with srsUE over ZeroMQ, UERANSIM, Open5GS in several mixed topologies); anything not listed there has not been tested.
+
+**Not built, and why.** `docs/guides/known-gaps.md` lists every gap with its reason; `docs/guides/todo.md` orders the remaining work. In short: UE policy (URSP) delivery cannot be shown working without a UE that decodes it; the SEPP implements the TLS protection of N32-f but not PRINS; multi-core UPF, shared-state high availability, HSM and IPsec/DTLS, IMS and multi-PLMN each need a design of their own or hardware or peers that are not here.
+
 ---
 
 ## 1. System model
@@ -34,11 +42,11 @@ The core follows the Service-Based Architecture of TS 23.501. Control-plane func
 
 | Function | Responsibility | Notable internals |
 |----------|----------------|-------------------|
-| **AMF** | Access and mobility. Terminates N1/N2: NG setup, registration, 5G-AKA and EAP-AKA' orchestration, NAS security mode, service request and paging, de-registration, configuration update, Xn and N2 handover, N1N2 message transfer, event exposure. | SCTP transport, NAS security context per UE, persistent UE state, per-slice session accounting, fault injection hooks for resilience tests. |
+| **AMF** | Access and mobility. Terminates N1/N2: NG setup, registration, 5G-AKA and EAP-AKA' orchestration, NAS security mode, service request and paging, de-registration, configuration update, Xn and N2 handover, N1N2 message transfer, event exposure. | SCTP transport, NAS security context per UE, persistent UE state, per-slice session accounting, multi-homed N2 endpoint, registration counters by type and slice, an event hook for a program of yours, fault injection hooks for resilience tests. |
 | **SMF** | Session management. PDU session create/modify/release, UE address allocation, UPF selection, PFCP rule generation (PDR, FAR, QER, URR, BAR), PCF-driven modification, paging triggers, UPF restart recovery. | Usage-monitoring loop (PCF thresholds → URR → usage report → policy update), CDR emission, persistence of session state, PFCP retransmission and message caching. |
 | **UPF** | User plane. GTP-U termination on N3, N6 forwarding through a TUN device, SDF classification, QoS enforcement (token buckets for MBR/AMBR), downlink buffering with end markers, usage reporting. | Open-addressed pointer maps for TEID/UE lookup, rule store validated on every PFCP modification, runtime event loop separate from the pure dataplane engine. |
-| **PCF** | Policy control. SM and AM policy associations, PCC rule decisions, per-subscriber policy from the UDR, application-function sessions (Npcf_PolicyAuthorization) with QoS references, BSF binding registration. | Mid-session policy push, usage-monitoring decisions, operator admin API for policies and sessions. |
-| **UDM** | Subscriber data and credentials. Nudm_UEAuthentication (5G-AKA, EAP-AKA' vector generation), SDM, UECM, event exposure, SUCI de-concealment, ID translation. | Keys encrypted at rest through a master key, serialized per-SUPI SQN handling, bulk subscriber provisioning, embedded operator console. |
+| **PCF** | Policy control. SM and AM policy associations, PCC rule decisions, per-subscriber policy from the UDR, application-function sessions (Npcf_PolicyAuthorization) with QoS references, BSF binding registration. | Mid-session policy push, usage-monitoring decisions, operator admin API for policies and sessions, policy scripts (a small bounded condition language, including device groups) with reload on SIGHUP and a dry-run tool, a decision hook. |
+| **UDM** | Subscriber data and credentials. Nudm_UEAuthentication (5G-AKA, EAP-AKA' vector generation), SDM, UECM, event exposure, SUCI de-concealment, ID translation. | Keys encrypted at rest through a master key, serialized per-SUPI SQN handling, bulk subscriber provisioning, embedded operator console, device groups (GetGroupIdentifiers, `internalGroupIds`), authentication vectors from an external program (`auth_hook`). |
 | **UDR** | Unified data repository. Nudr data APIs for subscription, policy, exposure and application data, group-ID mapping. | Operations and schemas generated from the pinned OpenAPI files; one storage interface with memory, journalled-file and PostgreSQL backends; ETag/precondition handling; subscriptions and notifications. |
 | **AUSF** | Authentication server. Nausf_UEAuthentication for 5G-AKA and EAP-AKA', SoR and UPU protection, FN-RG authentication. | KAUSF per SUPI in an encrypted state file. |
 | **NRF** | Registry. Nnrf_NFManagement, NFDiscovery with filters and ordering, AccessToken (ES256 JWT). | Heart-beat supervision, status notifications, persistence. |
@@ -47,7 +55,7 @@ The core follows the Service-Based Architecture of TS 23.501. Control-plane func
 | **SCP** | Service communication proxy: indirect communication models C and D (TS 29.500 §6.10). | Delegated discovery with cache, producer reselection with quarantine, loop detection, chained SCPs. |
 | **BSF** | Binding support. Nbsf_Management register/update/deregister/discover. | IPv4 and IPv6 longest-prefix match, MAC and framed-route bindings, overlapping address handling. |
 | **CHF** | Charging. Nchf_ConvergedCharging create/update/release with volume quota grants against subscriber balances; the SMF is the trigger (`smf.chf`). Optional. | Quota arithmetic, final unit indication, denial when the balance is gone, charging data records as JSON lines. |
-| **SEPP** | Security edge for roaming (TLS-protected N32-f). Screens requests to and from partner networks and forwards them. Optional. | Per-partner services, forbidden paths, rate limit, identity check, topology hiding of Location headers. |
+| **SEPP** | Security edge for roaming (TLS-protected N32-f). Screens requests to and from partner networks and forwards them. Optional. | Per-partner services, forbidden paths, rate limit, identity check, topology hiding of Location headers, N32-c security capability negotiation (TLS) as initiator and responder. |
 
 Every function is a single binary configured by one YAML file, started as `<name> [--check] <config.yaml>` (`--check` validates the configuration and exits), and exposes `/health/live`, `/health/ready`, `/metrics` and, where applicable, an authenticated `/admin/v1` surface.
 
@@ -86,13 +94,16 @@ Every function is a single binary configured by one YAML file, started as `<name
 - **Golden traces.** Captured NGAP/NAS/PFCP/GTP-U exchanges are decoded and re-encoded byte-exactly; payload dumps are validated against the official OpenAPI documents.
 - **Differential tests.** `deploy/oracle` and `tools/diff` run our functions and Open5GS's against the same stimuli and compare status codes, bodies and wire bytes.
 - **Cluster tests.** `deploy/run/g5c-cluster.sh` builds a full multi-function core in network namespaces and runs load, chaos (latency, loss, kills), soak, TLS, secrets, slices, upgrade, key-log and scenario modes. `load_core` generates registrations and user-plane traffic; `g5c-scenario` interprets declarative YAML scenarios from `scenarios/`.
+- **Interoperability.** `deploy/oran/prove.sh` runs the ORAN emulator's N2/NAS/N3 drivers against the whole core; `docs/interop/register.json` lists every peer that was run, what passed, what was found and how to repeat it (`g5c-interop`).
+- **Conformance monitor.** `g5c-conform` checks recorded signalling against 13 procedure rules (registration, mobility, service request, release, reset, N4) and runs on the real captures in the tests.
+- **Continuous integration.** `.github/workflows/ci.yml`: build and test plain and under ASan + UBSan, static analysis, a 30 second fuzz smoke per target. A test that needs a host feature the runner lacks (network namespaces, tshark) skips instead of failing.
 - **Static checks.** `scripts/c_lint.sh` enforces banned functions, dependency licences and `gcc -fanalyzer`; `-Werror` with hardening flags is the default build.
 
 ## 6. Tooling (`tools/`)
 
 | Folder | Role |
 |--------|------|
-| `cli/` | Operator and tester commands: `g5c-api` (SBI explorer), `g5c-sdk` (generates a client from live `/openapi.json`), `g5c-subscribers` (Open5GS/free5GC/CSV import and export), `g5c-scenario`, `g5c-kpi`, `g5c-trace` (cross-function trace stitching), `g5c-ladder` (message-flow ladders and anomaly detection from packet captures), `g5c-capture`, `g5c-diag` (support bundle with redaction), `g5c-redact`, `g5c-dn`, `g5c-why` (explains from the logs why a subscriber failed), `g5c-privacy` (finds subscriber identities in clear in an N1/N2 capture), `g5c-cdr` (usage, quality and roaming reports from charging records), `g5c-alarms` (Prometheus alerts as X.733 alarms), `g5c-tokens` (admin tokens with roles and tenants). |
+| `cli/` | Operator and tester commands: `g5c-api` (SBI explorer), `g5c-sdk` (generates a client from live `/openapi.json`), `g5c-subscribers` (Open5GS/free5GC/CSV import and export), `g5c-scenario`, `g5c-kpi`, `g5c-trace` (cross-function trace stitching), `g5c-ladder` (message-flow ladders and anomaly detection from packet captures), `g5c-capture`, `g5c-diag` (support bundle with redaction), `g5c-redact`, `g5c-dn`, `g5c-why` (explains from the logs why a subscriber failed), `g5c-privacy` (finds subscriber identities in clear in an N1/N2 capture), `g5c-cdr` (usage, quality and roaming reports from charging records), `g5c-alarms` (Prometheus alerts as X.733 alarms), `g5c-tokens` (admin tokens with roles and tenants), `g5c-conform` (procedure rules over a capture), `g5c-pm` (TS 28.552 measurements as files and a read-only view), `g5c-fleet` (device-fleet provisioning and reports), `g5c-triage` (triage of support bundles), `g5c-nwdaf` (analytics from the metrics), `g5c-tester` and `g5c-fanout` (scripted UE load against any core), `g5c-interop` (the interoperability register), `g5c-lab` (training exercises). The PCF also installs `g5c-policy-eval`, a dry run of the policy for a session. |
 | `spec/` | Fetches the pinned 3GPP documents, extracts ASN.1, NAS tables and OpenAPI files, and generates the NGAP schema, NAS definitions and per-function API tables. |
 | `gen/` | Reproducible generators for test vectors, fuzz seeds, conformance matrices, the web console and the Grafana dashboard. |
 | `check/` | Consistency gates for matrices, operations files and service-level objectives. |
@@ -102,7 +113,7 @@ Every function is a single binary configured by one YAML file, started as `<name
 
 ## 7. Deployment (`deploy/`)
 
-`docker` and `compose` (including a UERANSIM + Open5GS oracle topology), `k8s`, `systemd` units with a `g5c@` template, `run` (namespace cluster, PKI generation with CRL and revocation, one-command init), `oracle` (interop scenarios), `ops` (monitoring), `console` (single-file web UI served by the UDM), `demo`, `windows`, and `install.sh` for host installation.
+`docker` and `compose` (including a UERANSIM + Open5GS oracle topology), `k8s`, `systemd` units with a `g5c@` template, `run` (namespace cluster, PKI generation with CRL and revocation, one-command init), `oracle` (interop scenarios), `ops` (monitoring), `console` (single-file web UI served by the UDM), `demo`, `windows`, `oran` (the ORAN emulator proof), `radio-kit` (OCUDU gNB with srsUE), and `install.sh` for host installation.
 
 ## 8. Repository map
 

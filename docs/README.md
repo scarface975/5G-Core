@@ -8,13 +8,16 @@ See the licensing policy in the strategy PDF, section 2.
 ## Where things are
 | Path | Purpose |
 |------|---------|
-| `guides/` | install, upgrade, admin guide, testing, release process, pilot plan, known gaps, to do, the ORAN emulator proof |
+| `guides/` | install, upgrade, admin guide, testing, release process, pilot plan, known gaps, to do (what is left, in order), the ORAN emulator proof |
 | `history/update.md` | Append-only, newest-first build log. Update it every session or milestone |
 | `adr/` | Architecture decision records, `NNNN-title.md` (language, licensing, spec baseline, per-NF design) |
 | `specs/` | Pinned 3GPP documents and the clause -> module -> test traceability |
 | `conformance/` | Per-phase matrices: spec clause, function, proving test (checked by `tools/check/check_matrix.py`) |
 | `api/` | Generated SBI reference of every NF |
 | `ops/` | Runbooks and service level objectives |
+| `interop/` | The register of what was run against which peer, with results and how to repeat each (`g5c-interop`) |
+| `pm/` | The TS 28.552 measurements the core counts, with clause and fidelity (`g5c-pm`) |
+| `training/` | Exercises for operators (`g5c-lab`) |
 | `security/` | Threat model, key-handling note, lawful-intercept design |
 | `legal/` | Third-party licences, SNOW 3G licensing, release audit |
 | `sbom/`, `perf/` | Software bill of materials, performance history |
@@ -31,6 +34,8 @@ The repository layout (code, tools, deploy) is described in the [top-level READM
 
 ## Phases (status in history/update.md)
 0 Foundations - 1 UDM - 2 PCF - 3 UPF - 4 SMF - 5 AMF - 6 Integration - 7 Remaining NFs - 8 Hardening - 9 Release
+
+**Status:** release candidate 0.9.0-rc1; all functions built; 156 tests green (153 under ASan + UBSan) and the GitHub Actions workflow passing; the ORAN emulator proof passes (`guides/oran-emulator.md`). What is open is in `guides/known-gaps.md` and `guides/todo.md`.
 
 ## Build / run
 C17, CMake, GCC or Clang, with OpenSSL 3, nghttp2 and libuv development packages (ADR-0013). On Windows use WSL2 Ubuntu;
