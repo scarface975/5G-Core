@@ -170,6 +170,13 @@ udm *udm_from_config(const g5c_json *cfg, g5c_nf *nf, char *err, size_t errcap)
     udm_init(u, nf->client, discover_udr ? "http://unused" : g5c_json_get_str(udr, "uri"), &keys, hk, nhk, plmn, nf->instance_id, nf->metrics);
     atomic_init(&u->refuse_null_scheme, refuse_null);
     g5c_nf_on_reload(nf, "suci", udm_reload_suci, u);
+    g5c_nf_on_reload(nf, "groups", udm_reload_groups, u);
+    u->groups = udm_groups_parse(g5c_json_get(cfg, "groups"), err, errcap);
+    if (u->groups == NULL) {
+        udm_destroy(u);
+        free(u);
+        return NULL;
+    }
     if (discover_udr)
         udm_udr_use_discovery(&u->udr, g5c_disc_new(nf->client, nf->common.nrf_uri, "UDM", nf->instance_id));
     OPENSSL_cleanse(&keys, sizeof keys);
@@ -180,6 +187,32 @@ udm *udm_from_config(const g5c_json *cfg, g5c_nf *nf, char *err, size_t errcap)
         udm_udr_set_token(&u->udr, udr_token);
         OPENSSL_cleanse(udr_token, strlen(udr_token));
         free(udr_token);
+    }
+    {
+        static const char *const k_ah[] = {"command", "timeout_s", NULL};
+        const g5c_json *ah = g5c_json_get(cfg, "auth_hook");
+        int64_t to = 5;
+        if (ah != NULL) {
+            if (!g5c_json_is(ah, G5C_J_OBJECT) || g5c_json_check_keys(ah, k_ah, "auth_hook", err, errcap) != 0) {
+                if (err && errcap && err[0] == 0)
+                    seterr(err, errcap, "%s", "invalid config: `auth_hook` must be a mapping with `command`");
+                udm_destroy(u);
+                free(u);
+                return NULL;
+            }
+            if (g5c_json_get(ah, "timeout_s") != NULL && (!g5c_json_get_int(ah, "timeout_s", &to) || to < 1 || to > 60)) {
+                seterr(err, errcap, "%s", "invalid value for `auth_hook.timeout_s`: must be 1..=60");
+                udm_destroy(u);
+                free(u);
+                return NULL;
+            }
+            u->auth_hook = g5c_hookcall_new("auth_vector", g5c_json_get_str(ah, "command"), (unsigned)to, nf->metrics, err, errcap);
+            if (u->auth_hook == NULL) {
+                udm_destroy(u);
+                free(u);
+                return NULL;
+            }
+        }
     }
     {
         static const char *const k_ee[] = {"amf_uri", "notify_uri", "state_file", NULL};

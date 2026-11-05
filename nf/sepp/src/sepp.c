@@ -23,6 +23,7 @@
 #include <string.h>
 #include <strings.h>
 #include <time.h>
+#include <stdatomic.h>
 
 #include "g5c/sepp.h"
 
@@ -40,12 +41,14 @@ typedef struct {
     size_t ndeny;
     double rate, burst;
     bool supi_local;
+    atomic_bool negotiated; /* N32-c: a security capability was agreed with this partner */
     double tokens, last; /* the bucket */
     pthread_mutex_t mu;
 } partner_t;
 
 struct sepp {
-    char *name, *public_root, *local_plmn;
+    char *name, *public_root, *local_plmn, *fqdn; /* fqdn: what this SEPP calls itself in N32-c */
+    bool hs_required;
     struct {
         char *apiroot, *uri;
     } local[MAX_LIST];
@@ -100,7 +103,7 @@ static bool uri_ok(const char *u)
 
 sepp *sepp_from_config(const g5c_json *root, g5c_nf *nf, char *err, size_t errcap)
 {
-    static const char *const top[] = {"public_apiroot", "local_targets", "max_body", "timeout_ms", "partners", NULL};
+    static const char *const top[] = {"public_apiroot", "local_targets", "max_body", "timeout_ms", "handshake", "partners", NULL};
     static const char *const pk[] = {"name", "plmn", "domain", "uri", "sources", "allow_services", "deny_path_contains", "rate_per_s", "burst", "supi_must_be_local", NULL};
     const g5c_json *blk = g5c_json_get(root, "sepp"), *pl;
     sepp *s = g5c_xcalloc(1, sizeof *s);
@@ -155,6 +158,26 @@ sepp *sepp_from_config(const g5c_json *root, g5c_nf *nf, char *err, size_t errca
             goto bad;
         }
         g5c_client_set_timeout(nf->client, (int)v);
+    }
+    {   /* N32-c: `handshake: { required: true, sender: sepp.5gc.mnc001.mcc001.3gppnetwork.org }` */
+        static const char *const hk[] = {"required", "sender", NULL};
+        const g5c_json *hs = g5c_json_get(blk, "handshake");
+        const char *snd = g5c_json_get_str(hs, "sender");
+        if (hs != NULL && (!g5c_json_is(hs, G5C_J_OBJECT) || g5c_json_check_keys(hs, hk, "sepp.handshake", err, errcap) != 0)) {
+            if (err[0] == 0)
+                snprintf(err, errcap, "invalid config: `sepp.handshake` must be a mapping");
+            goto bad;
+        }
+        (void)g5c_json_get_bool(hs, "required", &s->hs_required);
+        if (snd != NULL) {
+            s->fqdn = g5c_xstrdup(snd);
+        } else if (s->public_root != NULL) { /* the host of the public apiRoot */
+            const char *h = strstr(s->public_root, "://") + 3;
+            size_t n = strcspn(h, ":/");
+            s->fqdn = g5c_xstrndup(h, n);
+        } else {
+            s->fqdn = g5c_xstrdup(nf->common.name);
+        }
     }
     pl = g5c_json_get(blk, "partners");
     if (!g5c_json_is(pl, G5C_J_ARRAY) || g5c_json_len(pl) < 1 || g5c_json_len(pl) > MAX_PARTNERS) {
@@ -244,12 +267,187 @@ void sepp_destroy(sepp *s)
     free(s->name);
     free(s->public_root);
     free(s->local_plmn);
+    free(s->fqdn);
     free(s);
 }
 
 size_t sepp_partner_count(const sepp *s)
 {
     return s->npart;
+}
+
+/* ---- N32-c: security capability negotiation (TS 29.573 6.1.4.2, clause 5.2) ----
+ * The initiating SEPP offers what it supports; the responding SEPP selects one and answers. This SEPP supports TLS (the protected mode of N32-f it implements) and requires that the peer
+ * supports 3gpp-Sbi-Target-apiRoot (C.2.1.3), which TLS mode relies on. With `sepp.handshake.required` no request is forwarded to or accepted from a partner before the negotiation succeeded;
+ * the SEPP starts it itself, when the first request for the partner arrives. One negotiation, from either side, serves both directions. Parameter exchange (PRINS) is not implemented. */
+static void count_n32c(sepp *s, const partner_t *p, const char *role, const char *result)
+{
+    g5c_label l[] = {{"partner", p ? p->name : "-"}, {"role", role}, {"result", result}};
+    g5c_counter_inc(g5c_counter_get(s->metrics, "g5c_sepp_n32c_total", "N32-c security capability negotiations, by partner, role and result.", l, 3));
+}
+
+static g5c_json *plmn_json(const char *plmn)
+{
+    g5c_json *o = g5c_json_new_obj();
+    char mcc[4], mnc[4];
+    memcpy(mcc, plmn, 3);
+    mcc[3] = 0;
+    snprintf(mnc, sizeof mnc, "%s", plmn + 3);
+    g5c_json_set_str(o, "mcc", mcc);
+    g5c_json_set_str(o, "mnc", mnc);
+    return o;
+}
+
+static bool plmn_list_has(const g5c_json *list, const char *plmn)
+{
+    for (size_t i = 0; i < g5c_json_len(list); i++) {
+        const g5c_json *e = g5c_json_at(list, i);
+        const char *mcc = g5c_json_get_str(e, "mcc"), *mnc = g5c_json_get_str(e, "mnc");
+        char both[8];
+        if (mcc == NULL || mnc == NULL)
+            continue;
+        snprintf(both, sizeof both, "%s%s", mcc, mnc);
+        if (strcmp(both, plmn) == 0)
+            return true;
+    }
+    return false;
+}
+
+static bool list_has_str(const g5c_json *list, const char *v)
+{
+    for (size_t i = 0; i < g5c_json_len(list); i++)
+        if (g5c_streq(g5c_json_str(g5c_json_at(list, i)), v))
+            return true;
+    return false;
+}
+
+/* the responder: POST /n32c-handshake/v1/exchange-capability */
+static void exchange_capability(void *ctx, const g5c_req *req, g5c_resp *resp)
+{
+    sepp *s = ctx;
+    partner_t *in = NULL;
+    g5c_json *rq = g5c_req_json(req, resp), *rsp, *pl;
+    const g5c_json *caps, *plmns;
+    bool root_ok = false;
+    if (rq == NULL)
+        return;
+    for (size_t i = 0; i < s->npart && in == NULL; i++)
+        for (size_t k = 0; k < s->part[i].nsources && in == NULL; k++)
+            if (strcmp(s->part[i].sources[k], req->peer) == 0)
+                in = &s->part[i];
+    if (in == NULL) {
+        refuse(s, resp, 403, "UNKNOWN_PARTNER", "no roaming relation with the address the request comes from", "-", "n32c", "unknown_partner");
+        count_n32c(s, NULL, "responder", "refused");
+        goto done;
+    }
+    caps = g5c_json_get(rq, "supportedSecCapabilityList");
+    plmns = g5c_json_get(rq, "plmnIdList");
+    (void)g5c_json_get_bool(rq, "3GppSbiTargetApiRootSupported", &root_ok);
+    if (g5c_json_get_str(rq, "sender") == NULL || !g5c_json_is(caps, G5C_J_ARRAY) || g5c_json_len(caps) < 1 || (plmns != NULL && !g5c_json_is(plmns, G5C_J_ARRAY))) {
+        refuse(s, resp, 400, "MANDATORY_IE_INCORRECT", "SecNegotiateReqData needs sender and a non-empty supportedSecCapabilityList", in->name, "n32c", "bad_request");
+        count_n32c(s, in, "responder", "refused");
+        goto done;
+    }
+    if (!list_has_str(caps, "TLS")) {
+        refuse(s, resp, 403, "NO_COMMON_SECURITY_CAPABILITY", "this SEPP supports TLS protection of N32-f only", in->name, "n32c", "no_common_capability");
+        count_n32c(s, in, "responder", "refused");
+        goto done;
+    }
+    if (!root_ok) {
+        refuse(s, resp, 403, "NO_COMMON_SECURITY_CAPABILITY", "TLS protection needs 3gpp-Sbi-Target-apiRoot, which the initiating SEPP does not support", in->name, "n32c", "no_common_capability");
+        count_n32c(s, in, "responder", "refused");
+        goto done;
+    }
+    if (plmns != NULL && g5c_json_len(plmns) > 0 && !plmn_list_has(plmns, in->plmn)) {
+        refuse(s, resp, 403, "PLMN_NOT_ALLOWED", "the PLMN of the roaming relation is not among those the initiating SEPP serves", in->name, "n32c", "plmn_mismatch");
+        count_n32c(s, in, "responder", "refused");
+        goto done;
+    }
+    atomic_store(&in->negotiated, true);
+    rsp = g5c_json_new_obj();
+    g5c_json_set_str(rsp, "sender", s->fqdn);
+    g5c_json_set_str(rsp, "selectedSecCapability", "TLS");
+    g5c_json_set_bool(rsp, "3GppSbiTargetApiRootSupported", true);
+    pl = g5c_json_set(rsp, "plmnIdList", g5c_json_new_arr());
+    g5c_json_push(pl, plmn_json(s->local_plmn));
+    g5c_resp_json(resp, 200, rsp);
+    g5c_json_free(rsp);
+    G5C_LOGI("g5c_sepp", "N32-c with %s (%s): TLS selected", in->name, g5c_json_get_str(rq, "sender"));
+    count_n32c(s, in, "responder", "ok");
+done:
+    g5c_json_free(rq);
+}
+
+/* TS 29.573 5.2.3: the parameter exchange (cipher suites, protection policy, security information) is executed only when PRINS was selected, and the N32-f context (terminate, error report)
+ * exists only for PRINS. This SEPP selects TLS, so these operations have nothing to act on: they are answered 501, not forwarded as if they were a request for a local function. */
+static void prins_only(void *ctx, const g5c_req *req, g5c_resp *resp)
+{
+    sepp *s = ctx;
+    (void)req;
+    g5c_resp_problem_simple(resp, 501, "UNSUPPORTED_SECURITY_CAPABILITY", "this SEPP selects TLS protection of N32-f; the operation belongs to PRINS (TS 29.573 5.2.3), which it does not support");
+    g5c_resp_header(resp, "server", s->name);
+    count_n32c(s, NULL, "responder", "prins_only");
+}
+
+/* the initiator: 0 when the partner selected TLS */
+static int handshake_with(sepp *s, partner_t *p)
+{
+    g5c_json *rq = g5c_json_new_obj(), *caps, *ans = NULL;
+    g5c_resp r;
+    char *body, *url, err[160];
+    int rc, ret = -1;
+    g5c_json_set_str(rq, "sender", s->fqdn);
+    caps = g5c_json_set(rq, "supportedSecCapabilityList", g5c_json_new_arr());
+    g5c_json_push_str(caps, "TLS");
+    g5c_json_set_bool(rq, "3GppSbiTargetApiRootSupported", true);
+    g5c_json_push(g5c_json_set(rq, "plmnIdList", g5c_json_new_arr()), plmn_json(s->local_plmn));
+    g5c_json_set(rq, "targetPlmnId", plmn_json(p->plmn));
+    body = g5c_json_to_string(rq, NULL);
+    g5c_json_free(rq);
+    url = g5c_xasprintf("%s/n32c-handshake/v1/exchange-capability", p->uri);
+    memset(&r, 0, sizeof r);
+    rc = g5c_client_request(s->client, "POST", url, NULL, 0, "application/json", (const uint8_t *)body, strlen(body), &r, err, sizeof err);
+    if (rc != 0) {
+        G5C_LOGW("g5c_sepp", "N32-c with %s failed: %s", p->name, err);
+        count_n32c(s, p, "initiator", "failed");
+    } else {
+        ans = r.status == 200 ? g5c_json_parse((const char *)r.body, r.body_len, err, sizeof err) : NULL;
+        if (ans != NULL && g5c_streq(g5c_json_get_str(ans, "selectedSecCapability"), "TLS") && g5c_json_get_str(ans, "sender") != NULL) {
+            bool root_ok = false;
+            (void)g5c_json_get_bool(ans, "3GppSbiTargetApiRootSupported", &root_ok);
+            if (root_ok) {
+                atomic_store(&p->negotiated, true);
+                count_n32c(s, p, "initiator", "ok");
+                G5C_LOGI("g5c_sepp", "N32-c with %s (%s): TLS selected", p->name, g5c_json_get_str(ans, "sender"));
+                ret = 0;
+            }
+        }
+        if (ret != 0) {
+            G5C_LOGW("g5c_sepp", "N32-c with %s: refused or not usable (status %d)", p->name, r.status);
+            count_n32c(s, p, "initiator", "refused");
+        }
+        g5c_resp_free(&r);
+    }
+    g5c_json_free(ans);
+    free(body);
+    free(url);
+    return ret;
+}
+
+int sepp_handshake(sepp *s, const char *partner)
+{
+    for (size_t i = 0; i < s->npart; i++)
+        if (strcmp(s->part[i].name, partner) == 0)
+            return handshake_with(s, &s->part[i]);
+    return -1;
+}
+
+bool sepp_partner_negotiated(const sepp *s, const char *partner)
+{
+    for (size_t i = 0; i < s->npart; i++)
+        if (strcmp(s->part[i].name, partner) == 0)
+            return atomic_load(&s->part[i].negotiated);
+    return false;
 }
 
 /* ---- the request ---- */
@@ -396,6 +594,10 @@ static void sepp_proxy(void *ctx, const g5c_req *req, g5c_resp *resp)
                 return;
             }
         }
+        if (s->hs_required && !atomic_load(&out->negotiated) && handshake_with(s, out) != 0) {
+            refuse(s, resp, 503, "N32C_NOT_NEGOTIATED", "the security capability negotiation with the partner network's SEPP has not succeeded", pname, dir, "not_negotiated");
+            return;
+        }
         base = g5c_xstrdup(out->uri);
     } else { /* a partner SEPP asks a local function */
         bool local_ok = false;
@@ -411,6 +613,10 @@ static void sepp_proxy(void *ctx, const g5c_req *req, g5c_resp *resp)
             return;
         }
         pname = in->name;
+        if (s->hs_required && !atomic_load(&in->negotiated)) {
+            refuse(s, resp, 403, "N32C_NOT_NEGOTIATED", "the partner network's SEPP has not negotiated a security capability (N32-c)", pname, dir, "not_negotiated");
+            return;
+        }
         for (size_t i = 0; i < s->nlocal && !local_ok; i++) {
             size_t l = strlen(s->local[i].apiroot);
             local_ok = strncasecmp(target, s->local[i].apiroot, l) == 0 && (target[l] == 0 || target[l] == '/');
@@ -495,6 +701,10 @@ static void sepp_proxy(void *ctx, const g5c_req *req, g5c_resp *resp)
 g5c_router *sepp_router(sepp *s)
 {
     g5c_router *r = g5c_router_new();
+    g5c_router_route(r, "POST", "/n32c-handshake/v1/exchange-capability", exchange_capability, s);
+    g5c_router_route(r, "POST", "/n32c-handshake/v1/exchange-params", prins_only, s);
+    g5c_router_route(r, "POST", "/n32c-handshake/v1/n32f-terminate", prins_only, s);
+    g5c_router_route(r, "POST", "/n32c-handshake/v1/n32f-error", prins_only, s);
     g5c_router_set_fallback(r, sepp_proxy, s);
     return r;
 }

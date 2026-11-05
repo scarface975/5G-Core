@@ -4,6 +4,7 @@
 #include <stdatomic.h>
 #include <time.h>
 #include <unistd.h>
+#include <sys/stat.h>
 
 #include "g5c/eapaka.h"
 #include "g5c/testkit.h"
@@ -889,6 +890,123 @@ static void test_ueau(bool encrypt)
 }
 
 /* suci.null_scheme: reject (TS 33.501 5.2.5): a SUCI in clear is refused, a concealed one and a SUPI on the SBI still work */
+/* device groups (backlog H-04): GetGroupIdentifiers, the group ids in am-data, a reload, the configuration errors */
+static void test_groups(void)
+{
+    T t;
+    g5c_json *v = NULL, *cfg;
+    char err[200], path[512];
+    const char *ext = "extgroupid-meters%40example.com", *gen = "/nudm-sdm/v2/group-data/group-identifiers";
+    udm_groups *gs;
+    cfg = J("[{\"ext_group_id\":\"extgroupid-meters@example.com\",\"int_group_id\":\"0000000a-001-01-0a\",\"members\":[\"" SUPI "\",\"imsi-001010000000009\"],\"supi_ranges\":[{\"start\":\"001010000000100\",\"end\":\"001010000000199\"}]},"
+            "{\"ext_group_id\":\"extgroupid-cams@example.com\",\"int_group_id\":\"0000000b-001-01-0b\",\"supi_ranges\":[{\"start\":\"001010000000001\",\"end\":\"001010000000001\"}]}]");
+    gs = udm_groups_parse(cfg, err, sizeof err);
+    TK_ASSERT(gs != NULL && udm_groups_count(gs) == 2);
+    setup(&t, false);
+    udm_set_groups(&t.u, gs);
+    g5c_json_free(cfg);
+    snprintf(path, sizeof path, "%s?ext-group-id=%s&ue-id-ind=true", gen, ext);
+    TK_ASSERT(rq(&t, "GET", path, NULL, false, &v, NULL) == 200);
+    TK_ASSERT(strcmp(g5c_json_get_str(v, "intGroupId"), "0000000a-001-01-0a") == 0 && g5c_json_len(g5c_json_get(v, "ueIdList")) == 2);
+    g5c_json_free(v);
+    snprintf(path, sizeof path, "%s?int-group-id=0000000a-001-01-0a", gen);
+    TK_ASSERT(rq(&t, "GET", path, NULL, false, &v, NULL) == 200 && strcmp(g5c_json_get_str(v, "extGroupId"), "extgroupid-meters@example.com") == 0 && g5c_json_get(v, "ueIdList") == NULL);
+    g5c_json_free(v);
+    snprintf(path, sizeof path, "%s?ext-group-id=extgroupid-none%%40example.com", gen);
+    TK_ASSERT(rq(&t, "GET", path, NULL, false, NULL, NULL) == 404);
+    TK_ASSERT(rq(&t, "GET", gen, NULL, false, NULL, NULL) == 400); /* neither */
+    snprintf(path, sizeof path, "%s?ext-group-id=%s&int-group-id=0000000a-001-01-0a", gen, ext);
+    TK_ASSERT(rq(&t, "GET", path, NULL, false, NULL, NULL) == 400); /* both */
+    snprintf(path, sizeof path, "%s?int-group-id=nonsense", gen);
+    TK_ASSERT(rq(&t, "GET", path, NULL, false, NULL, NULL) == 400);
+    /* the member's access and mobility data carries the identifiers of its groups */
+    snprintf(path, sizeof path, "/nudm-sdm/v2/" SUPI "/am-data?plmn-id=%s", PLMN);
+    TK_ASSERT(rq(&t, "GET", path, NULL, false, &v, NULL) == 200);
+    {
+        const g5c_json *ids = g5c_json_get(v, "internalGroupIds");
+        TK_ASSERT(g5c_json_len(ids) == 2 && strcmp(g5c_json_str(g5c_json_at(ids, 0)), "0000000a-001-01-0a") == 0 && strcmp(g5c_json_str(g5c_json_at(ids, 1)), "0000000b-001-01-0b") == 0);
+    }
+    g5c_json_free(v);
+    /* a reload replaces them */
+    cfg = J("[{\"ext_group_id\":\"extgroupid-only@example.com\",\"int_group_id\":\"0000000c-001-01-0c\",\"members\":[\"imsi-001010000000777\"]}]");
+    TK_ASSERT(udm_reload_groups(&t.u, NULL, cfg, err, sizeof err) == 0);
+    g5c_json_free(cfg);
+    TK_ASSERT(rq(&t, "GET", path, NULL, false, &v, NULL) == 200 && g5c_json_get(v, "internalGroupIds") == NULL);
+    g5c_json_free(v);
+    cfg = J("[{\"ext_group_id\":\"bad\",\"int_group_id\":\"0000000c-001-01-0c\"}]");
+    TK_ASSERT(udm_reload_groups(&t.u, NULL, cfg, err, sizeof err) == -1 && strstr(err, "ext_group_id") != NULL);
+    g5c_json_free(cfg);
+    TK_ASSERT(udm_groups_count(t.u.groups) == 1); /* the refused reload changed nothing */
+    {   /* configuration errors */
+        static const char *const bad[] = {
+            "[{\"ext_group_id\":\"extgroupid-a@b\",\"int_group_id\":\"123\"}]",
+            "[{\"ext_group_id\":\"extgroupid-a@b\",\"int_group_id\":\"0000000a-001-01-0a\",\"members\":[\"msisdn-1\"]}]",
+            "[{\"ext_group_id\":\"extgroupid-a@b\",\"int_group_id\":\"0000000a-001-01-0a\",\"supi_ranges\":[{\"start\":\"2\",\"end\":\"1\"}]}]",
+            "[{\"ext_group_id\":\"extgroupid-a@b\",\"int_group_id\":\"0000000a-001-01-0a\",\"surprise\":1}]",
+            "[{\"ext_group_id\":\"extgroupid-a@b\",\"int_group_id\":\"0000000a-001-01-0a\"},{\"ext_group_id\":\"extgroupid-c@b\",\"int_group_id\":\"0000000a-001-01-0a\"}]",
+            "{}",
+        };
+        for (size_t i = 0; i < sizeof bad / sizeof *bad; i++) {
+            g5c_json *c = J(bad[i]);
+            err[0] = 0;
+            TK_ASSERT(udm_groups_parse(c, err, sizeof err) == NULL && err[0] != 0);
+            g5c_json_free(c);
+        }
+    }
+    teardown(&t);
+}
+
+/* auth_hook (backlog G-03): a program supplies the vector for the subscribers it serves; for the others it says so and the UDM derives it */
+static void test_auth_hook(void)
+{
+    T t;
+    char path[] = "/tmp/g5c-authhook-XXXXXX", err[200];
+    const char *body = "{\"servingNetworkName\":\"5G:mnc001.mcc001.3gppnetwork.org\"}";
+    const char *gen = "/security-information/generate-auth-data";
+    char url[160];
+    g5c_json *v = NULL;
+    FILE *f;
+    int fd = mkstemp(path);
+    TK_ASSERT(fd >= 0);
+    f = fdopen(fd, "w");
+    fputs("#!/bin/sh\nread line\ncase \"$line\" in\n"
+          " *imsi-001010000000007*) printf '{\"authType\":\"5G_AKA\",\"authenticationVector\":{\"rand\":\"00112233445566778899aabbccddeeff\",\"xresStar\":\"ffeeddccbbaa99887766554433221100\","
+          "\"autn\":\"0f0e0d0c0b0a09080706050403020100\",\"kausf\":\"000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f\"}}'; exit 0;;\n"
+          " *imsi-001010000000008*) exit 4;;\n *imsi-001010000000009*) exit 5;;\n"
+          " *imsi-001010000000010*) printf 'not json'; exit 0;;\n"
+          " *imsi-001010000000011*) printf '{\"authType\":\"5G_AKA\",\"authenticationVector\":{\"rand\":\"00\"}}'; exit 0;;\n"
+          " *imsi-001010000000012*) sleep 30;;\n *) exit 3;;\nesac\n", f);
+    fclose(f);
+    TK_ASSERT(chmod(path, 0755) == 0);
+    setup(&t, false);
+    t.u.auth_hook = g5c_hookcall_new("auth_vector", path, 1, t.u.metrics, err, sizeof err);
+    TK_ASSERT(t.u.auth_hook != NULL);
+    snprintf(url, sizeof url, "/nudm-ueau/v1/imsi-001010000000007%s", gen);
+    TK_ASSERT(rq(&t, "POST", url, body, false, &v, NULL) == 200); /* not provisioned in the UDR: the program serves it */
+    TK_ASSERT(strcmp(g5c_json_get_str(v, "authType"), "5G_AKA") == 0 && strcmp(g5c_json_get_str(v, "supi"), "imsi-001010000000007") == 0 &&
+              strcmp(g5c_json_get_str(g5c_json_get(v, "authenticationVector"), "avType"), "5G_HE_AKA") == 0 &&
+              strcmp(g5c_json_get_str(g5c_json_get(v, "authenticationVector"), "rand"), "00112233445566778899aabbccddeeff") == 0);
+    g5c_json_free(v);
+    snprintf(url, sizeof url, "/nudm-ueau/v1/imsi-001010000000008%s", gen);
+    TK_ASSERT(rq(&t, "POST", url, body, false, NULL, NULL) == 404);
+    snprintf(url, sizeof url, "/nudm-ueau/v1/imsi-001010000000009%s", gen);
+    TK_ASSERT(rq(&t, "POST", url, body, false, NULL, NULL) == 403);
+    snprintf(url, sizeof url, "/nudm-ueau/v1/imsi-001010000000010%s", gen);
+    TK_ASSERT(rq(&t, "POST", url, body, false, NULL, NULL) == 500); /* an answer that is not a vector */
+    snprintf(url, sizeof url, "/nudm-ueau/v1/imsi-001010000000011%s", gen);
+    TK_ASSERT(rq(&t, "POST", url, body, false, NULL, NULL) == 500); /* a vector with the wrong sizes */
+    snprintf(url, sizeof url, "/nudm-ueau/v1/imsi-001010000000012%s", gen);
+    TK_ASSERT(rq(&t, "POST", url, body, false, NULL, NULL) == 500); /* the program takes longer than its timeout and is killed */
+    TK_ASSERT(rq(&t, "POST", "/nudm-ueau/v1/" SUPI "/security-information/generate-auth-data", body, false, NULL, NULL) == 200); /* "not mine": derived from the stored K and OPc */
+    {
+        char *m = g5c_registry_render(t.u.metrics);
+        TK_ASSERT(strstr(m, "g5c_hook_items_total{hook=\"auth_vector\",result=\"timeout\"} 1") != NULL);
+        free(m);
+    }
+    teardown(&t);
+    unlink(path);
+}
+
 static void test_null_scheme_policy(void)
 {
     T t;
@@ -1564,6 +1682,8 @@ int main(void)
     test_ueau(true);
     test_ueau_eap();
     test_null_scheme_policy();
+    test_auth_hook();
+    test_groups();
     test_admin();
     test_roles_and_tenants();
     test_udr_provisioning_token();

@@ -116,10 +116,30 @@ static void dispatch_event(amf *a, amf_ue *u, int type, const char *state)
     }
 }
 
+/* amf.event_hook: one line of JSON per registration event, {"event", "supi", "detail", "time"} */
+void amf_hook_event(amf *a, const char *event, const char *supi, const char *detail)
+{
+    g5c_json *o;
+    char *line;
+    if (a->event_hook == NULL)
+        return;
+    o = g5c_json_new_obj();
+    g5c_json_set_str(o, "event", event);
+    g5c_json_set_str(o, "supi", supi != NULL ? supi : "");
+    g5c_json_set_str(o, "detail", detail != NULL ? detail : "");
+    g5c_json_set_int(o, "time", g5c_unix_millis() / 1000);
+    line = g5c_json_to_string(o, NULL);
+    g5c_json_free(o);
+    g5c_hook_emit(a->event_hook, line);
+    free(line);
+}
+
 /* One state change can be several events */
 void gmm_event(amf *a, amf_ue *u, int type, const char *state)
 {
     const char *loss = NULL;
+    if (type == EVT_REG_STATE && state != NULL && u != NULL)
+        amf_hook_event(a, strcmp(state, "REGISTERED") == 0 ? "registered" : "deregistered", u->supi, strcmp(state, "DEREGISTERED_IMPLICIT") == 0 ? "implicit" : "");
     if (type == EVT_REG_STATE && state != NULL && strcmp(state, "DEREGISTERED") == 0) {
         loss = "UE_DEREGISTERED";
     } else if (type == EVT_REG_STATE && state != NULL && strcmp(state, "DEREGISTERED_IMPLICIT") == 0) {

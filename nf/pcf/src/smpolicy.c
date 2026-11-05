@@ -67,7 +67,8 @@ static void usage_monitoring(pcf *p, const char *sm_id, g5c_json *d)
 {
     bool throttled = false;
     g5c_json *rule;
-    if (p->cfg.um_volume == 0)
+    uint64_t volume = pcf_um_volume(p);
+    if (volume == 0)
         return;
     if (sm_id != NULL) {
         pthread_mutex_lock(&p->mu);
@@ -82,20 +83,27 @@ static void usage_monitoring(pcf *p, const char *sm_id, g5c_json *d)
         return;
     if (throttled) {
         g5c_json *amb = g5c_json_get_mut(rule, "authSessAmbr");
+        pthread_mutex_lock(&p->scripts_mu); /* the policy can be replaced by a reload */
         g5c_json_set_str(amb, "uplink", p->cfg.um_throttle.uplink);
         g5c_json_set_str(amb, "downlink", p->cfg.um_throttle.downlink);
+        pthread_mutex_unlock(&p->scripts_mu);
     } else {
         g5c_json *um = g5c_json_set(g5c_json_set(d, "umDecs", g5c_json_new_obj()), "um1", g5c_json_new_obj());
         g5c_json_set_str(rule, "refUmData", "um1");
         g5c_json_set_str(um, "umId", "um1");
-        g5c_json_set_int(um, "volumeThreshold", (int64_t)p->cfg.um_volume);
+        g5c_json_set_int(um, "volumeThreshold", (int64_t)volume);
         g5c_json_push_str(g5c_json_set(d, "policyCtrlReqTriggers", g5c_json_new_arr()), "US_RE");
     }
 }
 
 static g5c_json *decide(pcf *p, const char *sm_id, const pcf_session_info *info, const pcf_policy *sub, bool have)
 {
-    pcf_resolved r = pcf_resolve(info, &p->cfg, have ? sub : NULL);
+    pcf_resolved r;
+    int script;
+    pthread_mutex_lock(&p->scripts_mu);
+    r = pcf_resolve(info, &p->cfg, have ? sub : NULL);
+    script = pcf_policy_match_script(&p->cfg, info, have ? sub : NULL);
+    pthread_mutex_unlock(&p->scripts_mu);
     pcf_rule *af = NULL;
     size_t naf = 0;
     g5c_json *d;
@@ -106,6 +114,23 @@ static g5c_json *decide(pcf *p, const char *sm_id, const pcf_session_info *info,
             r.rules[r.nrules++] = af[i];
     }
     free(af);
+    if (p->decision_hook != NULL) { /* decision_hook: {"supi", "dnn", "sst", "script", "sessionAmbr", "qi5"} for the program to log, audit or mirror */
+        g5c_json *o = g5c_json_new_obj();
+        char *line;
+        g5c_json_set_str(o, "supi", info->supi != NULL ? info->supi : "");
+        g5c_json_set_str(o, "dnn", info->dnn != NULL ? info->dnn : "");
+        g5c_json_set_int(o, "sst", info->sst);
+        g5c_json_set_int(o, "script", script);
+        if (r.ambr.uplink != NULL) {
+            g5c_json_set_str(o, "sessionAmbrUl", r.ambr.uplink);
+            g5c_json_set_str(o, "sessionAmbrDl", r.ambr.downlink);
+        }
+        g5c_json_set_int(o, "qi5", r.qos.qi5);
+        line = g5c_json_to_string(o, NULL);
+        g5c_json_free(o);
+        g5c_hook_emit(p->decision_hook, line);
+        free(line);
+    }
     d = pcf_decision(&r);
     pcf_resolved_free(&r);
     usage_monitoring(p, sm_id, d);
@@ -269,7 +294,7 @@ static void update(void *ctx, const g5c_req *req, g5c_resp *resp)
     pcf_session_info info;
     pcf_policy sub;
     bool have = false;
-    uint64_t reported = 0;
+    uint64_t reported = 0, volume = 0;
     bool throttled_now = false;
     if (body == NULL) /* SmPolicyUpdateContextData */
         return;
@@ -283,15 +308,16 @@ static void update(void *ctx, const g5c_req *req, g5c_resp *resp)
     }
     g5c_json_free(body);
     memset(&info, 0, sizeof info);
+    volume = pcf_um_volume(p);
     pthread_mutex_lock(&p->mu);
     {
         pcf_sm_session *s = find(p, id ? id : "");
         if (s != NULL) {
             supi = g5c_xstrdup(s->supi);
             info = pcf_session_info_dup(&s->info);
-            if (reported > 0 && p->cfg.um_volume > 0) {
+            if (reported > 0 && volume > 0) {
                 s->used += reported;
-                if (s->used >= p->cfg.um_volume && !s->throttled) {
+                if (s->used >= volume && !s->throttled) {
                     s->throttled = true;
                     throttled_now = true;
                 }
@@ -303,7 +329,7 @@ static void update(void *ctx, const g5c_req *req, g5c_resp *resp)
         G5C_COUNT(p->metrics, "g5c_pcf_usage_reports_total", "Usage reports received from the SMF.");
         if (throttled_now) {
             G5C_COUNT(p->metrics, "g5c_pcf_usage_throttled_total", "Sessions throttled because their volume threshold was reached.");
-            G5C_LOGI("g5c_pcf", "SM policy %s: %llu octets used, threshold %llu reached: throttling", id ? id : "", (unsigned long long)reported, (unsigned long long)p->cfg.um_volume);
+            G5C_LOGI("g5c_pcf", "SM policy %s: %llu octets used, threshold %llu reached: throttling", id ? id : "", (unsigned long long)reported, (unsigned long long)volume);
         }
     }
     if (supi == NULL) {

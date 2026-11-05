@@ -133,7 +133,7 @@ static void upf_mark_up(smf_n4 *n, smf_upf *u, uint32_t recovery, bool have_reco
     u->down_since = 0;
     u->lost_fired = false;
     u->hb_fail = 0;
-    u->next_hb = mono() + n->cfg.hb_interval_s;
+    u->next_hb = g5c_now_seconds() + n->cfg.hb_interval_s;
     pthread_mutex_unlock(&n->mu);
     if (!was_up)
         G5C_LOGI("g5c_smf", "N4 association with UPF %s established", u->cfg.name);
@@ -151,9 +151,9 @@ static void upf_mark_down(smf_n4 *n, smf_upf *u, const char *why)
     pthread_mutex_lock(&n->mu);
     was_up = u->up;
     u->up = false;
-    u->next_assoc = mono() + 1;
+    u->next_assoc = g5c_now_seconds() + 1;
     if (was_up) {
-        u->down_since = mono();
+        u->down_since = g5c_now_seconds();
         u->lost_fired = false;
     }
     pthread_mutex_unlock(&n->mu);
@@ -320,8 +320,10 @@ static int call_ex(smf_n4 *n, smf_upf *u, uint8_t type, bool session, uint64_t s
         send_raw(n, &u->addr, out, len);
         pthread_mutex_lock(&n->mu);
         clock_gettime(CLOCK_MONOTONIC, &dl);
-        dl.tv_sec += n->cfg.t1_ms / 1000;
-        dl.tv_nsec += (long)(n->cfg.t1_ms % 1000) * 1000000L;
+        double t1 = g5c_real_wait(n->cfg.t1_ms / 1000.0); /* T1 is on the warped clock (backlog B-12): the real time to wait for a response */
+        unsigned long t1_ns = (unsigned long)(t1 * 1e9);
+        dl.tv_sec += (time_t)(t1_ns / 1000000000UL);
+        dl.tv_nsec += (long)(t1_ns % 1000000000UL);
         if (dl.tv_nsec >= 1000000000L) {
             dl.tv_sec++;
             dl.tv_nsec -= 1000000000L;
@@ -382,7 +384,7 @@ static void *hb_main(void *a)
 {
     smf_n4 *n = a;
     while (!atomic_load(&n->stop)) {
-        double now = mono();
+        double now = g5c_now_seconds(); /* virtual time: the heartbeat, association retry and lost-after timers follow the warp (backlog B-12) */
         for (size_t i = 0; i < n->n && !atomic_load(&n->stop); i++) {
             smf_upf *u = &n->upfs[i];
             bool up, due_assoc, due_hb, gone = false;

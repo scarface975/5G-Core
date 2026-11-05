@@ -11,6 +11,7 @@
 
 #include "g5c/amf.h"
 #include "g5c/crypto.h"
+#include "g5c/hook.h"
 #include "g5c/metrics.h"
 #include "g5c/multipart.h"
 #include "g5c/nas.h"
@@ -377,6 +378,7 @@ typedef struct {
 
 struct amf {
     amf_cfg cfg;
+    g5c_hook *event_hook; /* `amf.event_hook`: a program told about registrations, rejections and de-registrations (backlog G-03) */
     g5c_nf *nf;
     g5c_client *client;
     g5c_registry *metrics;
@@ -647,6 +649,7 @@ void gmm_send_plain(amf_conn *c, const uint8_t *nas, size_t len);
 int gmm_send_dl(amf_conn *c, amf_ue *u, const uint8_t *plain, size_t len);
 int gmm_send_dl_ex(amf_conn *c, amf_ue *u, const uint8_t *plain, size_t len, bool new_ctx);
 void gmm_event(amf *a, amf_ue *u, int type, const char *state);
+void amf_hook_event(amf *a, const char *event, const char *supi, const char *detail);
 void conn_bind_ue(amf_conn *c, amf_ue *u);
 void conn_unbind_ue(amf_conn *c);
 void ue_detach_conn(amf_ue *u);

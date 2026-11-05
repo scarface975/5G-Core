@@ -25,6 +25,7 @@ void pcf_init(pcf *p, pcf_policy *cfg, g5c_client *client, const char *udr_uri, 
     p->udr = g5c_xstrndup(udr_uri, n);
     p->metrics = metrics;
     pthread_mutex_init(&p->mu, NULL);
+    pthread_mutex_init(&p->scripts_mu, NULL);
 }
 
 static void session_free(pcf_sm_session *s)
@@ -47,6 +48,8 @@ void pcf_track(pcf *p, void *owned)
 
 void pcf_destroy(pcf *p)
 {
+    g5c_hook_free(p->decision_hook);
+    p->decision_hook = NULL;
     for (int i = 0; i < 100 && atomic_load(&p->notes_inflight) > 0; i++)
         usleep(50000); /* notifications to AFs still on their way */
     pcf_bsf_free(p);
@@ -72,6 +75,7 @@ void pcf_destroy(pcf *p)
         free(p->admin_token);
     }
     pthread_mutex_destroy(&p->mu);
+    pthread_mutex_destroy(&p->scripts_mu);
 }
 
 size_t pcf_session_count(pcf *p)
@@ -178,6 +182,50 @@ g5c_router *pcf_router(pcf *p)
 
 /* ---- configuration ---- */
 
+/* configuration reload of `policy`: the whole operator policy is replaced under the lock the readers take (default, DNN profiles, rfsp, usage monitoring, scripts). Sessions that already
+ * have a decision keep it until they are updated. */
+int pcf_reload_policy(void *ctx, const g5c_json *from, const g5c_json *to, char *err, size_t errcap)
+{
+    pcf *p = ctx;
+    pcf_policy neu, old;
+    char field[200], reason[200];
+    (void)from;
+    if (pcf_policy_parse(to, true, &neu, err, errcap) != 0)
+        return -1;
+    if (pcf_policy_validate(&neu, true, field, sizeof field, reason, sizeof reason) != 0) {
+        snprintf(err, errcap, "%s: %s", field, reason);
+        pcf_policy_free(&neu);
+        return -1;
+    }
+    pthread_mutex_lock(&p->scripts_mu);
+    old = p->cfg;
+    p->cfg = neu;
+    pthread_mutex_unlock(&p->scripts_mu);
+    pcf_policy_free(&old);
+    G5C_LOGI("g5c_pcf", "policy reloaded: %zu DNN profile(s), %zu script(s); sessions already decided keep their policy until they are updated", p->cfg.ndnns, p->cfg.nscripts);
+    return 0;
+}
+
+uint64_t pcf_um_volume(pcf *p)
+{
+    uint64_t v;
+    pthread_mutex_lock(&p->scripts_mu);
+    v = p->cfg.um_volume;
+    pthread_mutex_unlock(&p->scripts_mu);
+    return v;
+}
+
+bool pcf_rfsp(pcf *p, uint16_t *out)
+{
+    bool has;
+    pthread_mutex_lock(&p->scripts_mu);
+    has = p->cfg.has_rfsp;
+    if (has)
+        *out = p->cfg.rfsp;
+    pthread_mutex_unlock(&p->scripts_mu);
+    return has;
+}
+
 pcf *pcf_from_config(const g5c_json *cfg, g5c_nf *nf, char *err, size_t errcap)
 {
     static const char *const k_udr[] = {"uri", NULL};
@@ -237,5 +285,12 @@ pcf *pcf_from_config(const g5c_json *cfg, g5c_nf *nf, char *err, size_t errcap)
             return NULL;
         }
     }
+    p->decision_hook = g5c_hook_from_config(g5c_json_get(cfg, "decision_hook"), "pcf_decision", "decision_hook", nf->metrics, err, errcap);
+    if (p->decision_hook == NULL && err[0] != 0) {
+        pcf_destroy(p);
+        free(p);
+        return NULL;
+    }
+    g5c_nf_on_reload(nf, "policy", pcf_reload_policy, p);
     return p;
 }

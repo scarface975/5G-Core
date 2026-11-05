@@ -1831,6 +1831,36 @@ static void test_metrics(void)
     free(txt);
 }
 
+/* time warp (backlog B-12): with the UPF gone, a request is sent n1 = 2 times and waits T1 = 150 ms after each; at a warp of 30 that takes a few milliseconds of the wall clock, and the retransmission is counted */
+static void test_n4_warp(void)
+{
+    uint16_t n4 = E.n4p, n3 = E.n3p;
+    smf_n4_msg resp;
+    smf_upf *u = smf_n4_upf(E.s->n4, 0);
+    g5c_counter *rt = g5c_counter_get(E.nf->metrics, "g5c_smf_n4_retransmissions_total", "PFCP request retransmissions.", NULL, 0);
+    uint64_t before = g5c_counter_value(rt);
+    double t0;
+    stop_upf();
+    g5c_time_warp_set(30);
+    t0 = now_s();
+    TK_ASSERT(smf_n4_call(E.s->n4, u, PFCP_HEARTBEAT_REQUEST, false, 0, (const uint8_t *)"\x00\x60\x00\x04\x00\x00\x00\x01", 8, &resp) != 0);
+    t0 = now_s() - t0;
+    g5c_time_warp_set(1);
+    TK_ASSERT(t0 < 0.15); /* 2 x 150 ms of the SMF's clock would be 0.3 s of the wall clock */
+    TK_ASSERT(g5c_counter_value(rt) >= before + 1); /* the heartbeat is on the same clock and may have retransmitted too */
+    /* the heartbeat (1 s, two misses) notices the missing UPF in about 3 s of the SMF's clock: at a warp of 8, in under half a second (a warp of 30 would also run the 30 s `lost_after` out) */
+    g5c_time_warp_set(8);
+    t0 = now_s();
+    while (smf_upf_up(u) && now_s() - t0 < 2.0)
+        usleep(10000);
+    t0 = now_s() - t0;
+    g5c_time_warp_set(1);
+    TK_ASSERT(!smf_upf_up(u) && t0 < 1.5); /* unwarped it takes at least 2.6 s */
+    sleep(1);
+    start_upf(n4, n3);
+    TK_ASSERT(smf_n4_wait_up(E.s->n4, 6000));
+}
+
 static void test_slice_limit(void)
 {
     g5c_resp r;
@@ -1869,6 +1899,7 @@ int main(void)
     test_metrics();
     test_slice_limit();
     test_persistence();
+    test_n4_warp(); /* last: it stops and restarts the UPF */
     teardown();
     printf("smf e2e: OK\n");
     return 0;

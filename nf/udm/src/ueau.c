@@ -36,7 +36,83 @@ static const char *path_param(const g5c_req *req, const char *name)
     return p ? p : "";
 }
 
-static void vector_for(udm *u, const char *supi, const char *snn, const g5c_json *resync_info, g5c_resp *resp)
+/* ---- auth_hook (backlog G-03): the vectors come from a program ----
+ * The program gets one line on its standard input: {"supi", "servingNetworkName", "resynchronizationInfo": {"rand", "auts"}} (the last only after a synchronisation failure), and answers with
+ * the vector on its standard output, as the Nudm_UEAuthentication response carries it: {"authType": "5G_AKA", "authenticationVector": {"rand", "xresStar", "autn", "kausf"}} or
+ * {"authType": "EAP_AKA_PRIME", "authenticationVector": {"rand", "xres", "autn", "ckPrime", "ikPrime"}}, every value in hex. Exit status 0: the vector is taken; 3: not a subscriber of
+ * the program, the UDM derives the vector itself from the stored K and OPc; 4: unknown subscriber (404); 5: authentication rejected (403); anything else, a timeout or an answer that does not
+ * fit is a system failure (500) and is logged without the vector. The UDM keeps no SQN for a subscriber the program serves. */
+static bool hex_len_ok(const g5c_json *v, const char *key, size_t min_bytes, size_t max_bytes)
+{
+    const char *h = g5c_json_get_str(v, key);
+    uint8_t tmp[64];
+    size_t n = h != NULL ? strlen(h) : 0;
+    long got;
+    if (n < 2 * min_bytes || n > 2 * max_bytes || n % 2 != 0)
+        return false;
+    got = g5c_hex_decode(h, tmp, sizeof tmp);
+    OPENSSL_cleanse(tmp, sizeof tmp);
+    return got == (long)(n / 2);
+}
+
+static bool hook_vector(udm *u, const char *supi, const char *snn, const g5c_json *resync_info, g5c_resp *resp)
+{
+    g5c_json *rq = g5c_json_new_obj(), *ans = NULL, *res, *vec;
+    char *line, out[2048], perr[100];
+    const char *type;
+    bool prime;
+    int rc;
+    g5c_json_set_str(rq, "supi", supi);
+    g5c_json_set_str(rq, "servingNetworkName", snn);
+    if (resync_info != NULL)
+        g5c_json_set(rq, "resynchronizationInfo", g5c_json_dup(resync_info));
+    line = g5c_json_to_string(rq, NULL);
+    g5c_json_free(rq);
+    rc = g5c_hookcall_run(u->auth_hook, line, out, sizeof out);
+    free(line);
+    if (rc == 3)
+        return false;
+    if (rc == 4) {
+        reject(resp, 404, "USER_NOT_FOUND", "unknown subscriber");
+        return true;
+    }
+    if (rc == 5) {
+        reject(resp, 403, "AUTHENTICATION_REJECTED", "authentication rejected");
+        return true;
+    }
+    if (rc == 0)
+        ans = g5c_json_parse(out, strlen(out), perr, sizeof perr);
+    OPENSSL_cleanse(out, strlen(out));
+    type = g5c_json_get_str(ans, "authType");
+    prime = g5c_streq(type, "EAP_AKA_PRIME");
+    vec = (g5c_json *)(uintptr_t)g5c_json_get(ans, "authenticationVector");
+    if (rc != 0 || ans == NULL || (!prime && !g5c_streq(type, "5G_AKA")) || vec == NULL || !hex_len_ok(vec, "rand", 16, 16) || !hex_len_ok(vec, "autn", 16, 16) ||
+        (prime ? !(hex_len_ok(vec, "xres", 4, 16) && hex_len_ok(vec, "ckPrime", 16, 16) && hex_len_ok(vec, "ikPrime", 16, 16))
+               : !(hex_len_ok(vec, "xresStar", 16, 16) && hex_len_ok(vec, "kausf", 32, 32)))) {
+        G5C_LOGE("g5c_udm", "%s: the authentication hook failed (%s)", supi, rc == -2 ? "timeout" : rc != 0 ? "exit status or no answer" : "the vector does not fit");
+        reject(resp, 500, "SYSTEM_FAILURE", "authentication hook failed");
+        g5c_json_free(ans);
+        return true;
+    }
+    res = g5c_json_new_obj();
+    g5c_json_set_str(res, "authType", prime ? "EAP_AKA_PRIME" : "5G_AKA");
+    {
+        static const char *const f_aka[] = {"rand", "xresStar", "autn", "kausf", NULL};
+        static const char *const f_prime[] = {"rand", "xres", "autn", "ckPrime", "ikPrime", NULL};
+        const char *const *f = prime ? f_prime : f_aka;
+        g5c_json *ov = g5c_json_set(res, "authenticationVector", g5c_json_new_obj());
+        g5c_json_set_str(ov, "avType", prime ? "EAP_AKA_PRIME" : "5G_HE_AKA");
+        for (; *f != NULL; f++)
+            g5c_json_set_str(ov, *f, g5c_json_get_str(vec, *f));
+    }
+    g5c_json_set_str(res, "supi", supi);
+    g5c_resp_json(resp, 200, res);
+    g5c_json_free(res);
+    g5c_json_free(ans);
+    return true;
+}
+
+static void vector_local(udm *u, const char *supi, const char *snn, const g5c_json *resync_info, g5c_resp *resp)
 {
     g5c_json *sub = NULL;
     udr_result ur = udm_udr_auth_subscription(&u->udr, supi, &sub);
@@ -180,6 +256,13 @@ done:
     g5c_json_free(res);
     g5c_json_free(patch);
     g5c_json_free(sub);
+}
+
+static void vector_for(udm *u, const char *supi, const char *snn, const g5c_json *resync_info, g5c_resp *resp)
+{
+    if (u->auth_hook != NULL && hook_vector(u, supi, snn, resync_info, resp))
+        return;
+    vector_local(u, supi, snn, resync_info, resp);
 }
 
 static void generate_auth_data(void *ctx, const g5c_req *req, g5c_resp *resp)

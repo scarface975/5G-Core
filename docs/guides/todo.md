@@ -2,18 +2,29 @@
 
 What can be built with what is here today, and what waits. Effort is engineering time for one person, rough (±50 %). `known-gaps.md` says what each finished row still lacks; this page orders the work.
 
-## Possible now (nothing missing: specs pinned, tools present)
+## Built in this round
+| Work | Row | Result |
+|---|---|---|
+| The ORAN emulator against the whole core | proof | `deploy/oran/prove.sh`; `docs/guides/oran-emulator.md` |
+| N4 request timer under time warp | B-12 | the T1 wait runs on the warped clock; tested |
+| Reload of `policy.scripts` by SIGHUP; dry run | G-02 | `g5c-policy-eval`; the rest of `policy` still needs a restart |
+| Authentication-vector hook | G-03 | `auth_hook` at the UDM; the other functions have no hook |
+| SEPP N32-c security capability negotiation | A-06 | exchange-capability both ways, `sepp.handshake`; not the parameter exchange or PRINS |
+| More procedure rules | C-04 | six rules (mobility, service request, release request, reset, N4 modification) |
+| Device groups for policy | H-04 | `groups` in the subscriber policy and `memberof` in scripts at the PCF; the UDM side is open |
+| PM counters after TS 28.552, files and a read-only view | F-05 | `g5c-pm`, 19 measurements; not XML files or the TS 28.532 services |
+| Device groups in the UDM | H-04 | `groups` in the UDM configuration, Nudm_SDM GetGroupIdentifiers, `internalGroupIds` in am-data, reloadable |
+| N4 heartbeat, association retry and lost-after timers under time warp | B-12 | on the virtual clock |
+| Hooks in the AMF and the PCF | G-03 | `amf.event_hook`, `decision_hook`; proven live in the ORAN run |
+| Reload of the whole `policy` section | G-02 | default, DNN profiles, rfsp, usage monitoring and scripts |
+| Per-S-NSSAI subcounters of the registration measurements | F-05 | `RM.RegInitReq.<snssai>` and the others |
+| SEPP parameter exchange, N32-f terminate and error report | A-06 | answered 501: they belong to PRINS (TS 29.573 5.2.3) and the SEPP selects TLS only |
+
+## Possible now, not built yet
 | # | Work | Row | Effort |
 |---|---|---|---|
-| 1 | Connect the ORAN_emulator project (its N2 stack as the gNB and UE side) to this core and prove the whole chain: NG Setup, registration with authentication, PDU session, GTP-U through the UPF, release | proof of the system | 2-3 days |
-| 2 | SMF N4 retransmission timers under time warp | B-12 | 3-5 days |
-| 3 | Reload of `policy.scripts` by SIGHUP and a dry-run tool for conditions | G-02 | 3-5 days |
-| 4 | Hook for authentication vectors (the UDM asks a program) and hook points in more functions | G-03 | 1-2 weeks |
-| 5 | SEPP N32-c handshake and security capability negotiation (TS 29.573 is pinned) | A-06 | 2-3 weeks |
-| 6 | More procedure rules for the conformance monitor (mobility, paging, release) | C-04 | 1-2 weeks |
-| 7 | Device groups known to the UDM (group provisioning and per-group policy at the PCF) | H-04 | 2-3 weeks |
-| 8 | PM counters named after TS 28.552 measurements, exported as files, and a read-only REST view after TS 28.532 | F-05 | 3-4 weeks |
-| 9 | UE policy (URSP) delivery: PCF UE policy association (TS 29.525), UE policy container in a DL NAS transport, URSP encoding (TS 24.526) | A-04 | 4-6 weeks |
+| 1 | UE policy (URSP) delivery: PCF UE policy association (TS 29.525), UE policy container in a DL NAS transport, URSP encoding (TS 24.526). It can be coded, but nothing here decodes it on the UE side, so it could not be shown working end to end | A-04 | 4-6 weeks |
+| 2 | PRINS for the SEPP (JWE/JWS protected N32-f, modification policy, parameter exchange; today the SEPP selects TLS only) | A-06 | 4-8 weeks |
 
 ## Waiting
 | Work | Row | Waits for |

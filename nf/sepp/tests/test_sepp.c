@@ -204,6 +204,80 @@ int main(void)
     TK_ASSERT(r.status == 508);
     g5c_resp_free(&r);
 
+    /* 11. N32-c (TS 29.573 6.1.4.2): a home SEPP that requires the negotiation, a visited SEPP that does it by itself, and one that does not */
+    {
+        node_t homeR, visR, visC;
+        static const char *const cases[][2] = {
+            {"{\"sender\":\"sepp.v\",\"supportedSecCapabilityList\":[\"PRINS\"],\"3GppSbiTargetApiRootSupported\":true}", "403"},            /* nothing in common */
+            {"{\"sender\":\"sepp.v\",\"supportedSecCapabilityList\":[\"TLS\"]}", "403"},                                                    /* no 3gpp-Sbi-Target-apiRoot */
+            {"{\"sender\":\"sepp.v\",\"supportedSecCapabilityList\":[\"TLS\"],\"3GppSbiTargetApiRootSupported\":true,\"plmnIdList\":[{\"mcc\":\"310\",\"mnc\":\"260\"}]}", "403"}, /* a PLMN that is not the partner's */
+            {"{\"supportedSecCapabilityList\":[\"TLS\"],\"3GppSbiTargetApiRootSupported\":true}", "400"},                                     /* no sender */
+            {"{\"sender\":\"sepp.v\",\"supportedSecCapabilityList\":[]}", "400"},
+        };
+        char url[160];
+        snprintf(cfg, sizeof cfg,
+                 "sepp:\n  public_apiroot: 'https://sepp.5gc.mnc001.mcc001.3gppnetwork.org'\n  handshake: { required: true }\n  local_targets: [ { apiroot: '%s', uri: '%s' } ]\n"
+                 "  partners:\n    - { name: visited, plmn: '26201', domain: '5gc.mnc001.mcc262.3gppnetwork.org', uri: 'http://127.0.0.1:1', sources: [ '127.0.0.1' ], allow_services: [ nudm-sdm ] }\n",
+                 HOME_API, udm_url);
+        start_node(&homeR, "sepp-homeR", "001", "01", cfg);
+        snprintf(cfg, sizeof cfg, "sepp:\n  handshake: { required: true, sender: 'sepp.5gc.mnc001.mcc262.3gppnetwork.org' }\n  partners:\n    - { name: home, plmn: '00101', domain: '5gc.mnc001.mcc001.3gppnetwork.org', uri: '%s', allow_services: [ nudm-sdm ] }\n", homeR.url);
+        start_node(&visR, "sepp-visR", "262", "01", cfg);
+        snprintf(cfg, sizeof cfg, "sepp:\n  partners:\n    - { name: home, plmn: '00101', domain: '5gc.mnc001.mcc001.3gppnetwork.org', uri: '%s', allow_services: [ nudm-sdm ] }\n", homeR.url);
+        start_node(&visC, "sepp-visC", "262", "01", cfg);
+        snprintf(url, sizeof url, "%s/n32c-handshake/v1/exchange-capability", homeR.url);
+        for (size_t i = 0; i < sizeof cases / sizeof *cases; i++) {
+            TK_ASSERT(g5c_client_request(cl, "POST", url, NULL, 0, "application/json", cases[i][0], strlen(cases[i][0]), &r, err, sizeof err) == 0);
+            TK_ASSERT(r.status == atoi(cases[i][1]));
+            g5c_resp_free(&r);
+        }
+        TK_ASSERT(!sepp_partner_negotiated(homeR.s, "visited"));
+        {   /* the PRINS-only operations are answered, not forwarded */
+            static const char *const ops[] = {"exchange-params", "n32f-terminate", "n32f-error"};
+            for (size_t i = 0; i < 3; i++) {
+                char u2[200];
+                snprintf(u2, sizeof u2, "%s/n32c-handshake/v1/%s", homeR.url, ops[i]);
+                TK_ASSERT(g5c_client_request(cl, "POST", u2, NULL, 0, "application/json", "{}", 2, &r, err, sizeof err) == 0 && r.status == 501);
+                g5c_resp_free(&r);
+            }
+        }
+        /* a visited SEPP that does not negotiate: the home SEPP refuses what it sends */
+        ask(cl, visC.url, "GET", HOME_API, SUPI_HOME, NULL, NULL, &r);
+        j = g5c_resp_parse_json(&r);
+        TK_ASSERT(r.status == 403 && j != NULL && strcmp(g5c_json_get_str(j, "cause"), "N32C_NOT_NEGOTIATED") == 0);
+        g5c_json_free(j);
+        g5c_resp_free(&r);
+        /* one that does: the first request starts the negotiation, then it goes through */
+        TK_ASSERT(!sepp_partner_negotiated(visR.s, "home"));
+        {
+            int before = atomic_load(&udm_hits);
+            ask(cl, visR.url, "GET", HOME_API, SUPI_HOME, NULL, NULL, &r);
+            TK_ASSERT(r.status == 200 && atomic_load(&udm_hits) == before + 1);
+            g5c_resp_free(&r);
+        }
+        TK_ASSERT(sepp_partner_negotiated(visR.s, "home") && sepp_partner_negotiated(homeR.s, "visited"));
+        /* a valid offer, answered with the selection */
+        {
+            const char *ok = "{\"sender\":\"sepp.v\",\"supportedSecCapabilityList\":[\"PRINS\",\"TLS\"],\"3GppSbiTargetApiRootSupported\":true,\"plmnIdList\":[{\"mcc\":\"262\",\"mnc\":\"01\"}]}";
+            TK_ASSERT(g5c_client_request(cl, "POST", url, NULL, 0, "application/json", ok, strlen(ok), &r, err, sizeof err) == 0 && r.status == 200);
+            j = g5c_resp_parse_json(&r);
+            TK_ASSERT(strcmp(g5c_json_get_str(j, "selectedSecCapability"), "TLS") == 0 && strcmp(g5c_json_get_str(j, "sender"), "sepp.5gc.mnc001.mcc001.3gppnetwork.org") == 0);
+            g5c_json_free(j);
+            g5c_resp_free(&r);
+        }
+        g5c_server_stop(homeR.srv);
+        g5c_server_stop(visR.srv);
+        g5c_server_stop(visC.srv);
+        g5c_router_free(homeR.rt);
+        g5c_router_free(visR.rt);
+        g5c_router_free(visC.rt);
+        sepp_destroy(homeR.s);
+        sepp_destroy(visR.s);
+        sepp_destroy(visC.s);
+        g5c_nf_free(homeR.nf);
+        g5c_nf_free(visR.nf);
+        g5c_nf_free(visC.nf);
+    }
+
     /* configuration errors */
     {
         static const char *const bad[] = {"sepp:\n  partners: []\n", "sepp:\n  partners:\n    - { name: a, plmn: '1', domain: x, uri: 'http://h:1' }\n", "sepp:\n  bogus: 1\n  partners:\n    - { name: a, plmn: '26201', domain: x, uri: 'http://h:1' }\n",

@@ -12,4 +12,18 @@ export ORAN_EMULATOR="${ORAN_EMULATOR:-/mnt/c/Users/Work/Documents/ORAN_emulator
 export PROVE_UES="${1:-${PROVE_UES:-16}}"
 export G5C_MCC=999 G5C_MNC=70 G5C_AMF_ADDR=127.0.0.5 G5C_TAC=1 G5C_TLS="${G5C_TLS:-0}" G5C_OAUTH2="${G5C_OAUTH2:-1}" G5C_RUN="${G5C_RUN:-$HOME/g5c-oran-run}"
 [ -d "$HOME/g5c-cbuild/plain/nf" ] && export G5C_BUILD_DIR="${G5C_BUILD_DIR:-$HOME/g5c-cbuild/plain}"
+# the AMF tells a program about registrations (amf.event_hook); the run checks what it was told
+mkdir -p "$G5C_RUN"
+rm -f "$G5C_RUN/amf-events.log"
+printf '#!/bin/sh
+cat >> "%s/amf-events.log"
+' "$G5C_RUN" > "$G5C_RUN/amf-event-hook.sh"
+chmod 755 "$G5C_RUN/amf-event-hook.sh"
+export G5C_AMF_EXTRA="  event_hook: { command: $G5C_RUN/amf-event-hook.sh }"
+rm -f "$G5C_RUN/pcf-decisions.log"
+printf '#!/bin/sh
+cat >> "%s/pcf-decisions.log"
+' "$G5C_RUN" > "$G5C_RUN/pcf-decision-hook.sh"
+chmod 755 "$G5C_RUN/pcf-decision-hook.sh"
+export G5C_PCF_EXTRA="decision_hook: { command: $G5C_RUN/pcf-decision-hook.sh }"
 exec bash "$ROOT/deploy/run/g5c-cluster.sh" ns exec bash "$HERE/inside.sh"

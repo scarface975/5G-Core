@@ -120,6 +120,7 @@ static void multi_data_sets(udm *u, const g5c_req *req, const char *supi, const 
         r = udm_udr_am_data(&u->udr, supi, plmn, &v);
         if (r.kind != UDR_OK)
             goto fail;
+        udm_groups_annotate(u, supi, v);
         g5c_json_set(out, "amData", v);
     }
     if (want_sel) {
@@ -165,10 +166,12 @@ static void sdm(void *ctx, const g5c_req *req, g5c_resp *resp)
     switch (c->which) {
     case S_AM:
         r = udm_udr_am_data(&u->udr, supi, plmn, &v);
-        if (r.kind == UDR_OK)
+        if (r.kind == UDR_OK) {
+            udm_groups_annotate(u, supi, v);
             reply_json(resp, 200, v);
-        else
+        } else {
             user_or_data(&r, resp);
+        }
         break;
     case S_SM: {
         char *nssai = g5c_req_query_decoded(req, "single-nssai"), *dnn = g5c_req_query_decoded(req, "dnn");
@@ -324,6 +327,7 @@ static void id_translation(void *ctx, const g5c_req *req, g5c_resp *resp)
 void udm_sdm_routes(g5c_router *r, udm *u)
 {
     static const char *const versions[] = {"v2", "v1"};
+    udm_groups_routes(r, u);
     for (size_t i = 0; i < 2; i++) {
         const char *v = versions[i];
         {

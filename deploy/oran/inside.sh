@@ -69,6 +69,33 @@ say "  registrations accepted $acc, rejected $rej; UEs still registered $ues; PD
 [ "$acc" -ge $((MULTI + 3)) ] && ck ok "the AMF accepted at least $((MULTI + 3)) registrations ($acc)" || ck bad "the AMF accepted only $acc registrations"
 [ "$rej" = 0 ] && ck ok "no registration was rejected" || ck bad "$rej registrations were rejected"
 [ "$fwd" -gt 0 ] && ck ok "the UPF counted user-plane packets ($fwd)" || ck bad "the UPF counted no user-plane packets"
+# the same counters as TS 28.552 measurements (tools/cli/g5c-pm): the files are kept next to the report
+if command -v python3 >/dev/null 2>&1 && python3 "$ROOT/tools/cli/g5c-pm" collect --amf-file "$OUT/amf-metrics.txt" --smf-file "$OUT/smf-metrics.txt" --upf-file "$OUT/upf-metrics.txt" --out "$OUT/pm" --format json,csv > /dev/null 2>&1; then
+    pm=$(cat "$OUT"/pm/PM_*.json)
+    pmv() { printf '%s' "$pm" | tr -d '\n ' | grep -o "\"name\":\"$1\"[^}]*" | grep -o '"value":[0-9.]*' | head -1 | cut -d: -f2; }
+    reg=$(pmv RM.RegInitSucc); pdu=$(pmv SM.PduSessionCreationSucc); gtp=$(pmv GTP.InDataPktN3UPF)
+    say "  TS 28.552 measurements: RM.RegInitSucc $reg, SM.PduSessionCreationSucc $pdu, GTP.InDataPktN3UPF $gtp"
+    subs=$(printf '%s' "$pm" | tr -d '\n ' | grep -o '"name":"RM.RegInitSucc\.[^"]*"' | head -3 | tr '\n' ' ')
+    say "  per-slice subcounters: ${subs:-none}"
+    [ "${reg:-0}" -ge $((MULTI + 3)) ] && [ "${pdu:-0}" -ge $((MULTI + 2)) ] && [ "${gtp:-0}" -gt 0 ] && ck ok "the measurement files agree with the run (registrations, PDU sessions, N3 packets)" || ck bad "the measurement files do not agree with the run"
+else
+    say "  SKIP  TS 28.552 measurement files (python3 not available)"
+fi
+# the AMF's event hook (amf.event_hook): every registration and de-registration reached the program
+if [ -f "$RUN/amf-events.log" ]; then
+    reg_ev=$(grep -c '"event":"registered"' "$RUN/amf-events.log"); dereg_ev=$(grep -c '"event":"deregistered"' "$RUN/amf-events.log")
+    say "  AMF event hook told: $reg_ev registered, $dereg_ev deregistered"
+    [ "$reg_ev" -ge $((MULTI + 3)) ] && [ "$dereg_ev" -ge 1 ] && ck ok "the AMF's event hook was told of every registration and of the de-registrations" || ck bad "the AMF's event hook missed events ($reg_ev registered, $dereg_ev deregistered)"
+else
+    ck bad "the AMF's event hook wrote nothing"
+fi
+if [ -f "$RUN/pcf-decisions.log" ]; then
+    dec=$(grep -c '"supi":"imsi-9997' "$RUN/pcf-decisions.log")
+    say "  PCF decision hook told: $dec decisions"
+    [ "$dec" -ge $((MULTI + 2)) ] && ck ok "the PCF's decision hook was told of every SM policy decision" || ck bad "the PCF's decision hook was told of only $dec decisions"
+else
+    ck bad "the PCF's decision hook wrote nothing"
+fi
 bad=$(grep -hE "ERROR|panic|Assertion|AddressSanitizer" "$RUN"/log/*.log 2>/dev/null | grep -v "injected" | head -3)
 [ -z "$bad" ] && ck ok "no function logged an error" || { ck bad "a function logged errors:"; echo "$bad" | cut -c1-200 | sed 's/^/        /' | tee -a "$OUT/report.txt"; }
 

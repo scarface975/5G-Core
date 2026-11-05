@@ -15,6 +15,7 @@
 #include <stdint.h>
 
 #include "g5c/crypto.h"
+#include "g5c/hook.h"
 #include "g5c/json.h"
 #include "g5c/metrics.h"
 #include "g5c/nfcore.h"
@@ -164,13 +165,22 @@ udr_result udm_udr_list_subscribers(const udm_udr *u, g5c_json **out);
 
 typedef int (*udm_rand_fn)(void *ctx, uint8_t out[16]);
 
+/* Device groups (groups.c, backlog H-04) */
+typedef struct udm_groups udm_groups;
+udm_groups *udm_groups_parse(const g5c_json *arr, char *err, size_t cap); /* NULL with err on an invalid `groups` list; a NULL list is no groups */
+void udm_groups_free(udm_groups *gs);
+size_t udm_groups_count(const udm_groups *gs);
+
 typedef struct udm {
+    udm_groups *groups; /* `groups`, replaced under groups_mu by a reload */
+    pthread_mutex_t groups_mu;
     udm_udr udr;
     udm_keys keys;
     udm_hnkey *hn_keys;
     size_t nhn_keys;
     g5c_authz *authz; /* `admin_tokens_file`: roles and tenants for the admin API; NULL: the single admin token */
     atomic_bool refuse_null_scheme; /* `suci.null_scheme: reject`; a configuration reload changes it */
+    g5c_hookcall *auth_hook; /* `auth_hook`: a program that supplies authentication vectors (backlog G-03); NULL: the UDM derives them from the stored K and OPc */
     char plmn[8]; /* mcc+mnc, e.g. "00101" */
     char instance_id[37];
     g5c_registry *metrics;
@@ -209,6 +219,11 @@ void udm_unlock_supi(udm *u, udm_supi_lock *l);
 g5c_router *udm_router(udm *u);
 void udm_ueau_routes(g5c_router *r, udm *u);
 void udm_sdm_routes(g5c_router *r, udm *u);
+void udm_groups_routes(g5c_router *r, udm *u);
+void udm_set_groups(udm *u, udm_groups *gs);
+/* Adds the internal identifiers of the groups the subscriber is in to `internalGroupIds` of an access and mobility subscription document. */
+void udm_groups_annotate(udm *u, const char *supi, g5c_json *am_data);
+int udm_reload_groups(void *ctx, const g5c_json *from, const g5c_json *to, char *err, size_t errcap);
 void udm_uecm_routes(g5c_router *r, udm *u);
 void udm_admin_routes(g5c_router *r, udm *u);
 void udm_ee_routes(g5c_router *r, udm *u); /* Nudm_EventExposure, TS 29.503 clause 5.5 */

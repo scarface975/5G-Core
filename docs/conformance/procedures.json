@@ -17,6 +17,21 @@
     {"id": "N4-ESTABLISH", "scope": "n4", "severity": "high", "clause": "TS 29.244 7.5.2", "title": "a PFCP Session Establishment Request is answered",
      "answers": [{"request": "PFCP Session Establishment Request", "response": ["PFCP Session Establishment Response"], "within_s": 5}]},
     {"id": "N4-DELETE", "scope": "n4", "severity": "medium", "clause": "TS 29.244 7.5.6", "title": "a PFCP Session Deletion Request is answered",
-     "answers": [{"request": "PFCP Session Deletion Request", "response": ["PFCP Session Deletion Response"], "within_s": 5}]}
+     "answers": [{"request": "PFCP Session Deletion Request", "response": ["PFCP Session Deletion Response"], "within_s": 5}]},
+    {"id": "N2-MOBILITY", "scope": "ue", "severity": "high", "clause": "TS 38.413 8.4.1, 8.4.2, 8.4.4", "title": "handover and path switch requests are answered",
+     "answers": [{"request": "HandoverRequired", "response": ["HandoverCommand", "HandoverPreparationFailure"], "within_s": 10},
+                 {"request": "HandoverRequest", "response": ["HandoverRequestAcknowledge", "HandoverFailure"], "within_s": 10},
+                 {"request": "PathSwitchRequest", "response": ["PathSwitchRequestAcknowledge", "PathSwitchRequestFailure"], "within_s": 10}]},
+    {"id": "N2-MODIFY", "scope": "ue", "severity": "medium", "clause": "TS 38.413 8.2.3", "title": "a PDU session resource modification is answered",
+     "answers": [{"request": "PDUSessionResourceModifyRequest", "response": ["PDUSessionResourceModifyResponse"], "within_s": 10}]},
+    {"id": "N2-RELEASE-REQ", "scope": "ue", "severity": "medium", "clause": "TS 38.413 8.3.2", "title": "a UE Context Release Request from the gNB is followed by a UE Context Release Command",
+     "answers": [{"request": "UEContextReleaseRequest", "response": ["UEContextReleaseCommand"], "within_s": 10}]},
+    {"id": "SERVICE-FLOW", "scope": "ue", "severity": "medium", "clause": "TS 24.501 5.6.1.4", "title": "a Service request that is accepted re-establishes the context before the user plane resumes",
+     "trigger": "Service request", "then": ["InitialContextSetupRequest"], "unless": ["Service reject", "Registration reject", "UEContextReleaseCommand", "ErrorIndication"], "needs": "InitialContextSetupRequest"},
+    {"id": "N2-RESET", "scope": "n2", "severity": "medium", "clause": "TS 38.413 8.7.4, 8.7.2", "title": "an NG Reset and a RAN Configuration Update are answered",
+     "answers": [{"request": "NGReset", "response": ["NGResetAcknowledge"], "within_s": 10},
+                 {"request": "RANConfigurationUpdate", "response": ["RANConfigurationUpdateAcknowledge", "RANConfigurationUpdateFailure"], "within_s": 10}]},
+    {"id": "N4-MODIFY", "scope": "n4", "severity": "medium", "clause": "TS 29.244 7.5.4", "title": "a PFCP Session Modification Request is answered",
+     "answers": [{"request": "PFCP Session Modification Request", "response": ["PFCP Session Modification Response"], "within_s": 5}]}
   ]
 }

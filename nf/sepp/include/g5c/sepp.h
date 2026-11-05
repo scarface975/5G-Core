@@ -6,7 +6,7 @@
  * SEPP is screened against that partner's policy and delivered to the local target it names. Screening is per partner: the services it may use, paths it may not touch, a request rate,
  * and the identities it may ask about. Locations that the partner's policy does not allow, and anything addressed to a target the SEPP does not serve, are refused with ProblemDetails.
  *
- * Not in this version: PRINS (application layer protection of N32-f), the N32-c capability exchange and security negotiation (the partner relation is configured), and the IPX
+ * N32-c: the security capability negotiation (exchange-capability, TLS) is implemented, as responder and as initiator. Not in this version: PRINS (application layer protection of N32-f), the N32-c parameter exchange, and the IPX
  * provider's modification policy. */
 #ifndef G5C_SEPP_H
 #define G5C_SEPP_H
@@ -26,5 +26,8 @@ void sepp_destroy(sepp *s);
 
 /* ---- introspection (tests, tools) ---- */
 size_t sepp_partner_count(const sepp *s);
+/* N32-c (TS 29.573 6.1.4.2): ask the partner SEPP to agree on a security capability; 0 when it selected TLS. sepp.handshake.required makes the SEPP do it itself before the first request. */
+int sepp_handshake(sepp *s, const char *partner);
+bool sepp_partner_negotiated(const sepp *s, const char *partner);
 
 #endif

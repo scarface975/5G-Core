@@ -260,6 +260,7 @@ policy:
   default:
     session_ambr: { uplink: ${G5C_AMBR_UL:-1 Gbps}, downlink: ${G5C_AMBR_DL:-2 Gbps} }
 ${G5C_PCF_POLICY_EXTRA:-}
+${G5C_PCF_EXTRA:-}
 EOF
   cat > "$RUN/conf/upf.yaml" <<EOF
 name: upf-1

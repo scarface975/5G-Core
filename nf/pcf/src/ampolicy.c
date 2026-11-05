@@ -29,6 +29,7 @@ static int find(const pcf *p, const char *id)
 static void create(void *ctx, const g5c_req *req, g5c_resp *resp)
 {
     pcf *p = ctx;
+    uint16_t rfsp = 0;
     g5c_json *request = g5c_req_json(req, resp), *body;
     const char *supi, *notif;
     char id[37], *path, *loc;
@@ -69,8 +70,8 @@ static void create(void *ctx, const g5c_req *req, g5c_resp *resp)
     body = g5c_json_new_obj();
     g5c_json_set(body, "request", request); /* takes ownership */
     g5c_json_set_str(body, "suppFeat", "");
-    if (p->cfg.has_rfsp)
-        g5c_json_set_int(body, "rfsp", p->cfg.rfsp);
+    if (pcf_rfsp(p, &rfsp))
+        g5c_json_set_int(body, "rfsp", rfsp);
     path = g5c_xasprintf("%s/%s", BASE, id);
     loc = g5c_req_url(req, path);
     g5c_resp_json(resp, 201, body);
@@ -83,6 +84,7 @@ static void create(void *ctx, const g5c_req *req, g5c_resp *resp)
 static void update(void *ctx, const g5c_req *req, g5c_resp *resp)
 {
     pcf *p = ctx;
+    uint16_t rfsp = 0;
     const char *id = g5c_req_param(req, "polAssoId");
     g5c_json *in = g5c_req_json(req, resp), *body;
     bool known;
@@ -102,8 +104,8 @@ static void update(void *ctx, const g5c_req *req, g5c_resp *resp)
     uri = g5c_req_url(req, path);
     body = g5c_json_new_obj();
     g5c_json_set_str(body, "resourceUri", uri);
-    if (p->cfg.has_rfsp)
-        g5c_json_set_int(body, "rfsp", p->cfg.rfsp);
+    if (pcf_rfsp(p, &rfsp))
+        g5c_json_set_int(body, "rfsp", rfsp);
     g5c_resp_json(resp, 200, body);
     g5c_json_free(body);
     free(path);

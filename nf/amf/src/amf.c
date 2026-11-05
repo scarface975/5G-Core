@@ -779,7 +779,7 @@ amf *amf_from_config(const g5c_json *root, g5c_nf *nf, char *err, size_t cap)
 {
     static const char *const k_amf[] = {"name", "guami", "ngap", "capacity", "tais", "slices", "security", "ausf", "udm", "pcf", "smf", "nssf", "default_dnn",
                                         "network_name", "timers", "paging_tries", "workers", "self_uri", "state_file", "reachable_grace",
-                                        "max_unauthenticated", "inject", "overload", "power_saving", "slice_limits", NULL};
+                                        "max_unauthenticated", "inject", "overload", "power_saving", "slice_limits", "event_hook", NULL};
     static const char *const k_guami[] = {"region", "set", "pointer", NULL};
     static const char *const k_ngap[] = {"address", "addresses", "port", NULL};
     static const char *const k_sec[] = {"integrity", "ciphering", NULL};
@@ -1080,6 +1080,9 @@ amf *amf_from_config(const g5c_json *root, g5c_nf *nf, char *err, size_t cap)
             cf->nslice_limit = (unsigned)i + 1;
         }
     }
+    a->event_hook = g5c_hook_from_config(g5c_json_get(c, "event_hook"), "amf_event", "amf.event_hook", a->metrics, err, cap);
+    if (a->event_hook == NULL && err[0] != 0)
+        goto fail;
     g5c_nf_on_reload(nf, "amf.overload", amf_reload_overload, a);
     if (g5c_json_get(c, "inject") != NULL) { /* `inject: { registration_reject: [{ supi: imsi-0010100, cause: 11 }], accept_delay_ms */
         static const char *const k_inj[] = {"registration_reject", "accept_delay_ms", NULL}, *const k_rej[] = {"supi", "cause", NULL};
@@ -1173,6 +1176,8 @@ void amf_destroy(amf *a)
 {
     if (a == NULL)
         return;
+    g5c_hook_free(a->event_hook);
+    a->event_hook = NULL;
     a->stop = true;
     amf_sctp_stop(a);
     timers_stop(a);

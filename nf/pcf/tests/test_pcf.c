@@ -1385,7 +1385,7 @@ static bool cond(const char *src, const pcf_expr_ctx *c)
 
 static void test_expressions(void)
 {
-    pcf_expr_ctx c = {"imsi-001010000000007", "iot", "000001", 1, 9};
+    pcf_expr_ctx c = {"imsi-001010000000007", "iot", "000001", 1, 9, NULL, 0};
     char err[120];
     TK_ASSERT(cond("dnn == 'iot'", &c) && !cond("dnn == 'internet'", &c) && cond("dnn != 'internet'", &c));
     TK_ASSERT(cond("supi startswith 'imsi-00101'", &c) && cond("supi endswith '07'", &c) && cond("supi contains '0000'", &c) && !cond("supi startswith 'imsi-26201'", &c));
@@ -1406,6 +1406,15 @@ static void test_expressions(void)
         memset(deep, '(', 40);
         strcpy(deep + 40, "sst == 1");
         TK_ASSERT(pcf_expr_parse(deep, err, sizeof err) == NULL); /* nested too deep, and not closed */
+    }
+    {   /* device groups: `memberof 'name'` */
+        char *grp[] = {"fleet-a", "meters"};
+        pcf_expr_ctx g = {"imsi-001010000000007", "iot", "000001", 1, 9, grp, 2};
+        TK_ASSERT(cond("memberof 'fleet-a'", &g) && cond("memberof 'meters' and dnn == 'iot'", &g) && !cond("memberof 'fleet-b'", &g) && !cond("memberof 'fleet'", &g));
+        TK_ASSERT(cond("not memberof 'fleet-b'", &g) && cond("memberof 'fleet-b' or memberof 'meters'", &g));
+        TK_ASSERT(!cond("memberof 'fleet-a'", &c)); /* a context with no groups: in none */
+        TK_ASSERT(pcf_expr_parse("memberof fleet", err, sizeof err) == NULL && strstr(err, "group name") != NULL);
+        TK_ASSERT(pcf_expr_parse("memberof 5", err, sizeof err) == NULL);
     }
     {
         char many[400] = "sst == 1";
@@ -1465,6 +1474,96 @@ static void test_scripts(void)
     pcf_session_info_free(&u);
 }
 
+
+/* device groups in a subscriber's policy and the scripts that use them (backlog H-04) */
+static void test_groups(void)
+{
+    pcf_policy cfg = parse_policy("default: { session_ambr: { uplink: '1 Gbps', downlink: '2 Gbps' } }\n"
+                                  "scripts:\n"
+                                  "  - when: \"memberof 'meters' and dnn == 'iot'\"\n"
+                                  "    session_ambr: { uplink: '64 Kbps', downlink: '64 Kbps' }\n"
+                                  "  - when: \"memberof 'cameras'\"\n"
+                                  "    session_ambr: { uplink: '8 Mbps', downlink: '2 Mbps' }\n",
+                                  true),
+                m, c, none, bad;
+    pcf_session_info s = info_for("iot", NULL, NULL);
+    pcf_resolved r;
+    char err[200];
+    g5c_json *jm = Y("groups: [meters, fleet-a]\n"), *jc = Y("groups: [cameras]\n"), *jbad = Y("groups: ['bad name']\n"), *jmany = Y("groups: [a,b,c,d,e,f,g,h,i]\n"), *jtype = Y("groups: meters\n");
+    s.supi = g5c_xstrdup("imsi-001010000000001");
+    s.sst = 1;
+    TK_ASSERT(pcf_policy_parse(jm, false, &m, err, sizeof err) == 0 && m.ngroups == 2);
+    TK_ASSERT(pcf_policy_parse(jc, false, &c, err, sizeof err) == 0);
+    memset(&none, 0, sizeof none);
+    r = pcf_resolve(&s, &cfg, &m);
+    TK_ASSERT(strcmp(r.ambr.uplink, "64 Kbps") == 0); /* the meters' script */
+    pcf_resolved_free(&r);
+    r = pcf_resolve(&s, &cfg, &c);
+    TK_ASSERT(strcmp(r.ambr.uplink, "8 Mbps") == 0); /* the cameras' script */
+    pcf_resolved_free(&r);
+    r = pcf_resolve(&s, &cfg, &none);
+    TK_ASSERT(strcmp(r.ambr.uplink, "1 Gbps") == 0); /* no groups: no script holds */
+    pcf_resolved_free(&r);
+    r = pcf_resolve(&s, &cfg, NULL);
+    TK_ASSERT(strcmp(r.ambr.uplink, "1 Gbps") == 0);
+    pcf_resolved_free(&r);
+    {   /* the groups survive the round trip through the stored document */
+        g5c_json *back = pcf_policy_to_json(&m), *gl = (g5c_json *)(uintptr_t)g5c_json_get(back, "groups");
+        TK_ASSERT(g5c_json_len(gl) == 2 && strcmp(g5c_json_str(g5c_json_at(gl, 1)), "fleet-a") == 0);
+        g5c_json_free(back);
+    }
+    TK_ASSERT(pcf_policy_parse(jbad, false, &bad, err, sizeof err) == -1 && strstr(err, "group name") != NULL);
+    TK_ASSERT(pcf_policy_parse(jmany, false, &bad, err, sizeof err) == -1 && strstr(err, "at most 8") != NULL);
+    TK_ASSERT(pcf_policy_parse(jtype, false, &bad, err, sizeof err) == -1);
+    TK_ASSERT(pcf_policy_parse(jm, true, &bad, err, sizeof err) == -1); /* the operator's configuration has scripts, not groups */
+    pcf_policy_free(&cfg);
+    pcf_policy_free(&m);
+    pcf_policy_free(&c);
+    pcf_session_info_free(&s);
+    g5c_json_free(jm);
+    g5c_json_free(jc);
+    g5c_json_free(jbad);
+    g5c_json_free(jmany);
+    g5c_json_free(jtype);
+}
+/* reload of `policy` (backlog G-02): the whole operator policy is replaced (scripts, default), a bad script or value leaves the old policy in place */
+static void test_scripts_reload(void)
+{
+    const char *v1 = "default: { session_ambr: { uplink: '1 Gbps', downlink: '2 Gbps' } }\nscripts:\n  - when: \"dnn == 'iot'\"\n    session_ambr: { uplink: '1 Mbps', downlink: '1 Mbps' }\n";
+    const char *v2 = "default: { session_ambr: { uplink: '1 Gbps', downlink: '2 Gbps' } }\nscripts:\n  - when: \"dnn == 'iot'\"\n    session_ambr: { uplink: '5 Mbps', downlink: '5 Mbps' }\n";
+    const char *v3 = "default: { session_ambr: { uplink: '3 Gbps', downlink: '2 Gbps' } }\nscripts:\n  - when: \"dnn == 'iot'\"\n    session_ambr: { uplink: '5 Mbps', downlink: '5 Mbps' }\n";
+    const char *v4 = "default: { session_ambr: { uplink: '1 Gbps', downlink: '2 Gbps' } }\nscripts:\n  - when: \"dnn ==\"\n    session_ambr: { uplink: '5 Mbps', downlink: '5 Mbps' }\n";
+    pcf pp;
+    pcf_policy pol = parse_policy(v1, true);
+    pcf_session_info s = info_for("iot", NULL, NULL);
+    pcf_resolved r;
+    char err[200];
+    g5c_json *j1 = Y(v1), *j2 = Y(v2), *j3 = Y(v3), *j4 = Y(v4);
+    s.supi = g5c_xstrdup("imsi-001010000000001");
+    s.sst = 1;
+    pcf_init(&pp, &pol, NULL, "http://u", NULL);
+    TK_ASSERT(pcf_reload_policy(&pp, j1, j2, err, sizeof err) == 0);
+    r = pcf_resolve(&s, &pp.cfg, NULL);
+    TK_ASSERT(strcmp(r.ambr.uplink, "5 Mbps") == 0);
+    pcf_resolved_free(&r);
+    TK_ASSERT(pcf_reload_policy(&pp, j2, j3, err, sizeof err) == 0); /* the default changes too */
+    r = pcf_resolve(&s, &pp.cfg, NULL);
+    TK_ASSERT(strcmp(r.ambr.uplink, "5 Mbps") == 0 && pp.cfg.default_profile.ambr.uplink != NULL && strcmp(pp.cfg.default_profile.ambr.uplink, "3 Gbps") == 0);
+    pcf_resolved_free(&r);
+    TK_ASSERT(pcf_reload_policy(&pp, j3, j1, err, sizeof err) == 0 && strcmp(pp.cfg.default_profile.ambr.uplink, "1 Gbps") == 0);
+    TK_ASSERT(pcf_reload_policy(&pp, j1, j2, err, sizeof err) == 0);
+    TK_ASSERT(pcf_reload_policy(&pp, j2, j4, err, sizeof err) == -1 && strstr(err, "scripts[0].when") != NULL);
+    r = pcf_resolve(&s, &pp.cfg, NULL);
+    TK_ASSERT(strcmp(r.ambr.uplink, "5 Mbps") == 0); /* the refused ones changed nothing */
+    pcf_resolved_free(&r);
+    pcf_session_info_free(&s);
+    pcf_destroy(&pp);
+    g5c_json_free(j1);
+    g5c_json_free(j2);
+    g5c_json_free(j3);
+    g5c_json_free(j4);
+}
+
 int main(void)
 {
     g5c_log_init("error", false);
@@ -1472,6 +1571,8 @@ int main(void)
     test_resolution();
     test_expressions();
     test_scripts();
+    test_scripts_reload();
+    test_groups();
     test_decision_shape();
     test_validation();
     test_policy_roundtrip();

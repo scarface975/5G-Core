@@ -10,6 +10,7 @@ sepp:
   local_targets:                       # what a partner's target apiRoot stands for here
     - { apiroot: 'https://udm.5gc.mnc001.mcc001.3gppnetwork.org', uri: 'https://udm:7773' }
     - { apiroot: 'https://ausf.5gc.mnc001.mcc001.3gppnetwork.org', uri: 'https://ausf:7774' }
+  handshake: { required: true, sender: sepp.5gc.mnc001.mcc001.3gppnetwork.org }   # N32-c (TS 29.573 6.1.4.2): agree on TLS with a partner's SEPP before anything is forwarded either way
   max_body: 1048576
   partners:
     - name: visited-de

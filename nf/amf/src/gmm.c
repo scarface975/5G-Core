@@ -388,11 +388,36 @@ void amf_ue_gc(amf_ue *u)
     amf_ue_remove(u);
 }
 
+/* registration procedures by type and stage (TS 28.552 5.2.2: RM.RegInitReq / RM.RegInitSucc and the mobility, periodic and emergency ones) */
+static void count_reg_type(amf *a, unsigned type, const char *stage, const nas_snssai *sn, size_t nsn)
+{
+    const char *t = type == 1 ? "initial" : type == 2 ? "mobility" : type == 3 ? "periodic" : type == 4 ? "emergency" : "other";
+    g5c_label l[2] = {{"type", t}, {"stage", stage}};
+    g5c_counter_inc(g5c_counter_get(a->metrics, "g5c_amf_registration_procedures_total", "Registration procedures by registration type and stage (requested, accepted).", l, 2));
+    /* the subcounters of TS 28.552 are per S-NSSAI: a registration adds one to each slice of its requested (or allowed) NSSAI; "none" when it names no slice */
+    for (size_t i = 0; i < (nsn > 0 ? nsn : 1); i++) {
+        char sl[16];
+        g5c_label ls[3] = {{"type", t}, {"stage", stage}, {"snssai", sl}};
+        if (nsn == 0)
+            snprintf(sl, sizeof sl, "none");
+        else if (sn[i].has_sd)
+            snprintf(sl, sizeof sl, "%u-%06x", (unsigned)sn[i].sst, (unsigned)sn[i].sd);
+        else
+            snprintf(sl, sizeof sl, "%u", (unsigned)sn[i].sst);
+        g5c_counter_inc(g5c_counter_get(a->metrics, "g5c_amf_registration_procedures_by_slice_total", "Registration procedures by registration type, stage and S-NSSAI (requested or allowed NSSAI).", ls, 3));
+    }
+}
+
 static void reg_reject_t3346(amf_conn *c, amf_ue *u, uint8_t cause, const char *why, unsigned t3346_s)
 {
     g5c_bytes b;
     g5c_bytes_init(&b);
     G5C_LOGI(AMF_LOG, "registration of %s rejected, cause #%u (%s)", u != NULL ? u->supi : "(unidentified)", cause, why);
+    {
+        char cs[16];
+        snprintf(cs, sizeof cs, "cause %u", cause);
+        amf_hook_event(c->a, "registration-rejected", u != NULL ? u->supi : "", cs);
+    }
     amf_count(c->a, "g5c_amf_registrations_total", "Registration requests by result.", "result", cause == MM_CAUSE_CONGESTION ? "congestion" : "rejected");
     if (nm_reg_reject_t3346(cause, t3346_s, &b) == 0) {
         if (c->sec_active && u != NULL && u->sec.valid)
@@ -1042,6 +1067,7 @@ static void on_reg_complete(amf_conn *c, amf_ue *u)
     c->last_len = 0;
     atomic_fetch_add(&a->st_registrations, 1);
     amf_count(a, "g5c_amf_registrations_total", "Registration requests by result.", "result", "accepted");
+    count_reg_type(a, u->reg_type, "accepted", u->allowed, u->nallowed);
     G5C_LOGI(AMF_LOG, "%s registered (type %u, GUTI %08x)", u->supi, u->reg_type, u->tmsi);
     if (first)
         gmm_event(a, u, EVT_REG_STATE, "REGISTERED");
@@ -1094,6 +1120,7 @@ static void reg_request(amf_conn *c, const nas_msg *m, nas_auth *au)
             return;
         }
     }
+    count_reg_type(c->a, ri.type, "requested", ri.req, ri.nreq);
     conn_clear_proc(c);
     c->sec_active = false;
     g5c_bytes_init(&raw);

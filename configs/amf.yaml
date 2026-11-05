@@ -30,3 +30,6 @@ amf:
   workers: 8
   max_unauthenticated: 4096            # connections that have not completed their registration
   state_file: /var/lib/g5c/amf-state.json   # registered UEs are written here and restored at start-up (omit for none)
+
+# A program told of every registration, de-registration and rejected registration (one line of JSON each: event, supi, detail, time):
+#   event_hook: { command: /opt/g5c/hooks/registration-events }   # under amf:

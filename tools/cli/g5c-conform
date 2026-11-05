@@ -13,6 +13,7 @@ import argparse
 import importlib.machinery
 import importlib.util
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -28,8 +29,13 @@ def load_ladder():
     return mod
 
 
+def has(info, phrase):
+    """The phrase as a whole: "NGReset" is not found in "NGResetAcknowledge" (a request must not be mistaken for its own answer)."""
+    return re.search(re.escape(phrase) + r"(?![A-Za-z0-9])", info) is not None
+
+
 def first(evs, phrase, start=0):
-    return next((i for i in range(start, len(evs)) if phrase in evs[i]["info"]), None)
+    return next((i for i in range(start, len(evs)) if has(evs[i]["info"], phrase)), None)
 
 
 def check_sequence(rule, evs):
@@ -55,10 +61,10 @@ def check_answers(rule, evs):
     out, applied = [], False
     for a in rule["answers"]:
         for i, e in enumerate(evs):
-            if a["request"] not in e["info"]:
+            if not has(e["info"], a["request"]):
                 continue
             applied = True
-            j = next((k for k in range(i + 1, len(evs)) if any(r in evs[k]["info"] for r in a["response"])), None)
+            j = next((k for k in range(i + 1, len(evs)) if any(has(evs[k]["info"], r) for r in a["response"])), None)
             if j is None:
                 out.append("frame %d: %s was not answered" % (e["n"], a["request"]))
             elif evs[j]["t"] - e["t"] > a["within_s"]:

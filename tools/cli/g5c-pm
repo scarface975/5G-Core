@@ -1,0 +1,275 @@
+#!/usr/bin/env python3
+"""g5c-pm: performance measurements named after TS 28.552 (backlog F-05), computed from the metrics of the AMF, SMF and UPF.
+
+  g5c-pm collect [--amf URL] [--smf URL] [--upf URL] [--period S] [--interval S] [--out DIR] [--format json,csv]
+  g5c-pm collect --amf-file F --smf-file F --upf-file F       metrics text read from files (for tests, or a scrape saved earlier)
+  g5c-pm serve [--listen 127.0.0.1:7810] [--dir DIR] [sources as above]        a read-only HTTP view
+  g5c-pm types                                                 the measurements this core counts, with the clause and the fidelity of each
+
+Each source is the /metrics endpoint of a function (Prometheus text). A collection takes a sample at the start and at the end of the period (and every --interval seconds in between, for the
+gauge measurements): a counter measurement is the increase over the period (a counter that went back, because the function restarted, counts from zero), a gauge measurement is the mean or the
+maximum of the samples. With --period 0 the value is the count since the function started. The measurements, their clauses and how each differs from its definition are in
+docs/pm/measurements.json; a measurement the core does not count is not in the file.
+
+The files are PM_<begin>_<period>s.json and .csv in --out (default ./pm): begin and end time (UTC), the granularity period, and one row per measurement with its name, clause, function,
+value and fidelity. The HTTP view is read-only and project-defined (GET /pm/v1/measurementTypes, /pm/v1/measurements?period=S, /pm/v1/files, /pm/v1/files/NAME); TS 28.532 is the management
+service framework this follows in spirit, the data model of its performance assurance service (TS 28.550) is not implemented. Bind it to a trusted address, or set G5C_PM_TOKEN to require
+`Authorization: Bearer <token>`. Exit code 0, 2 when a source cannot be read."""
+import argparse
+import csv
+import datetime
+import hmac
+import http.server
+import io
+import json
+import os
+import re
+import sys
+import time
+import urllib.request
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+TABLE = HERE.parent.parent / "docs" / "pm" / "measurements.json"
+LINE = re.compile(r'^([a-zA-Z_:][a-zA-Z0-9_:]*)(?:\{(.*)\})?\s+([-+0-9.eE]+|NaN|\+Inf|-Inf)\s*$')
+LABEL = re.compile(r'([a-zA-Z_][a-zA-Z0-9_]*)="((?:[^"\\]|\\.)*)"')
+
+
+def parse_metrics(text):
+    """{metric: [(labels dict, value)]}"""
+    out = {}
+    for line in text.splitlines():
+        if not line or line.startswith("#"):
+            continue
+        m = LINE.match(line.strip())
+        if not m:
+            continue
+        labels = {k: v for k, v in LABEL.findall(m.group(2) or "")}
+        try:
+            val = float(m.group(3))
+        except ValueError:
+            continue
+        out.setdefault(m.group(1), []).append((labels, val))
+    return out
+
+
+def fetch(src, timeout=5):
+    if src.startswith(("http://", "https://")):
+        with urllib.request.urlopen(src, timeout=timeout) as r:
+            return r.read().decode("utf8", "replace")
+    return Path(src).read_text()
+
+
+def load_table():
+    return json.loads(TABLE.read_text())["measurements"]
+
+
+def matches(labels, want):
+    for k, v in want.items():
+        if (labels.get(k) not in v) if isinstance(v, list) else (labels.get(k) != v):
+            return False
+    return True
+
+
+def read_value(parsed, m):
+    """The sum of the samples of the metric whose labels match; None when the metric is absent from the scrape."""
+    rows = parsed.get(m["metric"])
+    if rows is None:
+        # a counter that never moved is not exposed yet: absent counts as zero, an absent gauge is unknown
+        return 0.0 if m["kind"] == "counter" else None
+    return sum(v for lab, v in rows if matches(lab, m["labels"]))
+
+
+def by_label(parsed, metric, want, label):
+    """{label value: sum of the samples whose labels match `want`} for one metric."""
+    out = {}
+    for lab, v in parsed.get(metric, []):
+        if matches(lab, want) and label in lab:
+            out[lab[label]] = out.get(lab[label], 0.0) + v
+    return out
+
+
+def scrape(sources):
+    """{nf: parsed metrics, or None when the source was not given}; raises OSError when one that was given cannot be read."""
+    got = {}
+    for nf, src in sources.items():
+        got[nf] = parse_metrics(fetch(src)) if src else None
+    return got
+
+
+def compute(table, first, samples):
+    """first: the scrape at the start; samples: scrapes during and at the end (the last is the end)."""
+    rows = []
+    for m in table:
+        nf = m["nf"]
+        if first.get(nf) is None:
+            continue
+        series = [read_value(s[nf], m) for s in samples if s.get(nf) is not None]
+        series = [v for v in series if v is not None]
+        start = read_value(first[nf], m)
+        if not series:
+            continue
+        if m["kind"] == "counter":
+            end = series[-1]
+            value = end - start if start is not None and end >= start else end
+        elif m["kind"] == "gauge-mean":
+            value = sum(series) / len(series)
+        else:
+            value = max(series)
+        rows.append({"name": m["name"], "clause": "TS 28.552 " + m["clause"], "nf": nf, "value": int(value) if float(value).is_integer() else round(value, 3), "fidelity": m["fidelity"]})
+        if m.get("by_slice"):   # the subcounters per S-NSSAI: NAME.<snssai>
+            sub = dict(m, metric=m["by_slice"])
+            ends = by_label(samples[-1][nf], sub["metric"], m["labels"], "snssai") if samples[-1].get(nf) is not None else {}
+            starts = by_label(first[nf], sub["metric"], m["labels"], "snssai")
+            for sl in sorted(ends):
+                e, s0 = ends[sl], starts.get(sl, 0.0)
+                v = e - s0 if e >= s0 else e
+                rows.append({"name": "%s.%s" % (m["name"], sl), "clause": "TS 28.552 " + m["clause"], "nf": nf, "value": int(v), "fidelity": "subcounter of %s for the S-NSSAI %s" % (m["name"], sl)})
+    return rows
+
+
+def collect(sources, period, interval, table=None):
+    table = table or load_table()
+    t0 = datetime.datetime.now(datetime.timezone.utc)
+    first = scrape(sources)
+    samples = []
+    if period > 0:
+        end = time.monotonic() + period
+        step = interval if interval and interval < period else period
+        while True:
+            left = end - time.monotonic()
+            if left <= 0:
+                break
+            time.sleep(min(step, left))
+            samples.append(scrape(sources))
+        if not samples:
+            samples.append(scrape(sources))
+        # the cumulative counters are read at the start; a period of 0 below reads since start
+        rows = compute(table, first, samples)
+    else:
+        zero = {nf: ({} if p is not None else None) for nf, p in first.items()}  # counters from zero: since the function started
+        rows = compute(table, zero, [first])
+    t1 = datetime.datetime.now(datetime.timezone.utc)
+    return {"spec": "TS 28.552 v16.20.0", "beginTime": t0.strftime("%Y-%m-%dT%H:%M:%SZ"), "endTime": t1.strftime("%Y-%m-%dT%H:%M:%SZ"), "granularityPeriod": period,
+            "sources": sorted(nf for nf, s in sources.items() if s), "measurements": rows}
+
+
+def to_csv(rep):
+    buf = io.StringIO()
+    w = csv.writer(buf, lineterminator="\n")
+    w.writerow(["beginTime", "endTime", "granularityPeriod", "function", "measurement", "value", "clause", "fidelity"])
+    for r in rep["measurements"]:
+        w.writerow([rep["beginTime"], rep["endTime"], rep["granularityPeriod"], r["nf"], r["name"], r["value"], r["clause"], r["fidelity"]])
+    return buf.getvalue()
+
+
+def write_files(rep, out, formats):
+    out.mkdir(parents=True, exist_ok=True)
+    stem = "PM_%s_%ds" % (rep["beginTime"].replace(":", "").replace("-", ""), rep["granularityPeriod"])
+    paths = []
+    if "json" in formats:
+        p = out / (stem + ".json")
+        p.write_text(json.dumps(rep, indent=2) + "\n")
+        paths.append(p)
+    if "csv" in formats:
+        p = out / (stem + ".csv")
+        p.write_text(to_csv(rep))
+        paths.append(p)
+    return paths
+
+
+def make_handler(sources, outdir, token):
+    class H(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def send(self, code, body, ctype="application/json"):
+            data = body.encode() if isinstance(body, str) else body
+            self.send_response(code)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def problem(self, code, detail):
+            self.send(code, json.dumps({"status": code, "detail": detail}), "application/problem+json")
+
+        def do_GET(self):
+            if token and not hmac.compare_digest(self.headers.get("Authorization", ""), "Bearer " + token):
+                return self.problem(401, "a bearer token is required")
+            path, _, query = self.path.partition("?")
+            try:
+                if path == "/pm/v1/measurementTypes":
+                    return self.send(200, json.dumps({"spec": "TS 28.552 v16.20.0", "measurements": load_table()}, indent=2))
+                if path == "/pm/v1/measurements":
+                    q = dict(p.split("=", 1) for p in query.split("&") if "=" in p)
+                    period = int(q.get("period", "0"))
+                    if period < 0 or period > 300:
+                        return self.problem(400, "period must be 0..300 seconds (0: since the functions started)")
+                    return self.send(200, json.dumps(collect(sources, period, max(1, period // 5)), indent=2))
+                if path == "/pm/v1/files":
+                    names = sorted(p.name for p in outdir.glob("PM_*")) if outdir.is_dir() else []
+                    return self.send(200, json.dumps({"files": names}))
+                m = re.match(r"^/pm/v1/files/(PM_[A-Za-z0-9_.-]+)$", path)
+                if m:
+                    f = outdir / m.group(1)
+                    if not f.is_file():
+                        return self.problem(404, "no such file")
+                    return self.send(200, f.read_bytes(), "text/csv" if f.suffix == ".csv" else "application/json")
+            except (OSError, ValueError) as e:
+                return self.problem(502, "a source cannot be read: %s" % e)
+            self.problem(404, "no such resource")
+
+        def do_POST(self):
+            self.problem(405, "read-only")
+
+        do_PUT = do_DELETE = do_PATCH = do_POST
+
+    return H
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(prog="g5c-pm", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("cmd", choices=["collect", "serve", "types"])
+    for nf in ("amf", "smf", "upf"):
+        ap.add_argument("--" + nf, help="URL of the /metrics of the %s" % nf.upper())
+        ap.add_argument("--%s-file" % nf, help="metrics text of the %s in a file" % nf.upper())
+    ap.add_argument("--period", type=int, default=0, help="granularity period in seconds (0: since the functions started)")
+    ap.add_argument("--interval", type=int, default=0, help="seconds between samples for the gauge measurements (default: period / 5)")
+    ap.add_argument("--out", default="pm")
+    ap.add_argument("--format", default="json,csv")
+    ap.add_argument("--listen", default="127.0.0.1:7810")
+    a = ap.parse_args(argv)
+    if a.cmd == "types":
+        for m in load_table():
+            print("%-26s TS 28.552 %-9s %-3s %s" % (m["name"], m["clause"], m["nf"], m["fidelity"]))
+        return 0
+    sources = {nf.upper(): getattr(a, nf) or getattr(a, nf + "_file") for nf in ("amf", "smf", "upf")}
+    if not any(sources.values()):
+        print("g5c-pm: give at least one source (--amf, --smf, --upf or the -file forms)", file=sys.stderr)
+        return 2
+    if a.period < 0 or a.period > 86400:
+        print("g5c-pm: --period must be 0..86400", file=sys.stderr)
+        return 2
+    if a.cmd == "serve":
+        host, _, port = a.listen.rpartition(":")
+        srv = http.server.ThreadingHTTPServer((host or "127.0.0.1", int(port)), make_handler(sources, Path(a.out), os.environ.get("G5C_PM_TOKEN", "")))
+        print("g5c-pm: serving on %s (read-only)" % a.listen, file=sys.stderr)
+        try:
+            srv.serve_forever()
+        except KeyboardInterrupt:
+            pass
+        return 0
+    try:
+        rep = collect(sources, a.period, a.interval or max(1, a.period // 5))
+    except OSError as e:
+        print("g5c-pm: a source cannot be read: %s" % e, file=sys.stderr)
+        return 2
+    paths = write_files(rep, Path(a.out), set(a.format.split(",")))
+    for p in paths:
+        print(p)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

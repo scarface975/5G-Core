@@ -15,3 +15,11 @@ hn_keys:
   - { id: 1, scheme: profile-a, private_key_file: /etc/g5c/keys/hn-1.key }
 master_key_file: /etc/g5c/keys/udm-master.key     # 64 hex chars; encrypts K/OPc at rest in the UDR
 admin_token_file: /etc/g5c/keys/udm-admin.token   # >= 16 chars; enables /admin/v1
+
+# Authentication vectors from a program (an external authentication centre, a SIM vendor's service): it gets the SUPI and the serving network name as one line of JSON on its standard
+# input and prints the vector. Exit status 0 = take the vector, 3 = not my subscriber (the UDM derives it from the stored K and OPc), 4 = unknown subscriber, 5 = reject; else a failure.
+# auth_hook: { command: /opt/g5c/hooks/auth-centre, timeout_s: 5 }
+
+# Device groups: Nudm_SDM GetGroupIdentifiers answers from them, and the access and mobility data of a member lists the internal identifiers of its groups. Reloadable.
+# groups:
+#   - { ext_group_id: 'extgroupid-meters@example.com', int_group_id: '0000000a-001-01-0a', members: [ imsi-001010000000001 ], supi_ranges: [ { start: '001010000000100', end: '001010000000199' } ] }

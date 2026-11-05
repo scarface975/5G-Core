@@ -16,6 +16,7 @@
 
 #include "g5c/json.h"
 #include "g5c/metrics.h"
+#include "g5c/hook.h"
 #include "g5c/nfcore.h"
 #include "g5c/sbi.h"
 
@@ -75,7 +76,11 @@ typedef struct {
     pcf_ambr um_throttle; /* `usage_monitoring.throttle`: the session AMBR once the threshold is reached */
     pcf_script *scripts;  /* config only, `scripts` */
     size_t nscripts;
+    char **groups;        /* a subscriber's policy only, `groups`: its device groups (at most 8) */
+    size_t ngroups;
 } pcf_policy;
+
+bool pcf_group_name_ok(const char *g);
 
 /* Parse (strict: unknown fields and wrong types are errors). 0 / -1 with err. */
 int pcf_policy_parse(const g5c_json *j, bool is_config, pcf_policy *out, char *err, size_t errcap);
@@ -110,6 +115,8 @@ typedef struct {
 void pcf_session_info_free(pcf_session_info *s);
 pcf_session_info pcf_session_info_dup(const pcf_session_info *s);
 /* Resolve the policy for `s`; sub may be NULL. Deep copies, free with pcf_resolved_free. */
+/* The index of the first policy script whose condition holds for the session (sub: the subscriber's own policy, for its device groups; may be NULL), -1 when none does. */
+int pcf_policy_match_script(const pcf_policy *cfg, const pcf_session_info *s, const pcf_policy *sub);
 pcf_resolved pcf_resolve(const pcf_session_info *s, const pcf_policy *cfg, const pcf_policy *sub);
 void pcf_resolved_free(pcf_resolved *r);
 /* SmPolicyDecision (TS 29.512 5.6.2.4). Optional arrays with minItems 1 are omitted rather than sent empty. */
@@ -151,6 +158,8 @@ typedef struct pcf {
     g5c_registry *metrics; /* not owned */
     char *admin_token;    /* NULL: admin API disabled */
     g5c_authz *authz;     /* `admin_tokens_file`: roles and tenants for the admin API; NULL: the single admin token */
+    g5c_hook *decision_hook; /* `decision_hook`: a program told of every SM policy decision (backlog G-03) */
+    pthread_mutex_t scripts_mu; /* policy.scripts are replaced by a reload; a decision reads them under this lock */
     pthread_mutex_t mu;
     pcf_sm_session *sessions;
     size_t nsessions, capsessions;
@@ -215,6 +224,11 @@ int pcf_store_delete(pcf *p, const char *supi);
 
 /* ---- configuration ---- */
 
+/* Replaces the operator's policy (the reload hook of `policy`: default, dnns, rfsp, usage_monitoring and scripts). A policy that does not parse or validate changes nothing. */
+int pcf_reload_policy(void *ctx, const g5c_json *from, const g5c_json *to, char *err, size_t errcap);
+/* The usage-monitoring volume threshold and the RFSP index now in force (the policy can be replaced by a reload; these read it under the lock). */
+uint64_t pcf_um_volume(pcf *p);
+bool pcf_rfsp(pcf *p, uint16_t *out);
 /* Sections: udr {uri}, policy {...}, admin_token_file. Returns NULL with err on failure; free with pcf_destroy+free. */
 pcf *pcf_from_config(const g5c_json *cfg, g5c_nf *nf, char *err, size_t errcap);
 

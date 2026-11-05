@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LicenseRef-Proprietary
-add_library(g5c_udm STATIC src/core.c src/udr.c src/udm.c src/ueau.c src/sdm.c src/uecm.c src/ee.c src/admin.c src/config.c)
+add_library(g5c_udm STATIC src/core.c src/udr.c src/udm.c src/ueau.c src/sdm.c src/uecm.c src/ee.c src/admin.c src/config.c src/groups.c)
 target_include_directories(g5c_udm PUBLIC include)
 target_link_libraries(g5c_udm PUBLIC g5c_nfcore g5c_sbi g5c_crypto g5c_base)
 

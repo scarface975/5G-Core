@@ -19,7 +19,7 @@
 
 #include "expr.h"
 
-enum { N_OR, N_AND, N_NOT, N_CMP, N_IN, N_FIELD, N_STR, N_NUM };
+enum { N_OR, N_AND, N_NOT, N_CMP, N_IN, N_FIELD, N_STR, N_NUM, N_MEMBER };
 enum { C_EQ, C_NE, C_LT, C_LE, C_GT, C_GE, C_STARTS, C_ENDS, C_CONTAINS };
 
 typedef struct node {
@@ -164,11 +164,30 @@ static node *p_term(ps *x)
 
 static node *p_cmp(ps *x)
 {
-    node *l = p_term(x), *c;
+    node *l, *c;
     static const struct {
         const char *t;
         int op;
     } ops[] = {{"==", C_EQ}, {"!=", C_NE}, {"<=", C_LE}, {">=", C_GE}, {"<", C_LT}, {">", C_GT}};
+    if (word(x, "memberof")) { /* `memberof 'fleet-a'`: the subscriber is in that device group */
+        node *t, *m;
+        skip(x);
+        if (*x->p != '\'') {
+            fail(x, "a 'group name' was expected after memberof");
+            return NULL;
+        }
+        t = p_term(x);
+        if (t == NULL)
+            return NULL;
+        m = mk(x, N_MEMBER);
+        if (m == NULL) {
+            nfree(t);
+            return NULL;
+        }
+        m->a = t;
+        return m;
+    }
+    l = p_term(x);
     if (l == NULL)
         return NULL;
     skip(x);
@@ -425,6 +444,11 @@ static bool eval(const node *n, const pcf_expr_ctx *c)
     case N_OR: return eval(n->a, c) || eval(n->b, c);
     case N_AND: return eval(n->a, c) && eval(n->b, c);
     case N_NOT: return !eval(n->a, c);
+    case N_MEMBER:
+        for (size_t i = 0; i < c->ngroups; i++)
+            if (c->groups[i] != NULL && strcmp(c->groups[i], n->a->s) == 0)
+                return true;
+        return false;
     case N_CMP: {
         val a = value_of(n->a, c), b = value_of(n->b, c);
         if (n->a->kind == N_CMP || n->b->kind == N_CMP)

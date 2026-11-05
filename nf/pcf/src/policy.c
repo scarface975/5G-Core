@@ -39,6 +39,17 @@ void pcf_profile_free(pcf_profile *p)
     memset(p, 0, sizeof *p);
 }
 
+bool pcf_group_name_ok(const char *g)
+{
+    size_t n = strlen(g);
+    if (n == 0 || n > 64)
+        return false;
+    for (size_t i = 0; i < n; i++)
+        if (!isalnum((unsigned char)g[i]) && g[i] != '.' && g[i] != '_' && g[i] != '-')
+            return false;
+    return true;
+}
+
 void pcf_policy_free(pcf_policy *p)
 {
     pcf_profile_free(&p->default_profile);
@@ -56,6 +67,9 @@ void pcf_policy_free(pcf_policy *p)
         pcf_profile_free(&p->scripts[i].profile);
     }
     free(p->scripts);
+    for (size_t i = 0; i < p->ngroups; i++)
+        free(p->groups[i]);
+    free(p->groups);
     memset(p, 0, sizeof *p);
 }
 
@@ -265,7 +279,7 @@ static int cmp_names(const void *a, const void *b)
 int pcf_policy_parse(const g5c_json *j, bool is_config, pcf_policy *out, char *err, size_t cap)
 {
     static const char *const k_cfg[] = {"default", "dnns", "rfsp", "usage_monitoring", "scripts", NULL};
-    static const char *const k_sub[] = {"default", "dnns", NULL};
+    static const char *const k_sub[] = {"default", "dnns", "groups", NULL};
     const g5c_json *d, *dn;
     size_t n = 0;
     char **names;
@@ -309,6 +323,23 @@ int pcf_policy_parse(const g5c_json *j, bool is_config, pcf_policy *out, char *e
                 goto bad;
             }
             out->ndnns = i + 1;
+        }
+    }
+    if (!is_config && !is_null(g5c_json_get(j, "groups"))) { /* the device groups of the subscriber: `memberof 'name'` in a policy script is true for them */
+        const g5c_json *gl = g5c_json_get(j, "groups");
+        if (!g5c_json_is(gl, G5C_J_ARRAY) || g5c_json_len(gl) > 8) {
+            E(err, cap, "invalid type: groups must be a list of at most 8 names", "");
+            goto bad;
+        }
+        out->groups = g5c_xcalloc(g5c_json_len(gl) ? g5c_json_len(gl) : 1, sizeof *out->groups);
+        for (size_t i = 0; i < g5c_json_len(gl); i++) {
+            const char *g = g5c_json_str(g5c_json_at(gl, i));
+            if (g == NULL || !pcf_group_name_ok(g)) {
+                E(err, cap, "invalid value: a group name is 1 to 64 characters of letters, digits, `.`, `_` and `-`", "");
+                goto bad;
+            }
+            out->groups[i] = g5c_xstrdup(g);
+            out->ngroups = i + 1;
         }
     }
     if (is_config) {
@@ -432,6 +463,11 @@ g5c_json *pcf_policy_to_json(const pcf_policy *p)
         g5c_json *d = g5c_json_set(o, "dnns", g5c_json_new_obj());
         for (size_t i = 0; i < p->ndnns; i++)
             g5c_json_set(d, p->dnn_names[i], profile_to_json(&p->dnns[i]));
+    }
+    if (p->ngroups > 0) {
+        g5c_json *gl = g5c_json_set(o, "groups", g5c_json_new_arr());
+        for (size_t i = 0; i < p->ngroups; i++)
+            g5c_json_push_str(gl, p->groups[i]);
     }
     return o;
 }
@@ -626,6 +662,19 @@ static pcf_rule rule_dup(const pcf_rule *r)
     return d;
 }
 
+int pcf_policy_match_script(const pcf_policy *cfg, const pcf_session_info *s, const pcf_policy *sub)
+{
+    for (size_t i = 0; i < cfg->nscripts; i++) {
+        pcf_expr_ctx c = {s->supi, s->dnn, s->sd, s->sst, 0, sub != NULL ? sub->groups : NULL, sub != NULL ? sub->ngroups : 0};
+        int64_t q = 0;
+        if (s->subs_def_qos != NULL && g5c_json_int(g5c_json_get(s->subs_def_qos, "5qi"), &q))
+            c.qi5 = (int)q;
+        if (pcf_expr_eval(cfg->scripts[i].expr, &c))
+            return (int)i;
+    }
+    return -1;
+}
+
 pcf_resolved pcf_resolve(const pcf_session_info *s, const pcf_policy *cfg, const pcf_policy *sub)
 {
     const pcf_profile *layers[5];
@@ -637,15 +686,10 @@ pcf_resolved pcf_resolve(const pcf_session_info *s, const pcf_policy *cfg, const
         layers[nl++] = find_dnn(sub, s->dnn);
     if (sub != NULL && sub->has_default)
         layers[nl++] = &sub->default_profile;
-    for (size_t i = 0; i < cfg->nscripts; i++) { /* policy scripts: the first whose condition holds adds its profile below the subscriber's layers */
-        pcf_expr_ctx c = {s->supi, s->dnn, s->sd, s->sst, 0};
-        int64_t q = 0;
-        if (s->subs_def_qos != NULL && g5c_json_int(g5c_json_get(s->subs_def_qos, "5qi"), &q))
-            c.qi5 = (int)q;
-        if (pcf_expr_eval(cfg->scripts[i].expr, &c)) {
-            layers[nl++] = &cfg->scripts[i].profile;
-            break;
-        }
+    {   /* policy scripts: the first whose condition holds adds its profile below the subscriber's layers */
+        int m = pcf_policy_match_script(cfg, s, sub);
+        if (m >= 0)
+            layers[nl++] = &cfg->scripts[m].profile;
     }
     if (find_dnn(cfg, s->dnn))
         layers[nl++] = find_dnn(cfg, s->dnn);

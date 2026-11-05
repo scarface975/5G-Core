@@ -37,6 +37,7 @@ void udm_init(udm *u, g5c_client *client, const char *udr_base, const udm_keys *
     u->client = client;
     u->rand_fn = os_rand;
     pthread_mutex_init(&u->mu, NULL);
+    pthread_mutex_init(&u->groups_mu, NULL);
     u->sdm_subs = g5c_json_new_obj();
     u->next_sub = 1;
     u->ee_subs = g5c_json_new_obj();
@@ -65,6 +66,9 @@ void udm_destroy(udm *u)
         OPENSSL_cleanse(u->hn_keys, u->nhn_keys * sizeof *u->hn_keys);
     free(u->hn_keys);
     OPENSSL_cleanse(&u->keys, sizeof u->keys);
+    g5c_hookcall_free(u->auth_hook);
+    udm_groups_free(u->groups);
+    u->groups = NULL;
     g5c_authz_free(u->authz);
     if (u->admin_token) {
         OPENSSL_cleanse(u->admin_token, strlen(u->admin_token));
